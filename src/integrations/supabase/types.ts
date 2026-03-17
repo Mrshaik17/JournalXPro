@@ -14,16 +14,227 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      accounts: {
+        Row: {
+          account_type: string | null
+          created_at: string
+          current_balance: number
+          id: string
+          initial_balance: number
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_type?: string | null
+          created_at?: string
+          current_balance?: number
+          id?: string
+          initial_balance?: number
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_type?: string | null
+          created_at?: string
+          current_balance?: number
+          id?: string
+          initial_balance?: number
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          method: string | null
+          screenshot_url: string | null
+          status: string
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          method?: string | null
+          screenshot_url?: string | null
+          status?: string
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          method?: string | null
+          screenshot_url?: string | null
+          status?: string
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          plan: string
+          referral_code_used: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+          plan?: string
+          referral_code_used?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          plan?: string
+          referral_code_used?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      referrals: {
+        Row: {
+          code: string
+          commission_percent: number
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          code: string
+          commission_percent?: number
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          code?: string
+          commission_percent?: number
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      trades: {
+        Row: {
+          account_id: string
+          created_at: string
+          entry_price: number | null
+          follow_plan: boolean | null
+          id: string
+          notes: string | null
+          pnl_amount: number
+          result: string | null
+          stop_loss: number | null
+          tags: string[] | null
+          take_profit: number | null
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          entry_price?: number | null
+          follow_plan?: boolean | null
+          id?: string
+          notes?: string | null
+          pnl_amount?: number
+          result?: string | null
+          stop_loss?: number | null
+          tags?: string[] | null
+          take_profit?: number | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          entry_price?: number | null
+          follow_plan?: boolean | null
+          id?: string
+          notes?: string | null
+          pnl_amount?: number
+          result?: string | null
+          stop_loss?: number | null
+          tags?: string[] | null
+          take_profit?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trades_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      add_trade_and_update_balance: {
+        Args: {
+          p_account_id: string
+          p_entry_price?: number
+          p_follow_plan?: boolean
+          p_notes?: string
+          p_pnl_amount?: number
+          p_result?: string
+          p_stop_loss?: number
+          p_tags?: string[]
+          p_take_profit?: number
+          p_user_id: string
+        }
+        Returns: string
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +361,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
