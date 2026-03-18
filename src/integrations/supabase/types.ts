@@ -134,48 +134,102 @@ export type Database = {
         }
         Relationships: []
       }
+      site_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       trades: {
         Row: {
           account_id: string
+          bias_1d: string | null
           created_at: string
+          custom_fields: Json | null
+          direction: string | null
+          end_balance: number | null
           entry_price: number | null
+          entry_time: string | null
+          exit_time: string | null
           follow_plan: boolean | null
           id: string
+          lot_size: number | null
           notes: string | null
+          pair: string | null
+          pips: number | null
           pnl_amount: number
           result: string | null
+          start_balance: number | null
           stop_loss: number | null
           tags: string[] | null
           take_profit: number | null
           user_id: string
+          went: string | null
         }
         Insert: {
           account_id: string
+          bias_1d?: string | null
           created_at?: string
+          custom_fields?: Json | null
+          direction?: string | null
+          end_balance?: number | null
           entry_price?: number | null
+          entry_time?: string | null
+          exit_time?: string | null
           follow_plan?: boolean | null
           id?: string
+          lot_size?: number | null
           notes?: string | null
+          pair?: string | null
+          pips?: number | null
           pnl_amount?: number
           result?: string | null
+          start_balance?: number | null
           stop_loss?: number | null
           tags?: string[] | null
           take_profit?: number | null
           user_id: string
+          went?: string | null
         }
         Update: {
           account_id?: string
+          bias_1d?: string | null
           created_at?: string
+          custom_fields?: Json | null
+          direction?: string | null
+          end_balance?: number | null
           entry_price?: number | null
+          entry_time?: string | null
+          exit_time?: string | null
           follow_plan?: boolean | null
           id?: string
+          lot_size?: number | null
           notes?: string | null
+          pair?: string | null
+          pips?: number | null
           pnl_amount?: number
           result?: string | null
+          start_balance?: number | null
           stop_loss?: number | null
           tags?: string[] | null
           take_profit?: number | null
           user_id?: string
+          went?: string | null
         }
         Relationships: [
           {
@@ -210,21 +264,48 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      add_trade_and_update_balance: {
-        Args: {
-          p_account_id: string
-          p_entry_price?: number
-          p_follow_plan?: boolean
-          p_notes?: string
-          p_pnl_amount?: number
-          p_result?: string
-          p_stop_loss?: number
-          p_tags?: string[]
-          p_take_profit?: number
-          p_user_id: string
-        }
-        Returns: string
-      }
+      add_trade_and_update_balance:
+        | {
+            Args: {
+              p_account_id: string
+              p_entry_price?: number
+              p_follow_plan?: boolean
+              p_notes?: string
+              p_pnl_amount?: number
+              p_result?: string
+              p_stop_loss?: number
+              p_tags?: string[]
+              p_take_profit?: number
+              p_user_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_account_id: string
+              p_bias_1d?: string
+              p_custom_fields?: Json
+              p_direction?: string
+              p_end_balance?: number
+              p_entry_price?: number
+              p_entry_time?: string
+              p_exit_time?: string
+              p_follow_plan?: boolean
+              p_lot_size?: number
+              p_notes?: string
+              p_pair?: string
+              p_pips?: number
+              p_pnl_amount?: number
+              p_result?: string
+              p_start_balance?: number
+              p_stop_loss?: number
+              p_tags?: string[]
+              p_take_profit?: number
+              p_user_id: string
+              p_went?: string
+            }
+            Returns: string
+          }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
