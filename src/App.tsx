@@ -16,6 +16,7 @@ import Analytics from "./pages/app/Analytics";
 import Tools from "./pages/app/Tools";
 import PropFirms from "./pages/app/PropFirms";
 import AppSettings from "./pages/app/AppSettings";
+import Admin from "./pages/admin/Admin";
 
 const queryClient = new QueryClient();
 
