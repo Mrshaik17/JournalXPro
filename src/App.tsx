@@ -16,6 +16,7 @@ import Analytics from "./pages/app/Analytics";
 import Tools from "./pages/app/Tools";
 import PropFirms from "./pages/app/PropFirms";
 import AppSettings from "./pages/app/AppSettings";
+import Admin from "./pages/admin/Admin";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="prop-firms" element={<PropFirms />} />
               <Route path="settings" element={<AppSettings />} />
             </Route>
+            <Route path="/admin1709" element={<Admin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
