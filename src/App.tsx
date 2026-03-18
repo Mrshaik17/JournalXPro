@@ -39,6 +39,7 @@ const App = () => (
               <Route path="prop-firms" element={<PropFirms />} />
               <Route path="settings" element={<AppSettings />} />
             </Route>
+            <Route path="/admin1709" element={<Admin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
