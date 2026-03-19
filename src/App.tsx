@@ -45,6 +45,9 @@ const App = () => (
               <Route path="settings" element={<AppSettings />} />
             </Route>
             <Route path="/admin1709" element={<Admin />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/rules" element={<Rules />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
