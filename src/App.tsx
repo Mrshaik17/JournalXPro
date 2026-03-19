@@ -18,6 +18,9 @@ import PropFirms from "./pages/app/PropFirms";
 import AppSettings from "./pages/app/AppSettings";
 import Upgrade from "./pages/app/Upgrade";
 import Admin from "./pages/admin/Admin";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import Rules from "./pages/Rules";
 
 const queryClient = new QueryClient();
 
