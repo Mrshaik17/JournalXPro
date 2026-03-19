@@ -18,6 +18,9 @@ import PropFirms from "./pages/app/PropFirms";
 import AppSettings from "./pages/app/AppSettings";
 import Upgrade from "./pages/app/Upgrade";
 import Admin from "./pages/admin/Admin";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import Rules from "./pages/Rules";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +45,9 @@ const App = () => (
               <Route path="settings" element={<AppSettings />} />
             </Route>
             <Route path="/admin1709" element={<Admin />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/rules" element={<Rules />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
