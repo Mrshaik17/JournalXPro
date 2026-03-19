@@ -16,6 +16,7 @@ import Analytics from "./pages/app/Analytics";
 import Tools from "./pages/app/Tools";
 import PropFirms from "./pages/app/PropFirms";
 import AppSettings from "./pages/app/AppSettings";
+import Upgrade from "./pages/app/Upgrade";
 import Admin from "./pages/admin/Admin";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="analytics" element={<Analytics />} />
               <Route path="tools" element={<Tools />} />
               <Route path="prop-firms" element={<PropFirms />} />
+              <Route path="upgrade" element={<Upgrade />} />
               <Route path="settings" element={<AppSettings />} />
             </Route>
             <Route path="/admin1709" element={<Admin />} />
