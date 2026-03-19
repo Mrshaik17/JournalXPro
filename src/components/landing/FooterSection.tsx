@@ -1,13 +1,14 @@
 import { Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 export const FooterSection = () => {
   const { data: socialLinks } = useQuery({
     queryKey: ["site-settings-social"],
     queryFn: async () => {
-      const { data } = await supabase.from("site_settings").select("value").eq("key", "social_links").single();
-      return data?.value as { instagram?: string; twitter?: string; telegram?: string; discord?: string } || {};
+      const { data } = await supabase.from("site_settings").select("value").eq("key", "social_links").maybeSingle();
+      return (data?.value as { instagram?: string; twitter?: string; telegram?: string; discord?: string }) || {};
     },
   });
 
@@ -21,26 +22,56 @@ export const FooterSection = () => {
   return (
     <footer className="border-t border-border py-12">
       <div className="container px-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">Trader's Divine</span>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Trader's Divine</span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              The trading journal built for traders who treat the market like a monastery.
+            </p>
           </div>
 
-          {links.length > 0 && (
-            <div className="flex items-center gap-4">
-              {links.map((l) => (
-                <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors text-sm flex items-center gap-1.5">
-                  <span>{l.icon}</span>
-                  <span className="hidden sm:inline">{l.label}</span>
-                </a>
-              ))}
-            </div>
-          )}
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Product</h4>
+            <ul className="space-y-2 text-sm">
+              <li><a href="#features" className="text-muted-foreground hover:text-primary transition-colors">Features</a></li>
+              <li><a href="#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</a></li>
+              <li><a href="#faq" className="text-muted-foreground hover:text-primary transition-colors">FAQ</a></li>
+            </ul>
+          </div>
 
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Trader's Divine. All rights reserved.
-          </p>
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Legal</h4>
+            <ul className="space-y-2 text-sm">
+              <li><Link to="/privacy" className="text-muted-foreground hover:text-primary transition-colors">Privacy Policy</Link></li>
+              <li><Link to="/terms" className="text-muted-foreground hover:text-primary transition-colors">Terms of Service</Link></li>
+              <li><Link to="/rules" className="text-muted-foreground hover:text-primary transition-colors">Trading Rules</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Connect</h4>
+            {links.length > 0 ? (
+              <ul className="space-y-2">
+                {links.map((l) => (
+                  <li key={l.label}>
+                    <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors text-sm flex items-center gap-1.5">
+                      <span>{l.icon}</span>{l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">Coming soon</p>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} Trader's Divine. All rights reserved.</p>
+          <p className="text-xs text-muted-foreground">Made with discipline ⚡</p>
         </div>
       </div>
     </footer>

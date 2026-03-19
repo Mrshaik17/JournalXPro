@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { Navigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shield, Users, CreditCard, Link2, Settings, BarChart3 } from "lucide-react";
+import { Shield, Users, CreditCard, Link2, Settings, BarChart3, Newspaper, Trash2, Plus } from "lucide-react";
+import { motion } from "framer-motion";
 
 const Admin = () => {
   const { user, loading } = useAuth();
@@ -75,6 +76,16 @@ const Admin = () => {
     enabled: !!isAdmin,
   });
 
+  const { data: newsList = [] } = useQuery({
+    queryKey: ["admin-news"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("news").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!isAdmin,
+  });
+
   const getSetting = (key: string): any => {
     const s = siteSettings.find((s: any) => s.key === key);
     return s?.value || {};
@@ -99,11 +110,11 @@ const Admin = () => {
   });
 
   const updatePaymentStatus = useMutation({
-    mutationFn: async ({ id, status, userId }: { id: string; status: string; userId: string }) => {
+    mutationFn: async ({ id, status, userId, plan }: { id: string; status: string; userId: string; plan?: string }) => {
       const { error } = await supabase.from("payments").update({ status }).eq("id", id);
       if (error) throw error;
-      if (status === "approved") {
-        await supabase.from("profiles").update({ plan: "pro" }).eq("id", userId);
+      if (status === "approved" && plan) {
+        await supabase.from("profiles").update({ plan }).eq("id", userId);
       }
     },
     onSuccess: () => {
@@ -149,21 +160,55 @@ const Admin = () => {
     onError: (err: any) => toast.error(err.message),
   });
 
-  // Payment settings state
+  // News management
+  const [newsTitle, setNewsTitle] = useState("");
+  const [newsContent, setNewsContent] = useState("");
+  const [newsSource, setNewsSource] = useState("");
+  const [newsCategory, setNewsCategory] = useState("forex");
+
+  const createNews = useMutation({
+    mutationFn: async () => {
+      if (!newsTitle || !newsContent) throw new Error("Title and content required");
+      const { error } = await supabase.from("news").insert({
+        title: newsTitle,
+        content: newsContent,
+        source: newsSource || null,
+        category: newsCategory,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-news"] });
+      toast.success("News published!");
+      setNewsTitle(""); setNewsContent(""); setNewsSource("");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteNews = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("news").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-news"] });
+      toast.success("News deleted.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  // Settings state
   const [upiId, setUpiId] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [cryptoWallet, setCryptoWallet] = useState("");
-
-  // Social media state
   const [instagram, setInstagram] = useState("");
   const [twitter, setTwitter] = useState("");
   const [telegram, setTelegram] = useState("");
   const [discord, setDiscord] = useState("");
-
-  // Pricing state
-  const [priceFree, setPriceFree] = useState("0");
-  const [pricePro, setPricePro] = useState("9");
-  const [priceProPlus, setPriceProPlus] = useState("19");
+  const [pricePro, setPricePro] = useState("5");
+  const [priceProPlus, setPriceProPlus] = useState("10");
+  const [priceElite, setPriceElite] = useState("14");
+  const [inrRate, setInrRate] = useState("83.5");
 
   useEffect(() => {
     if (siteSettings.length > 0) {
@@ -179,9 +224,12 @@ const Admin = () => {
       setDiscord(social.discord || "");
 
       const pricing = getSetting("pricing");
-      setPriceFree(pricing.free?.toString() || "0");
-      setPricePro(pricing.pro?.toString() || "9");
-      setPriceProPlus(pricing.pro_plus?.toString() || "19");
+      setPricePro(pricing.pro?.toString() || "5");
+      setPriceProPlus(pricing.pro_plus?.toString() || "10");
+      setPriceElite(pricing.elite?.toString() || "14");
+
+      const rate = getSetting("inr_rate");
+      setInrRate(rate.rate?.toString() || "83.5");
     }
   }, [siteSettings]);
 
@@ -197,6 +245,7 @@ const Admin = () => {
   const paidUsers = profiles.filter((p) => p.plan !== "free").length;
   const totalTrades = trades.length;
   const pendingPayments = payments.filter((p) => p.status === "pending").length;
+  const totalRevenue = payments.filter((p) => p.status === "approved").reduce((s, p) => s + Number(p.amount), 0);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -207,21 +256,21 @@ const Admin = () => {
       </div>
 
       <div className="container max-w-6xl px-6 py-6">
-        {/* Overview Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           {[
             { label: "Total Users", value: totalUsers, icon: Users },
             { label: "Paid Users", value: paidUsers, icon: CreditCard },
             { label: "Total Trades", value: totalTrades, icon: BarChart3 },
-            { label: "Pending Payments", value: pendingPayments, icon: Settings },
-          ].map((s) => (
-            <div key={s.label} className="rounded-lg border border-border bg-card p-4">
+            { label: "Pending", value: pendingPayments, icon: Settings },
+            { label: "Revenue", value: `$${totalRevenue.toFixed(0)}`, icon: CreditCard },
+          ].map((s, i) => (
+            <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-2">
                 <s.icon className="h-4 w-4 text-primary" />
                 <span className="text-xs text-muted-foreground">{s.label}</span>
               </div>
               <div className="text-2xl font-bold font-mono">{s.value}</div>
-            </div>
+            </motion.div>
           ))}
         </div>
 
@@ -230,6 +279,7 @@ const Admin = () => {
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="payments">Payments</TabsTrigger>
             <TabsTrigger value="referrals">Referrals</TabsTrigger>
+            <TabsTrigger value="news">News</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
@@ -266,6 +316,7 @@ const Admin = () => {
                             <SelectItem value="free">Free</SelectItem>
                             <SelectItem value="pro">Pro</SelectItem>
                             <SelectItem value="pro_plus">Pro+</SelectItem>
+                            <SelectItem value="elite">Elite</SelectItem>
                           </SelectContent>
                         </Select>
                       </td>
@@ -315,7 +366,16 @@ const Admin = () => {
                         <td className="p-3 text-center">
                           {p.status === "pending" && (
                             <div className="flex gap-1 justify-center">
-                              <Button size="sm" variant="outline" className="h-6 text-xs text-success border-success/30" onClick={() => updatePaymentStatus.mutate({ id: p.id, status: "approved", userId: p.user_id })}>Approve</Button>
+                              <Select onValueChange={(plan) => updatePaymentStatus.mutate({ id: p.id, status: "approved", userId: p.user_id, plan })}>
+                                <SelectTrigger className="h-6 text-xs w-20 bg-background border-success/30 text-success">
+                                  <SelectValue placeholder="Approve" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-card border-border">
+                                  <SelectItem value="pro">Pro</SelectItem>
+                                  <SelectItem value="pro_plus">Pro+</SelectItem>
+                                  <SelectItem value="elite">Elite</SelectItem>
+                                </SelectContent>
+                              </Select>
                               <Button size="sm" variant="outline" className="h-6 text-xs text-destructive border-destructive/30" onClick={() => updatePaymentStatus.mutate({ id: p.id, status: "rejected", userId: p.user_id })}>Reject</Button>
                             </div>
                           )}
@@ -370,10 +430,57 @@ const Admin = () => {
             </div>
           </TabsContent>
 
+          {/* News Tab */}
+          <TabsContent value="news">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="rounded-lg border border-border bg-card p-5">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Newspaper className="h-4 w-4 text-primary" /> Post News</h3>
+                <div className="space-y-3">
+                  <Input value={newsTitle} onChange={(e) => setNewsTitle(e.target.value)} placeholder="News headline" className="bg-background border-border" />
+                  <Textarea value={newsContent} onChange={(e) => setNewsContent(e.target.value)} placeholder="News content..." className="bg-background border-border" rows={4} />
+                  <Input value={newsSource} onChange={(e) => setNewsSource(e.target.value)} placeholder="Source (e.g. Forex Factory)" className="bg-background border-border" />
+                  <Select value={newsCategory} onValueChange={setNewsCategory}>
+                    <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="forex">Forex</SelectItem>
+                      <SelectItem value="crypto">Crypto</SelectItem>
+                      <SelectItem value="stocks">Stocks</SelectItem>
+                      <SelectItem value="economy">Economy</SelectItem>
+                      <SelectItem value="general">General</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={() => createNews.mutate()} disabled={createNews.isPending} className="w-full bg-primary text-primary-foreground">
+                    <Plus className="h-4 w-4 mr-2" />{createNews.isPending ? "Publishing..." : "Publish News"}
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-5">
+                <h3 className="text-sm font-semibold mb-3">Recent News ({newsList.length})</h3>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {newsList.map((n: any) => (
+                    <div key={n.id} className="p-3 rounded border border-border bg-background group">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <span className="text-xs text-primary font-mono uppercase">{n.category}</span>
+                          <h4 className="text-sm font-semibold mt-0.5">{n.title}</h4>
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{n.content}</p>
+                          <span className="text-[10px] text-muted-foreground font-mono mt-1 block">{new Date(n.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <button onClick={() => deleteNews.mutate(n.id)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {newsList.length === 0 && <p className="text-sm text-muted-foreground">No news posted yet.</p>}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
           {/* Settings Tab */}
           <TabsContent value="settings">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Payment Settings */}
               <div className="rounded-lg border border-border bg-card p-5">
                 <h3 className="text-sm font-semibold mb-3">Payment Settings</h3>
                 <div className="space-y-3">
@@ -386,54 +493,39 @@ const Admin = () => {
                     <Input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+91..." className="bg-background border-border font-mono" />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Crypto Wallet (Coming Soon)</label>
+                    <label className="text-xs text-muted-foreground block mb-1">Crypto Wallet</label>
                     <Input value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} placeholder="0x..." className="bg-background border-border font-mono" />
                   </div>
                   <Button onClick={() => upsertSetting.mutate({ key: "payment_settings", value: { upi_id: upiId, phone_number: phoneNumber, crypto_wallet: cryptoWallet } })} className="w-full bg-primary text-primary-foreground">Save Payment Settings</Button>
                 </div>
               </div>
 
-              {/* Social Links */}
               <div className="rounded-lg border border-border bg-card p-5">
                 <h3 className="text-sm font-semibold mb-3">Social Media Links</h3>
                 <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Instagram</label>
-                    <Input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="https://instagram.com/..." className="bg-background border-border" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Twitter / X</label>
-                    <Input value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder="https://x.com/..." className="bg-background border-border" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Telegram</label>
-                    <Input value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="https://t.me/..." className="bg-background border-border" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Discord</label>
-                    <Input value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder="https://discord.gg/..." className="bg-background border-border" />
-                  </div>
+                  <div><label className="text-xs text-muted-foreground block mb-1">Instagram</label><Input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="https://instagram.com/..." className="bg-background border-border" /></div>
+                  <div><label className="text-xs text-muted-foreground block mb-1">Twitter / X</label><Input value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder="https://x.com/..." className="bg-background border-border" /></div>
+                  <div><label className="text-xs text-muted-foreground block mb-1">Telegram</label><Input value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="https://t.me/..." className="bg-background border-border" /></div>
+                  <div><label className="text-xs text-muted-foreground block mb-1">Discord</label><Input value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder="https://discord.gg/..." className="bg-background border-border" /></div>
                   <Button onClick={() => upsertSetting.mutate({ key: "social_links", value: { instagram, twitter, telegram, discord } })} className="w-full bg-primary text-primary-foreground">Save Social Links</Button>
                 </div>
               </div>
 
-              {/* Pricing Control */}
               <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3">Pricing Control</h3>
+                <h3 className="text-sm font-semibold mb-3">Pricing Control (USD)</h3>
                 <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Free Plan Price ($)</label>
-                    <Input value={priceFree} onChange={(e) => setPriceFree(e.target.value)} className="bg-background border-border font-mono" type="number" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Pro Plan Price ($)</label>
-                    <Input value={pricePro} onChange={(e) => setPricePro(e.target.value)} className="bg-background border-border font-mono" type="number" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Pro+ Plan Price ($)</label>
-                    <Input value={priceProPlus} onChange={(e) => setPriceProPlus(e.target.value)} className="bg-background border-border font-mono" type="number" />
-                  </div>
-                  <Button onClick={() => upsertSetting.mutate({ key: "pricing", value: { free: parseFloat(priceFree), pro: parseFloat(pricePro), pro_plus: parseFloat(priceProPlus) } })} className="w-full bg-primary text-primary-foreground">Save Pricing</Button>
+                  <div><label className="text-xs text-muted-foreground block mb-1">Pro Plan ($)</label><Input value={pricePro} onChange={(e) => setPricePro(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+                  <div><label className="text-xs text-muted-foreground block mb-1">Pro+ Plan ($)</label><Input value={priceProPlus} onChange={(e) => setPriceProPlus(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+                  <div><label className="text-xs text-muted-foreground block mb-1">Elite Plan ($)</label><Input value={priceElite} onChange={(e) => setPriceElite(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+                  <Button onClick={() => upsertSetting.mutate({ key: "pricing", value: { free: 0, pro: parseFloat(pricePro), pro_plus: parseFloat(priceProPlus), elite: parseFloat(priceElite) } })} className="w-full bg-primary text-primary-foreground">Save Pricing</Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-5">
+                <h3 className="text-sm font-semibold mb-3">INR Conversion Rate</h3>
+                <div className="space-y-3">
+                  <div><label className="text-xs text-muted-foreground block mb-1">1 USD = ₹</label><Input value={inrRate} onChange={(e) => setInrRate(e.target.value)} className="bg-background border-border font-mono" type="number" step="0.1" /></div>
+                  <Button onClick={() => upsertSetting.mutate({ key: "inr_rate", value: { rate: parseFloat(inrRate) } })} className="w-full bg-primary text-primary-foreground">Save Rate</Button>
                 </div>
               </div>
             </div>

@@ -7,7 +7,10 @@ import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, CreditCard, Palette, LogOut, Crown, Shield } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { User, CreditCard, Palette, LogOut, Crown, Shield, Trash2, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { motion } from "framer-motion";
 
 const AppSettings = () => {
   const { user, signOut } = useAuth();
@@ -34,19 +37,29 @@ const AppSettings = () => {
     enabled: !!user,
   });
 
-  // Profile editing state
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("accounts").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
   const [fullName, setFullName] = useState("");
   const [theme, setTheme] = useState("dark");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [deleteAccountId, setDeleteAccountId] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    if (profile) {
-      setFullName(profile.full_name || "");
-    }
+    if (profile) setFullName(profile.full_name || "");
   }, [profile]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("td-theme") || "dark";
-    setTheme(saved);
+    setTheme(localStorage.getItem("td-theme") || "dark");
   }, []);
 
   const updateProfile = useMutation({
@@ -54,57 +67,58 @@ const AppSettings = () => {
       const { error } = await supabase.from("profiles").update({ full_name: fullName }).eq("id", user!.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
-      toast.success("Profile updated!");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["profile"] }); toast.success("Profile updated!"); },
     onError: (err: any) => toast.error(err.message),
   });
 
   const updatePassword = useMutation({
-    mutationFn: async (newPassword: string) => {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+    mutationFn: async (pw: string) => {
+      const { error } = await supabase.auth.updateUser({ password: pw });
       if (error) throw error;
     },
     onSuccess: () => toast.success("Password updated!"),
     onError: (err: any) => toast.error(err.message),
   });
 
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const deleteAccountMutation = useMutation({
+    mutationFn: async (id: string) => {
+      // Delete all trades for this account first
+      const { error: tradesErr } = await supabase.from("trades").delete().eq("account_id", id);
+      if (tradesErr) throw tradesErr;
+      const { error } = await supabase.from("accounts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["trades"] });
+      toast.success("Account and all its trades permanently deleted.");
+      setDeleteAccountId("");
+      setDeleteConfirm(false);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
 
   const handlePasswordChange = () => {
-    if (newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords don't match");
-      return;
-    }
+    if (newPassword.length < 6) { toast.error("Min 6 characters"); return; }
+    if (newPassword !== confirmPassword) { toast.error("Passwords don't match"); return; }
     updatePassword.mutate(newPassword);
-    setNewPassword("");
-    setConfirmPassword("");
+    setNewPassword(""); setConfirmPassword("");
   };
 
-  const handleThemeChange = (newTheme: string) => {
-    setTheme(newTheme);
-    localStorage.setItem("td-theme", newTheme);
-    // For now only dark mode is supported - could extend later
-    toast.success(`Theme preference saved: ${newTheme}`);
+  const handleThemeChange = (t: string) => {
+    setTheme(t);
+    localStorage.setItem("td-theme", t);
+    toast.success(`Theme: ${t}`);
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/");
-  };
+  const handleSignOut = async () => { await signOut(); navigate("/"); };
 
   const planBadge = (plan: string) => {
-    if (plan === "pro_plus") return { label: "Pro+", color: "bg-yellow-500/10 text-yellow-400" };
+    if (plan === "elite") return { label: "Elite", color: "bg-yellow-500/10 text-yellow-400" };
+    if (plan === "pro_plus") return { label: "Pro+", color: "bg-primary/10 text-primary" };
     if (plan === "pro") return { label: "Pro", color: "bg-primary/10 text-primary" };
     return { label: "Free", color: "bg-muted text-muted-foreground" };
   };
-
   const badge = planBadge(profile?.plan || "free");
 
   return (
@@ -122,83 +136,39 @@ const AppSettings = () => {
           <TabsTrigger value="security"><Shield className="h-3.5 w-3.5 mr-1.5" />Security</TabsTrigger>
         </TabsList>
 
-        {/* Profile Tab */}
         <TabsContent value="profile">
-          <div className="rounded-lg border border-border bg-card p-6 space-y-5">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Email</label>
-              <p className="font-mono text-sm text-foreground">{user?.email}</p>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Full Name</label>
-              <Input
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Enter your name"
-                className="bg-background border-border max-w-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Plan</label>
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge.color}`}>{badge.label}</span>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Member Since</label>
-              <p className="text-sm font-mono">{profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "—"}</p>
-            </div>
-            <Button
-              onClick={() => updateProfile.mutate()}
-              disabled={updateProfile.isPending}
-              className="bg-primary text-primary-foreground"
-            >
-              {updateProfile.isPending ? "Saving..." : "Save Profile"}
-            </Button>
-          </div>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-card p-6 space-y-5">
+            <div><label className="text-xs text-muted-foreground block mb-1">Email</label><p className="font-mono text-sm text-foreground">{user?.email}</p></div>
+            <div><label className="text-xs text-muted-foreground block mb-1">Full Name</label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter your name" className="bg-background border-border max-w-sm" /></div>
+            <div><label className="text-xs text-muted-foreground block mb-1">Plan</label><span className={`text-xs px-2.5 py-1 rounded-full font-medium ${badge.color}`}>{badge.label}</span></div>
+            <div><label className="text-xs text-muted-foreground block mb-1">Member Since</label><p className="text-sm font-mono">{profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "—"}</p></div>
+            <Button onClick={() => updateProfile.mutate()} disabled={updateProfile.isPending} className="bg-primary text-primary-foreground">{updateProfile.isPending ? "Saving..." : "Save Profile"}</Button>
+          </motion.div>
         </TabsContent>
 
-        {/* Billing Tab */}
         <TabsContent value="billing">
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-card p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="font-semibold">Current Plan</h3>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    You're on the <span className={`font-medium ${badge.color} px-1.5 py-0.5 rounded`}>{badge.label}</span> plan
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-0.5">You're on the <span className={`font-medium ${badge.color} px-1.5 py-0.5 rounded`}>{badge.label}</span> plan</p>
                 </div>
                 {profile?.plan === "free" && (
-                  <Button onClick={() => navigate("/app/upgrade")} className="bg-primary text-primary-foreground">
-                    <Crown className="h-3.5 w-3.5 mr-1.5" />
-                    Upgrade
-                  </Button>
+                  <Button onClick={() => navigate("/app/upgrade")} className="bg-primary text-primary-foreground"><Crown className="h-3.5 w-3.5 mr-1.5" />Upgrade</Button>
                 )}
               </div>
-
-              {profile?.plan === "free" && (
-                <div className="text-xs text-muted-foreground border-t border-border pt-3">
-                  Free plan includes 20 trades/month. Upgrade for more.
-                </div>
-              )}
             </div>
-
             {myPayments.length > 0 && (
               <div className="rounded-lg border border-border bg-card p-5">
                 <h3 className="text-sm font-semibold mb-3">Payment History</h3>
                 <div className="space-y-2">
                   {myPayments.map((p) => (
                     <div key={p.id} className="flex items-center justify-between p-3 rounded border border-border bg-background">
-                      <div>
-                        <span className="font-mono text-sm">${Number(p.amount).toFixed(2)}</span>
-                        <span className="text-xs text-muted-foreground ml-2">{p.method || "—"}</span>
-                      </div>
+                      <div><span className="font-mono text-sm">${Number(p.amount).toFixed(2)}</span><span className="text-xs text-muted-foreground ml-2">{p.method || "—"}</span></div>
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-mono text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          p.status === "approved" ? "bg-success/10 text-success" :
-                          p.status === "rejected" ? "bg-destructive/10 text-destructive" :
-                          "bg-yellow-500/10 text-yellow-500"
-                        }`}>{p.status}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "approved" ? "bg-success/10 text-success" : p.status === "rejected" ? "bg-destructive/10 text-destructive" : "bg-yellow-500/10 text-yellow-500"}`}>{p.status}</span>
                       </div>
                     </div>
                   ))}
@@ -208,9 +178,8 @@ const AppSettings = () => {
           </div>
         </TabsContent>
 
-        {/* Preferences Tab */}
         <TabsContent value="preferences">
-          <div className="rounded-lg border border-border bg-card p-6 space-y-5">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-card p-6 space-y-5">
             <div>
               <h3 className="font-semibold mb-3">Theme</h3>
               <div className="flex gap-3">
@@ -219,22 +188,13 @@ const AppSettings = () => {
                   { id: "midnight", label: "Midnight", desc: "Deep dark mode" },
                   { id: "divine", label: "Divine", desc: "Cyan accent glow" },
                 ].map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => handleThemeChange(t.id)}
-                    className={`flex-1 p-3 rounded-lg border text-left transition-all ${
-                      theme === t.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-background hover:border-muted-foreground/30"
-                    }`}
-                  >
+                  <button key={t.id} onClick={() => handleThemeChange(t.id)} className={`flex-1 p-3 rounded-lg border text-left transition-all ${theme === t.id ? "border-primary bg-primary/5" : "border-border bg-background hover:border-muted-foreground/30"}`}>
                     <span className="text-sm font-medium block">{t.label}</span>
                     <span className="text-xs text-muted-foreground">{t.desc}</span>
                   </button>
                 ))}
               </div>
             </div>
-
             <div>
               <h3 className="font-semibold mb-3">Notifications</h3>
               <div className="space-y-3">
@@ -246,45 +206,65 @@ const AppSettings = () => {
                 ))}
               </div>
             </div>
-          </div>
+          </motion.div>
         </TabsContent>
 
-        {/* Security Tab */}
         <TabsContent value="security">
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-card p-6 space-y-4">
               <h3 className="font-semibold">Change Password</h3>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">New Password</label>
-                <Input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  className="bg-background border-border max-w-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Confirm Password</label>
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter password"
-                  className="bg-background border-border max-w-sm"
-                />
-              </div>
-              <Button onClick={handlePasswordChange} disabled={updatePassword.isPending} className="bg-primary text-primary-foreground">
-                {updatePassword.isPending ? "Updating..." : "Update Password"}
-              </Button>
+              <div><label className="text-xs text-muted-foreground block mb-1">New Password</label><Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min 6 characters" className="bg-background border-border max-w-sm" /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Confirm Password</label><Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" className="bg-background border-border max-w-sm" /></div>
+              <Button onClick={handlePasswordChange} disabled={updatePassword.isPending} className="bg-primary text-primary-foreground">{updatePassword.isPending ? "Updating..." : "Update Password"}</Button>
             </div>
 
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6">
-              <h3 className="font-semibold text-destructive mb-2">Danger Zone</h3>
+            {/* Delete Account Data */}
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <h3 className="font-semibold text-destructive">Delete Account Data</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Permanently delete a trading account and all its trades. This cannot be undone.</p>
+              {accounts.length > 0 ? (
+                <div className="space-y-3">
+                  <Select value={deleteAccountId} onValueChange={setDeleteAccountId}>
+                    <SelectTrigger className="bg-background border-border max-w-sm">
+                      <SelectValue placeholder="Select account to delete" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      {accounts.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>{a.name} (${Number(a.current_balance).toFixed(0)})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {deleteAccountId && (
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.checked)} className="accent-destructive" />
+                        <span className="text-xs text-destructive">I understand this is permanent and irreversible</span>
+                      </label>
+                      <Button
+                        variant="outline"
+                        className="border-destructive text-destructive hover:bg-destructive/10"
+                        onClick={() => deleteAccountMutation.mutate(deleteAccountId)}
+                        disabled={!deleteConfirm || deleteAccountMutation.isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        {deleteAccountMutation.isPending ? "Deleting..." : "Delete Account Permanently"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No accounts to delete.</p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border bg-card p-6">
+              <h3 className="font-semibold mb-2">Sign Out</h3>
               <p className="text-sm text-muted-foreground mb-4">Sign out of your account on this device.</p>
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" onClick={handleSignOut}>
-                <LogOut className="h-3.5 w-3.5 mr-1.5" />
-                Sign Out
+                <LogOut className="h-3.5 w-3.5 mr-1.5" />Sign Out
               </Button>
             </div>
           </div>

@@ -1,0 +1,75 @@
+import { motion } from "framer-motion";
+import { Star } from "lucide-react";
+
+const reviews = [
+  {
+    name: "Arjun S.",
+    role: "Forex Trader",
+    text: "Trader's Divine completely changed how I approach journaling. The Divine Score keeps me honest about my discipline.",
+    stars: 5,
+  },
+  {
+    name: "Priya M.",
+    role: "Crypto Trader",
+    text: "The simplicity is unmatched. I log trades in seconds and the analytics help me see patterns I never noticed before.",
+    stars: 5,
+  },
+  {
+    name: "Rahul K.",
+    role: "Prop Firm Trader",
+    text: "Managing multiple accounts is seamless. Real-time balance updates and the risk calculator are game changers.",
+    stars: 5,
+  },
+  {
+    name: "Sarah T.",
+    role: "Day Trader",
+    text: "Finally a journal that focuses on discipline, not just profit. The plan adherence tracking is exactly what I needed.",
+    stars: 4,
+  },
+];
+
+export const ReviewsSection = () => {
+  return (
+    <section className="py-24 md:py-32 border-t border-border">
+      <div className="container px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="text-center mb-16"
+        >
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">Loved by Traders</h2>
+          <p className="text-muted-foreground text-lg">Join hundreds of disciplined traders worldwide.</p>
+        </motion.div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
+          {reviews.map((review, i) => (
+            <motion.div
+              key={review.name}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
+              className="rounded-lg border border-border bg-card p-5 card-glow hover:divine-border transition-all duration-300"
+            >
+              <div className="flex items-center gap-0.5 mb-3">
+                {Array.from({ length: review.stars }).map((_, j) => (
+                  <Star key={j} className="h-3.5 w-3.5 fill-primary text-primary" />
+                ))}
+                {Array.from({ length: 5 - review.stars }).map((_, j) => (
+                  <Star key={j} className="h-3.5 w-3.5 text-muted" />
+                ))}
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">"{review.text}"</p>
+              <div>
+                <p className="text-sm font-semibold">{review.name}</p>
+                <p className="text-xs text-muted-foreground">{review.role}</p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
