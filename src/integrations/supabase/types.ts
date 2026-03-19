@@ -47,6 +47,39 @@ export type Database = {
         }
         Relationships: []
       }
+      news: {
+        Row: {
+          category: string | null
+          content: string
+          created_at: string
+          id: string
+          published: boolean | null
+          source: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          published?: boolean | null
+          source?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          published?: boolean | null
+          source?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number
