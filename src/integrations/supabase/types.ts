@@ -83,9 +83,11 @@ export type Database = {
       payments: {
         Row: {
           amount: number
+          amount_inr: number | null
           created_at: string
           id: string
           method: string | null
+          requested_plan: string | null
           screenshot_url: string | null
           status: string
           transaction_id: string | null
@@ -93,9 +95,11 @@ export type Database = {
         }
         Insert: {
           amount: number
+          amount_inr?: number | null
           created_at?: string
           id?: string
           method?: string | null
+          requested_plan?: string | null
           screenshot_url?: string | null
           status?: string
           transaction_id?: string | null
@@ -103,9 +107,11 @@ export type Database = {
         }
         Update: {
           amount?: number
+          amount_inr?: number | null
           created_at?: string
           id?: string
           method?: string | null
+          requested_plan?: string | null
           screenshot_url?: string | null
           status?: string
           transaction_id?: string | null
@@ -185,6 +191,33 @@ export type Database = {
           key?: string
           updated_at?: string
           value?: Json
+        }
+        Relationships: []
+      }
+      support_messages: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          sender: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          sender: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          sender?: string
+          user_id?: string
         }
         Relationships: []
       }
