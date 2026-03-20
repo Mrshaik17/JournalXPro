@@ -1,21 +1,44 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Navigate } from "react-router-dom";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shield, Users, CreditCard, Link2, Settings, BarChart3, Newspaper, Trash2, Plus } from "lucide-react";
-import { motion } from "framer-motion";
+import {
+  Shield, Users, CreditCard, Link2, Settings, BarChart3, Newspaper,
+  Trash2, Plus, MessageSquare, LayoutDashboard, Download, Bell,
+  ChevronLeft, ChevronRight, TrendingUp, DollarSign, UserPlus, Clock
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
+
+type AdminSection = "dashboard" | "users" | "payments" | "referrals" | "chat" | "news" | "settings";
+
+const sidebarItems: { key: AdminSection; label: string; icon: any }[] = [
+  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { key: "users", label: "Users", icon: Users },
+  { key: "payments", label: "Payments", icon: CreditCard },
+  { key: "referrals", label: "Referrals", icon: Link2 },
+  { key: "chat", label: "Chat", icon: MessageSquare },
+  { key: "news", label: "News", icon: Newspaper },
+  { key: "settings", label: "Settings", icon: Settings },
+];
 
 const Admin = () => {
   const { user, loading } = useAuth();
   const queryClient = useQueryClient();
+  const [activeSection, setActiveSection] = useState<AdminSection>("dashboard");
+  const [collapsed, setCollapsed] = useState(false);
+  const [pendingNotif, setPendingNotif] = useState(0);
+  const [chatNotif, setChatNotif] = useState(0);
 
+  // ---- DATA QUERIES ----
   const { data: isAdmin, isLoading: roleLoading } = useQuery({
     queryKey: ["isAdmin", user?.id],
     queryFn: async () => {
@@ -86,6 +109,46 @@ const Admin = () => {
     enabled: !!isAdmin,
   });
 
+  const { data: chatUsers = [] } = useQuery({
+    queryKey: ["admin-chat-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("support_messages")
+        .select("user_id")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const uniqueIds = [...new Set(data.map((m: any) => m.user_id))];
+      return uniqueIds as string[];
+    },
+    enabled: !!isAdmin,
+  });
+
+  // ---- REALTIME ----
+  useEffect(() => {
+    if (!isAdmin) return;
+    const channel = supabase
+      .channel("admin-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
+        setPendingNotif((n) => n + 1);
+        toast.info("💰 New payment received!");
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" }, (payload: any) => {
+        if (payload.new?.sender === "user") {
+          queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
+          setChatNotif((n) => n + 1);
+          toast.info("💬 New chat message!");
+        }
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
+        toast.info("👤 New user signed up!");
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [isAdmin, queryClient]);
+
+  // ---- HELPERS ----
   const getSetting = (key: string): any => {
     const s = siteSettings.find((s: any) => s.key === key);
     return s?.value || {};
@@ -102,10 +165,7 @@ const Admin = () => {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["site-settings"] });
-      toast.success("Settings saved.");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["site-settings"] }); toast.success("Settings saved."); },
     onError: (err: any) => toast.error(err.message),
   });
 
@@ -130,71 +190,45 @@ const Admin = () => {
       const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
-      toast.success("User plan updated.");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-profiles"] }); toast.success("User plan updated."); },
     onError: (err: any) => toast.error(err.message),
   });
 
-  // Referral management
+  // Referral
   const [refName, setRefName] = useState("");
   const [refCode, setRefCode] = useState("");
   const [refCommission, setRefCommission] = useState("");
-
   const createReferral = useMutation({
     mutationFn: async () => {
       if (!refName || !refCode) throw new Error("Name and code required");
-      const { error } = await supabase.from("referrals").insert({
-        name: refName,
-        code: refCode,
-        commission_percent: parseFloat(refCommission) || 0,
-      });
+      const { error } = await supabase.from("referrals").insert({ name: refName, code: refCode, commission_percent: parseFloat(refCommission) || 0 });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
-      toast.success("Referral code created.");
-      setRefName(""); setRefCode(""); setRefCommission("");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-referrals"] }); toast.success("Referral created."); setRefName(""); setRefCode(""); setRefCommission(""); },
     onError: (err: any) => toast.error(err.message),
   });
+  const deleteReferral = useMutation({
+    mutationFn: async (id: string) => { const { error } = await supabase.from("referrals").delete().eq("id", id); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-referrals"] }); toast.success("Deleted."); },
+  });
 
-  // News management
+  // News
   const [newsTitle, setNewsTitle] = useState("");
   const [newsContent, setNewsContent] = useState("");
   const [newsSource, setNewsSource] = useState("");
   const [newsCategory, setNewsCategory] = useState("forex");
-
   const createNews = useMutation({
     mutationFn: async () => {
       if (!newsTitle || !newsContent) throw new Error("Title and content required");
-      const { error } = await supabase.from("news").insert({
-        title: newsTitle,
-        content: newsContent,
-        source: newsSource || null,
-        category: newsCategory,
-      });
+      const { error } = await supabase.from("news").insert({ title: newsTitle, content: newsContent, source: newsSource || null, category: newsCategory });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-news"] });
-      toast.success("News published!");
-      setNewsTitle(""); setNewsContent(""); setNewsSource("");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Published!"); setNewsTitle(""); setNewsContent(""); setNewsSource(""); },
     onError: (err: any) => toast.error(err.message),
   });
-
   const deleteNews = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("news").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-news"] });
-      toast.success("News deleted.");
-    },
-    onError: (err: any) => toast.error(err.message),
+    mutationFn: async (id: string) => { const { error } = await supabase.from("news").delete().eq("id", id); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Deleted."); },
   });
 
   // Settings state
@@ -213,30 +247,85 @@ const Admin = () => {
   useEffect(() => {
     if (siteSettings.length > 0) {
       const ps = getSetting("payment_settings");
-      setUpiId(ps.upi_id || "");
-      setPhoneNumber(ps.phone_number || "");
-      setCryptoWallet(ps.crypto_wallet || "");
-
+      setUpiId(ps.upi_id || ""); setPhoneNumber(ps.phone_number || ""); setCryptoWallet(ps.crypto_wallet || "");
       const social = getSetting("social_links");
-      setInstagram(social.instagram || "");
-      setTwitter(social.twitter || "");
-      setTelegram(social.telegram || "");
-      setDiscord(social.discord || "");
-
+      setInstagram(social.instagram || ""); setTwitter(social.twitter || ""); setTelegram(social.telegram || ""); setDiscord(social.discord || "");
       const pricing = getSetting("pricing");
-      setPricePro(pricing.pro?.toString() || "5");
-      setPriceProPlus(pricing.pro_plus?.toString() || "10");
-      setPriceElite(pricing.elite?.toString() || "14");
-
+      setPricePro(pricing.pro?.toString() || "5"); setPriceProPlus(pricing.pro_plus?.toString() || "10"); setPriceElite(pricing.elite?.toString() || "14");
       const rate = getSetting("inr_rate");
       setInrRate(rate.rate?.toString() || "83.5");
     }
   }, [siteSettings]);
 
-  if (loading || roleLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading...</p></div>;
-  }
+  // ---- CHAT ----
+  const [selectedChatUser, setSelectedChatUser] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatReply, setChatReply] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (!selectedChatUser || !isAdmin) return;
+    const fetchMessages = async () => {
+      const { data } = await supabase.from("support_messages").select("*").eq("user_id", selectedChatUser).order("created_at", { ascending: true });
+      setChatMessages(data || []);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    };
+    fetchMessages();
+    const channel = supabase.channel(`chat-${selectedChatUser}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages", filter: `user_id=eq.${selectedChatUser}` }, () => fetchMessages()).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedChatUser, isAdmin]);
+
+  const sendAdminReply = async () => {
+    if (!chatReply.trim() || !selectedChatUser) return;
+    await supabase.from("support_messages").insert({ user_id: selectedChatUser, sender: "admin", message: chatReply.trim() });
+    setChatReply("");
+  };
+
+  // ---- EXPORT ----
+  const exportData = (format: "pdf" | "excel", range: "week" | "month" | "all") => {
+    const now = new Date();
+    let since = new Date(0);
+    if (range === "week") since = new Date(now.getTime() - 7 * 86400000);
+    if (range === "month") since = new Date(now.getTime() - 30 * 86400000);
+
+    const filteredPayments = payments.filter((p) => new Date(p.created_at) >= since);
+    const filteredUsers = profiles.filter((p) => new Date(p.created_at) >= since);
+
+    if (format === "pdf") {
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text("Trader's Divine - Admin Report", 14, 20);
+      doc.setFontSize(10);
+      doc.text(`Range: ${range} | Generated: ${now.toLocaleDateString()}`, 14, 28);
+      doc.text(`Total Users: ${filteredUsers.length} | Payments: ${filteredPayments.length}`, 14, 34);
+      autoTable(doc, {
+        startY: 42,
+        head: [["Email", "Plan", "Joined"]],
+        body: filteredUsers.map((u) => [u.email || "", u.plan, new Date(u.created_at).toLocaleDateString()]),
+      });
+      const finalY = (doc as any).lastAutoTable?.finalY || 50;
+      autoTable(doc, {
+        startY: finalY + 10,
+        head: [["Amount", "Method", "Status", "Date"]],
+        body: filteredPayments.map((p) => [`$${Number(p.amount).toFixed(2)}`, p.method || "", p.status, new Date(p.created_at).toLocaleDateString()]),
+      });
+      doc.save(`admin-report-${range}.pdf`);
+      toast.success("PDF downloaded!");
+    } else {
+      const wb = XLSX.utils.book_new();
+      const usersWs = XLSX.utils.json_to_sheet(filteredUsers.map((u) => ({ Email: u.email, Name: u.full_name, Plan: u.plan, Referral: u.referral_code_used, Joined: new Date(u.created_at).toLocaleDateString() })));
+      XLSX.utils.book_append_sheet(wb, usersWs, "Users");
+      const paymentsWs = XLSX.utils.json_to_sheet(filteredPayments.map((p) => ({ Amount: p.amount, Method: p.method, Status: p.status, TxnID: p.transaction_id, Date: new Date(p.created_at).toLocaleDateString() })));
+      XLSX.utils.book_append_sheet(wb, paymentsWs, "Payments");
+      XLSX.writeFile(wb, `admin-report-${range}.xlsx`);
+      toast.success("Excel downloaded!");
+    }
+  };
+
+  // ---- LOADING / AUTH ----
+  if (loading || roleLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-pulse text-muted-foreground">Loading admin...</div></div>;
+  }
   if (!user || !isAdmin) {
     return <Navigate to="/" replace />;
   }
@@ -246,294 +335,529 @@ const Admin = () => {
   const totalTrades = trades.length;
   const pendingPayments = payments.filter((p) => p.status === "pending").length;
   const totalRevenue = payments.filter((p) => p.status === "approved").reduce((s, p) => s + Number(p.amount), 0);
+  const thisWeekUsers = profiles.filter((p) => new Date(p.created_at) >= new Date(Date.now() - 7 * 86400000)).length;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="border-b border-border px-6 py-4 flex items-center gap-3">
-        <Shield className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-bold">Admin Panel</h1>
-        <span className="text-xs text-muted-foreground ml-auto">Trader's Divine</span>
-      </div>
-
-      <div className="container max-w-6xl px-6 py-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          {[
-            { label: "Total Users", value: totalUsers, icon: Users },
-            { label: "Paid Users", value: paidUsers, icon: CreditCard },
-            { label: "Total Trades", value: totalTrades, icon: BarChart3 },
-            { label: "Pending", value: pendingPayments, icon: Settings },
-            { label: "Revenue", value: `$${totalRevenue.toFixed(0)}`, icon: CreditCard },
-          ].map((s, i) => (
-            <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="rounded-lg border border-border bg-card p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <s.icon className="h-4 w-4 text-primary" />
-                <span className="text-xs text-muted-foreground">{s.label}</span>
-              </div>
-              <div className="text-2xl font-bold font-mono">{s.value}</div>
-            </motion.div>
-          ))}
+    <div className="min-h-screen flex bg-background text-foreground">
+      {/* SIDEBAR */}
+      <motion.aside
+        animate={{ width: collapsed ? 64 : 220 }}
+        transition={{ duration: 0.2 }}
+        className="fixed left-0 top-0 h-full bg-card border-r border-border z-50 flex flex-col"
+      >
+        <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
+          <Shield className="h-5 w-5 text-primary shrink-0" />
+          {!collapsed && <span className="font-bold text-sm truncate">Admin Panel</span>}
         </div>
 
-        <Tabs defaultValue="users" className="space-y-4">
-          <TabsList className="bg-card border border-border">
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
-            <TabsTrigger value="referrals">Referrals</TabsTrigger>
-            <TabsTrigger value="news">News</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-
-          {/* Users Tab */}
-          <TabsContent value="users">
-            <div className="rounded-lg border border-border bg-card overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground text-xs uppercase">
-                    <th className="text-left p-3">Email</th>
-                    <th className="text-left p-3">Name</th>
-                    <th className="text-left p-3">Plan</th>
-                    <th className="text-left p-3">Referral</th>
-                    <th className="text-left p-3">Joined</th>
-                    <th className="text-center p-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profiles.map((p) => (
-                    <tr key={p.id} className="border-b border-border last:border-0">
-                      <td className="p-3 text-xs">{p.email}</td>
-                      <td className="p-3 text-xs">{p.full_name || "—"}</td>
-                      <td className="p-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${p.plan === "free" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>{p.plan}</span>
-                      </td>
-                      <td className="p-3 text-xs">{p.referral_code_used || "—"}</td>
-                      <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
-                      <td className="p-3 text-center">
-                        <Select onValueChange={(v) => updateUserPlan.mutate({ userId: p.id, plan: v })}>
-                          <SelectTrigger className="h-7 text-xs w-24 bg-background border-border">
-                            <SelectValue placeholder="Set plan" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-card border-border">
-                            <SelectItem value="free">Free</SelectItem>
-                            <SelectItem value="pro">Pro</SelectItem>
-                            <SelectItem value="pro_plus">Pro+</SelectItem>
-                            <SelectItem value="elite">Elite</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </TabsContent>
-
-          {/* Payments Tab */}
-          <TabsContent value="payments">
-            <div className="rounded-lg border border-border bg-card overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground text-xs uppercase">
-                    <th className="text-left p-3">User</th>
-                    <th className="text-right p-3">Amount</th>
-                    <th className="text-left p-3">Method</th>
-                    <th className="text-left p-3">TXN ID</th>
-                    <th className="text-left p-3">Status</th>
-                    <th className="text-left p-3">Screenshot</th>
-                    <th className="text-left p-3">Date</th>
-                    <th className="text-center p-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((p) => {
-                    const profile = profiles.find((pr) => pr.id === p.user_id);
-                    return (
-                      <tr key={p.id} className="border-b border-border last:border-0">
-                        <td className="p-3 text-xs">{profile?.email || p.user_id}</td>
-                        <td className="p-3 text-right font-mono">${Number(p.amount).toFixed(2)}</td>
-                        <td className="p-3 text-xs">{p.method || "—"}</td>
-                        <td className="p-3 text-xs font-mono">{p.transaction_id || "—"}</td>
-                        <td className="p-3">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            p.status === "approved" ? "bg-success/10 text-success" :
-                            p.status === "rejected" ? "bg-destructive/10 text-destructive" :
-                            "bg-yellow-500/10 text-yellow-500"
-                          }`}>{p.status}</span>
-                        </td>
-                        <td className="p-3 text-xs">
-                          {p.screenshot_url ? <a href={p.screenshot_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View</a> : "—"}
-                        </td>
-                        <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
-                        <td className="p-3 text-center">
-                          {p.status === "pending" && (
-                            <div className="flex gap-1 justify-center">
-                              <Select onValueChange={(plan) => updatePaymentStatus.mutate({ id: p.id, status: "approved", userId: p.user_id, plan })}>
-                                <SelectTrigger className="h-6 text-xs w-20 bg-background border-success/30 text-success">
-                                  <SelectValue placeholder="Approve" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-card border-border">
-                                  <SelectItem value="pro">Pro</SelectItem>
-                                  <SelectItem value="pro_plus">Pro+</SelectItem>
-                                  <SelectItem value="elite">Elite</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <Button size="sm" variant="outline" className="h-6 text-xs text-destructive border-destructive/30" onClick={() => updatePaymentStatus.mutate({ id: p.id, status: "rejected", userId: p.user_id })}>Reject</Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {payments.length === 0 && (
-                    <tr><td colSpan={8} className="p-6 text-center text-muted-foreground text-sm">No payments yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </TabsContent>
-
-          {/* Referrals Tab */}
-          <TabsContent value="referrals">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3">Create Referral Code</h3>
-                <div className="space-y-3">
-                  <Input value={refName} onChange={(e) => setRefName(e.target.value)} placeholder="Referrer name" className="bg-background border-border" />
-                  <Input value={refCode} onChange={(e) => setRefCode(e.target.value)} placeholder="Code (e.g. JOHN20)" className="bg-background border-border font-mono" />
-                  <Input value={refCommission} onChange={(e) => setRefCommission(e.target.value)} placeholder="Commission %" className="bg-background border-border font-mono" type="number" />
-                  <Button onClick={() => createReferral.mutate()} disabled={createReferral.isPending} className="w-full bg-primary text-primary-foreground">
-                    {createReferral.isPending ? "Creating..." : "Create Code"}
-                  </Button>
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3">Existing Codes</h3>
-                {referrals.length > 0 ? (
-                  <div className="space-y-2">
-                    {referrals.map((r) => {
-                      const signups = profiles.filter((p) => p.referral_code_used === r.code).length;
-                      const paidSignups = profiles.filter((p) => p.referral_code_used === r.code && p.plan !== "free").length;
-                      return (
-                        <div key={r.id} className="flex items-center justify-between p-3 rounded border border-border bg-background">
-                          <div>
-                            <span className="font-mono text-sm text-primary">{r.code}</span>
-                            <span className="text-xs text-muted-foreground ml-2">{r.name} · {r.commission_percent}%</span>
-                          </div>
-                          <div className="text-xs text-muted-foreground">{signups} signups · {paidSignups} paid</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No referral codes yet.</p>
+        <nav className="flex-1 py-2 space-y-0.5 px-2">
+          {sidebarItems.map((item) => {
+            const isActive = activeSection === item.key;
+            const badge = item.key === "payments" ? pendingNotif : item.key === "chat" ? chatNotif : 0;
+            return (
+              <button
+                key={item.key}
+                onClick={() => {
+                  setActiveSection(item.key);
+                  if (item.key === "payments") setPendingNotif(0);
+                  if (item.key === "chat") setChatNotif(0);
+                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all relative ${
+                  isActive
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                {!collapsed && <span className="truncate">{item.label}</span>}
+                {badge > 0 && (
+                  <span className="absolute right-2 top-1.5 h-4 min-w-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
+                    {badge}
+                  </span>
                 )}
-              </div>
-            </div>
-          </TabsContent>
+              </button>
+            );
+          })}
+        </nav>
 
-          {/* News Tab */}
-          <TabsContent value="news">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Newspaper className="h-4 w-4 text-primary" /> Post News</h3>
-                <div className="space-y-3">
-                  <Input value={newsTitle} onChange={(e) => setNewsTitle(e.target.value)} placeholder="News headline" className="bg-background border-border" />
-                  <Textarea value={newsContent} onChange={(e) => setNewsContent(e.target.value)} placeholder="News content..." className="bg-background border-border" rows={4} />
-                  <Input value={newsSource} onChange={(e) => setNewsSource(e.target.value)} placeholder="Source (e.g. Forex Factory)" className="bg-background border-border" />
-                  <Select value={newsCategory} onValueChange={setNewsCategory}>
-                    <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="forex">Forex</SelectItem>
-                      <SelectItem value="crypto">Crypto</SelectItem>
-                      <SelectItem value="stocks">Stocks</SelectItem>
-                      <SelectItem value="economy">Economy</SelectItem>
-                      <SelectItem value="general">General</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={() => createNews.mutate()} disabled={createNews.isPending} className="w-full bg-primary text-primary-foreground">
-                    <Plus className="h-4 w-4 mr-2" />{createNews.isPending ? "Publishing..." : "Publish News"}
-                  </Button>
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3">Recent News ({newsList.length})</h3>
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {newsList.map((n: any) => (
-                    <div key={n.id} className="p-3 rounded border border-border bg-background group">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <span className="text-xs text-primary font-mono uppercase">{n.category}</span>
-                          <h4 className="text-sm font-semibold mt-0.5">{n.title}</h4>
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{n.content}</p>
-                          <span className="text-[10px] text-muted-foreground font-mono mt-1 block">{new Date(n.created_at).toLocaleDateString()}</span>
-                        </div>
-                        <button onClick={() => deleteNews.mutate(n.id)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {newsList.length === 0 && <p className="text-sm text-muted-foreground">No news posted yet.</p>}
-                </div>
-              </div>
-            </div>
-          </TabsContent>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="p-3 border-t border-border text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4 mx-auto" /> : <ChevronLeft className="h-4 w-4 mx-auto" />}
+        </button>
+      </motion.aside>
 
-          {/* Settings Tab */}
-          <TabsContent value="settings">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3">Payment Settings</h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">UPI ID</label>
-                    <Input value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="yourname@upi" className="bg-background border-border font-mono" />
+      {/* MAIN CONTENT */}
+      <motion.main
+        animate={{ marginLeft: collapsed ? 64 : 220 }}
+        transition={{ duration: 0.2 }}
+        className="flex-1 min-h-screen"
+      >
+        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
+          <h2 className="font-bold text-lg capitalize">{activeSection}</h2>
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Trader's Divine</span>
+          </div>
+        </header>
+
+        <div className="p-6">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeSection}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.15 }}
+            >
+              {activeSection === "dashboard" && (
+                <DashboardSection
+                  totalUsers={totalUsers} paidUsers={paidUsers} totalTrades={totalTrades}
+                  pendingPayments={pendingPayments} totalRevenue={totalRevenue} thisWeekUsers={thisWeekUsers}
+                  profiles={profiles} payments={payments} exportData={exportData}
+                />
+              )}
+              {activeSection === "users" && <UsersSection profiles={profiles} updateUserPlan={updateUserPlan} />}
+              {activeSection === "payments" && <PaymentsSection payments={payments} profiles={profiles} updatePaymentStatus={updatePaymentStatus} />}
+              {activeSection === "referrals" && (
+                <ReferralsSection
+                  referrals={referrals} profiles={profiles} payments={payments}
+                  refName={refName} setRefName={setRefName} refCode={refCode} setRefCode={setRefCode}
+                  refCommission={refCommission} setRefCommission={setRefCommission}
+                  createReferral={createReferral} deleteReferral={deleteReferral}
+                />
+              )}
+              {activeSection === "chat" && (
+                <ChatSection
+                  chatUsers={chatUsers} profiles={profiles} selectedChatUser={selectedChatUser}
+                  setSelectedChatUser={setSelectedChatUser} chatMessages={chatMessages}
+                  chatReply={chatReply} setChatReply={setChatReply} sendAdminReply={sendAdminReply} chatEndRef={chatEndRef}
+                />
+              )}
+              {activeSection === "news" && (
+                <NewsSection
+                  newsList={newsList} newsTitle={newsTitle} setNewsTitle={setNewsTitle}
+                  newsContent={newsContent} setNewsContent={setNewsContent} newsSource={newsSource} setNewsSource={setNewsSource}
+                  newsCategory={newsCategory} setNewsCategory={setNewsCategory} createNews={createNews} deleteNews={deleteNews}
+                />
+              )}
+              {activeSection === "settings" && (
+                <SettingsSection
+                  upiId={upiId} setUpiId={setUpiId} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber}
+                  cryptoWallet={cryptoWallet} setCryptoWallet={setCryptoWallet}
+                  instagram={instagram} setInstagram={setInstagram} twitter={twitter} setTwitter={setTwitter}
+                  telegram={telegram} setTelegram={setTelegram} discord={discord} setDiscord={setDiscord}
+                  pricePro={pricePro} setPricePro={setPricePro} priceProPlus={priceProPlus} setPriceProPlus={setPriceProPlus}
+                  priceElite={priceElite} setPriceElite={setPriceElite} inrRate={inrRate} setInrRate={setInrRate}
+                  upsertSetting={upsertSetting}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </motion.main>
+    </div>
+  );
+};
+
+// ============== SUB COMPONENTS ==============
+
+const StatCard = ({ label, value, icon: Icon, color = "text-primary" }: any) => (
+  <div className="rounded-lg border border-border bg-card p-4 card-glow">
+    <div className="flex items-center gap-2 mb-2">
+      <Icon className={`h-4 w-4 ${color}`} />
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+    <div className="text-2xl font-bold font-mono">{value}</div>
+  </div>
+);
+
+const DashboardSection = ({ totalUsers, paidUsers, totalTrades, pendingPayments, totalRevenue, thisWeekUsers, profiles, payments, exportData }: any) => {
+  const recentPayments = payments.filter((p: any) => p.status === "pending").slice(0, 5);
+  const recentUsers = profiles.slice(0, 5);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <StatCard label="Total Users" value={totalUsers} icon={Users} />
+        <StatCard label="Paid Users" value={paidUsers} icon={CreditCard} color="text-green-400" />
+        <StatCard label="Total Trades" value={totalTrades} icon={BarChart3} />
+        <StatCard label="Pending" value={pendingPayments} icon={Clock} color="text-yellow-400" />
+        <StatCard label="Revenue" value={`$${totalRevenue.toFixed(0)}`} icon={DollarSign} color="text-green-400" />
+        <StatCard label="New (7d)" value={thisWeekUsers} icon={UserPlus} />
+      </div>
+
+      {/* Weekly revenue mini chart (text-based) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" /> Weekly Revenue</h3>
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => {
+              const weekStart = new Date(Date.now() - (3 - i) * 7 * 86400000);
+              const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+              const weekRevenue = payments.filter((p: any) => p.status === "approved" && new Date(p.created_at) >= weekStart && new Date(p.created_at) < weekEnd).reduce((s: number, p: any) => s + Number(p.amount), 0);
+              const maxRev = Math.max(totalRevenue, 1);
+              return (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-[10px] text-muted-foreground w-16 font-mono">{weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })}</span>
+                  <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.max((weekRevenue / maxRev) * 100, 2)}%` }}
+                      transition={{ duration: 0.5, delay: i * 0.1 }}
+                      className="h-full bg-primary/60 rounded-full"
+                    />
                   </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Phone Number (GPay/PhonePe)</label>
-                    <Input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+91..." className="bg-background border-border font-mono" />
+                  <span className="text-xs font-mono text-muted-foreground w-12 text-right">${weekRevenue.toFixed(0)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary" /> User Growth</h3>
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => {
+              const weekStart = new Date(Date.now() - (3 - i) * 7 * 86400000);
+              const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+              const weekUsers = profiles.filter((p: any) => new Date(p.created_at) >= weekStart && new Date(p.created_at) < weekEnd).length;
+              const maxU = Math.max(totalUsers, 1);
+              return (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-[10px] text-muted-foreground w-16 font-mono">{weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })}</span>
+                  <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.max((weekUsers / maxU) * 100, 2)}%` }}
+                      transition={{ duration: 0.5, delay: i * 0.1 }}
+                      className="h-full bg-green-500/60 rounded-full"
+                    />
                   </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Crypto Wallet</label>
-                    <Input value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} placeholder="0x..." className="bg-background border-border font-mono" />
-                  </div>
-                  <Button onClick={() => upsertSetting.mutate({ key: "payment_settings", value: { upi_id: upiId, phone_number: phoneNumber, crypto_wallet: cryptoWallet } })} className="w-full bg-primary text-primary-foreground">Save Payment Settings</Button>
+                  <span className="text-xs font-mono text-muted-foreground w-8 text-right">{weekUsers}</span>
                 </div>
-              </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3">Social Media Links</h3>
-                <div className="space-y-3">
-                  <div><label className="text-xs text-muted-foreground block mb-1">Instagram</label><Input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="https://instagram.com/..." className="bg-background border-border" /></div>
-                  <div><label className="text-xs text-muted-foreground block mb-1">Twitter / X</label><Input value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder="https://x.com/..." className="bg-background border-border" /></div>
-                  <div><label className="text-xs text-muted-foreground block mb-1">Telegram</label><Input value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="https://t.me/..." className="bg-background border-border" /></div>
-                  <div><label className="text-xs text-muted-foreground block mb-1">Discord</label><Input value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder="https://discord.gg/..." className="bg-background border-border" /></div>
-                  <Button onClick={() => upsertSetting.mutate({ key: "social_links", value: { instagram, twitter, telegram, discord } })} className="w-full bg-primary text-primary-foreground">Save Social Links</Button>
-                </div>
+      {/* Export + Quick lists */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Download className="h-4 w-4 text-primary" /> Export Data</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {(["week", "month", "all"] as const).map((range) => (
+              <div key={range} className="space-y-1.5">
+                <span className="text-[10px] text-muted-foreground uppercase">{range}</span>
+                <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => exportData("pdf", range)}>PDF</Button>
+                <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => exportData("excel", range)}>Excel</Button>
               </div>
+            ))}
+          </div>
+        </div>
 
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3">Pricing Control (USD)</h3>
-                <div className="space-y-3">
-                  <div><label className="text-xs text-muted-foreground block mb-1">Pro Plan ($)</label><Input value={pricePro} onChange={(e) => setPricePro(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
-                  <div><label className="text-xs text-muted-foreground block mb-1">Pro+ Plan ($)</label><Input value={priceProPlus} onChange={(e) => setPriceProPlus(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
-                  <div><label className="text-xs text-muted-foreground block mb-1">Elite Plan ($)</label><Input value={priceElite} onChange={(e) => setPriceElite(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
-                  <Button onClick={() => upsertSetting.mutate({ key: "pricing", value: { free: 0, pro: parseFloat(pricePro), pro_plus: parseFloat(priceProPlus), elite: parseFloat(priceElite) } })} className="w-full bg-primary text-primary-foreground">Save Pricing</Button>
-                </div>
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold mb-3">Pending Payments</h3>
+          <div className="space-y-2">
+            {recentPayments.length > 0 ? recentPayments.map((p: any) => (
+              <div key={p.id} className="flex items-center justify-between p-2 rounded bg-background border border-border">
+                <span className="text-xs font-mono">${Number(p.amount).toFixed(2)}</span>
+                <span className="text-[10px] text-yellow-400">{p.method}</span>
               </div>
+            )) : <p className="text-xs text-muted-foreground">No pending payments.</p>}
+          </div>
+        </div>
 
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="text-sm font-semibold mb-3">INR Conversion Rate</h3>
-                <div className="space-y-3">
-                  <div><label className="text-xs text-muted-foreground block mb-1">1 USD = ₹</label><Input value={inrRate} onChange={(e) => setInrRate(e.target.value)} className="bg-background border-border font-mono" type="number" step="0.1" /></div>
-                  <Button onClick={() => upsertSetting.mutate({ key: "inr_rate", value: { rate: parseFloat(inrRate) } })} className="w-full bg-primary text-primary-foreground">Save Rate</Button>
-                </div>
+        <div className="rounded-lg border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold mb-3">Recent Users</h3>
+          <div className="space-y-2">
+            {recentUsers.map((u: any) => (
+              <div key={u.id} className="flex items-center justify-between p-2 rounded bg-background border border-border">
+                <span className="text-xs truncate max-w-[140px]">{u.email}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${u.plan === "free" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>{u.plan}</span>
               </div>
-            </div>
-          </TabsContent>
-        </Tabs>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+
+const UsersSection = ({ profiles, updateUserPlan }: any) => (
+  <div className="rounded-lg border border-border bg-card overflow-x-auto">
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b border-border text-muted-foreground text-xs uppercase">
+          <th className="text-left p-3">Email</th>
+          <th className="text-left p-3">Name</th>
+          <th className="text-left p-3">Plan</th>
+          <th className="text-left p-3">Referral</th>
+          <th className="text-left p-3">Joined</th>
+          <th className="text-center p-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {profiles.map((p: any) => (
+          <tr key={p.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+            <td className="p-3 text-xs">{p.email}</td>
+            <td className="p-3 text-xs">{p.full_name || "—"}</td>
+            <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${p.plan === "free" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>{p.plan}</span></td>
+            <td className="p-3 text-xs font-mono">{p.referral_code_used || "—"}</td>
+            <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
+            <td className="p-3 text-center">
+              <Select onValueChange={(v) => updateUserPlan.mutate({ userId: p.id, plan: v })}>
+                <SelectTrigger className="h-7 text-xs w-24 bg-background border-border"><SelectValue placeholder="Set plan" /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="free">Free</SelectItem>
+                  <SelectItem value="pro">Pro</SelectItem>
+                  <SelectItem value="pro_plus">Pro+</SelectItem>
+                  <SelectItem value="elite">Elite</SelectItem>
+                </SelectContent>
+              </Select>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+const PaymentsSection = ({ payments, profiles, updatePaymentStatus }: any) => (
+  <div className="rounded-lg border border-border bg-card overflow-x-auto">
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b border-border text-muted-foreground text-xs uppercase">
+          <th className="text-left p-3">User</th>
+          <th className="text-right p-3">Amount</th>
+          <th className="text-left p-3">Plan</th>
+          <th className="text-left p-3">Method</th>
+          <th className="text-left p-3">TXN ID</th>
+          <th className="text-left p-3">Screenshot</th>
+          <th className="text-left p-3">Status</th>
+          <th className="text-left p-3">Date</th>
+          <th className="text-center p-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {payments.map((p: any) => {
+          const profile = profiles.find((pr: any) => pr.id === p.user_id);
+          return (
+            <tr key={p.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+              <td className="p-3 text-xs">{profile?.email || p.user_id.slice(0, 8)}</td>
+              <td className="p-3 text-right font-mono">${Number(p.amount).toFixed(2)}{p.amount_inr ? <span className="text-muted-foreground ml-1">(₹{Number(p.amount_inr).toFixed(0)})</span> : ""}</td>
+              <td className="p-3 text-xs">{p.requested_plan || "—"}</td>
+              <td className="p-3 text-xs">{p.method || "—"}</td>
+              <td className="p-3 text-xs font-mono">{p.transaction_id || "—"}</td>
+              <td className="p-3 text-xs">{p.screenshot_url ? <a href={p.screenshot_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View</a> : "—"}</td>
+              <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "approved" ? "bg-green-500/10 text-green-400" : p.status === "rejected" ? "bg-destructive/10 text-destructive" : "bg-yellow-500/10 text-yellow-400"}`}>{p.status}</span></td>
+              <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
+              <td className="p-3 text-center">
+                {p.status === "pending" && (
+                  <div className="flex gap-1 justify-center">
+                    <Select onValueChange={(plan) => updatePaymentStatus.mutate({ id: p.id, status: "approved", userId: p.user_id, plan })}>
+                      <SelectTrigger className="h-6 text-xs w-20 bg-background border-green-500/30 text-green-400"><SelectValue placeholder="Approve" /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        <SelectItem value="pro">Pro</SelectItem>
+                        <SelectItem value="pro_plus">Pro+</SelectItem>
+                        <SelectItem value="elite">Elite</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="outline" className="h-6 text-xs text-destructive border-destructive/30" onClick={() => updatePaymentStatus.mutate({ id: p.id, status: "rejected", userId: p.user_id })}>Reject</Button>
+                  </div>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+        {payments.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-muted-foreground text-sm">No payments yet.</td></tr>}
+      </tbody>
+    </table>
+  </div>
+);
+
+const ReferralsSection = ({ referrals, profiles, payments, refName, setRefName, refCode, setRefCode, refCommission, setRefCommission, createReferral, deleteReferral }: any) => (
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">Create Referral Code</h3>
+      <div className="space-y-3">
+        <Input value={refName} onChange={(e: any) => setRefName(e.target.value)} placeholder="Referrer name" className="bg-background border-border" />
+        <Input value={refCode} onChange={(e: any) => setRefCode(e.target.value)} placeholder="Code (e.g. JOHN20)" className="bg-background border-border font-mono" />
+        <Input value={refCommission} onChange={(e: any) => setRefCommission(e.target.value)} placeholder="Commission %" className="bg-background border-border font-mono" type="number" />
+        <Button onClick={() => createReferral.mutate()} disabled={createReferral.isPending} className="w-full"><Plus className="h-4 w-4 mr-2" />{createReferral.isPending ? "Creating..." : "Create Code"}</Button>
+      </div>
+    </div>
+    <div className="lg:col-span-2 rounded-lg border border-border bg-card overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-muted-foreground text-xs uppercase">
+            <th className="text-left p-3">Code</th>
+            <th className="text-left p-3">Name</th>
+            <th className="text-right p-3">Commission</th>
+            <th className="text-right p-3">Signups</th>
+            <th className="text-right p-3">Paid</th>
+            <th className="text-right p-3">Revenue</th>
+            <th className="text-center p-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {referrals.map((r: any) => {
+            const signups = profiles.filter((p: any) => p.referral_code_used === r.code).length;
+            const paidSignups = profiles.filter((p: any) => p.referral_code_used === r.code && p.plan !== "free");
+            const revenue = paidSignups.reduce((sum: number, u: any) => {
+              const userPayments = payments.filter((pay: any) => pay.user_id === u.id && pay.status === "approved");
+              return sum + userPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+            }, 0);
+            return (
+              <tr key={r.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                <td className="p-3 font-mono text-primary text-xs">{r.code}</td>
+                <td className="p-3 text-xs">{r.name}</td>
+                <td className="p-3 text-right text-xs font-mono">{r.commission_percent}%</td>
+                <td className="p-3 text-right text-xs font-mono">{signups}</td>
+                <td className="p-3 text-right text-xs font-mono">{paidSignups.length}</td>
+                <td className="p-3 text-right text-xs font-mono text-green-400">${revenue.toFixed(0)}</td>
+                <td className="p-3 text-center">
+                  <button onClick={() => deleteReferral.mutate(r.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
+                </td>
+              </tr>
+            );
+          })}
+          {referrals.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground text-sm">No referral codes yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+const ChatSection = ({ chatUsers, profiles, selectedChatUser, setSelectedChatUser, chatMessages, chatReply, setChatReply, sendAdminReply, chatEndRef }: any) => (
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+    <div className="rounded-lg border border-border bg-card p-4 overflow-y-auto">
+      <h3 className="text-sm font-semibold mb-3">Conversations</h3>
+      <div className="space-y-1">
+        {chatUsers.length > 0 ? chatUsers.map((uid: string) => {
+          const profile = profiles.find((p: any) => p.id === uid);
+          return (
+            <button
+              key={uid}
+              onClick={() => setSelectedChatUser(uid)}
+              className={`w-full flex items-center gap-2 p-2.5 rounded-md text-left transition-colors ${selectedChatUser === uid ? "bg-primary/10 text-primary" : "hover:bg-secondary text-foreground"}`}
+            >
+              <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+              <span className="text-xs truncate">{profile?.email || uid.slice(0, 12)}</span>
+            </button>
+          );
+        }) : <p className="text-xs text-muted-foreground">No conversations yet.</p>}
+      </div>
+    </div>
+
+    <div className="lg:col-span-2 rounded-lg border border-border bg-card flex flex-col">
+      {selectedChatUser ? (
+        <>
+          <div className="p-3 border-b border-border text-xs text-muted-foreground">
+            Chat with: {profiles.find((p: any) => p.id === selectedChatUser)?.email || selectedChatUser.slice(0, 12)}
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+            {chatMessages.map((m: any) => (
+              <div key={m.id} className={`flex ${m.sender === "admin" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[70%] px-3 py-2 rounded-lg text-xs ${m.sender === "admin" ? "bg-primary/20 text-foreground" : "bg-secondary text-foreground"}`}>
+                  {m.message}
+                  <div className="text-[9px] text-muted-foreground mt-1">{new Date(m.created_at).toLocaleTimeString()}</div>
+                </div>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="p-3 border-t border-border flex gap-2">
+            <Input value={chatReply} onChange={(e: any) => setChatReply(e.target.value)} placeholder="Type reply..." className="bg-background border-border text-sm" onKeyDown={(e: any) => e.key === "Enter" && sendAdminReply()} />
+            <Button size="sm" onClick={sendAdminReply}>Send</Button>
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Select a conversation</div>
+      )}
+    </div>
+  </div>
+);
+
+const NewsSection = ({ newsList, newsTitle, setNewsTitle, newsContent, setNewsContent, newsSource, setNewsSource, newsCategory, setNewsCategory, createNews, deleteNews }: any) => (
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Newspaper className="h-4 w-4 text-primary" /> Post News</h3>
+      <div className="space-y-3">
+        <Input value={newsTitle} onChange={(e: any) => setNewsTitle(e.target.value)} placeholder="Headline" className="bg-background border-border" />
+        <Textarea value={newsContent} onChange={(e: any) => setNewsContent(e.target.value)} placeholder="Content..." className="bg-background border-border" rows={4} />
+        <Input value={newsSource} onChange={(e: any) => setNewsSource(e.target.value)} placeholder="Source" className="bg-background border-border" />
+        <Select value={newsCategory} onValueChange={setNewsCategory}>
+          <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+          <SelectContent className="bg-card border-border">
+            <SelectItem value="forex">Forex</SelectItem><SelectItem value="crypto">Crypto</SelectItem><SelectItem value="stocks">Stocks</SelectItem><SelectItem value="economy">Economy</SelectItem><SelectItem value="general">General</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={() => createNews.mutate()} disabled={createNews.isPending} className="w-full"><Plus className="h-4 w-4 mr-2" />{createNews.isPending ? "Publishing..." : "Publish"}</Button>
+      </div>
+    </div>
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">Recent News ({newsList.length})</h3>
+      <div className="space-y-2 max-h-[500px] overflow-y-auto">
+        {newsList.map((n: any) => (
+          <div key={n.id} className="p-3 rounded border border-border bg-background group hover:bg-secondary/30 transition-colors">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <span className="text-[10px] text-primary font-mono uppercase">{n.category}</span>
+                <h4 className="text-sm font-semibold mt-0.5">{n.title}</h4>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{n.content}</p>
+                <span className="text-[10px] text-muted-foreground font-mono mt-1 block">{new Date(n.created_at).toLocaleDateString()}</span>
+              </div>
+              <button onClick={() => deleteNews.mutate(n.id)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
+        ))}
+        {newsList.length === 0 && <p className="text-sm text-muted-foreground">No news yet.</p>}
+      </div>
+    </div>
+  </div>
+);
+
+const SettingsSection = ({ upiId, setUpiId, phoneNumber, setPhoneNumber, cryptoWallet, setCryptoWallet, instagram, setInstagram, twitter, setTwitter, telegram, setTelegram, discord, setDiscord, pricePro, setPricePro, priceProPlus, setPriceProPlus, priceElite, setPriceElite, inrRate, setInrRate, upsertSetting }: any) => (
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">Payment Settings</h3>
+      <div className="space-y-3">
+        <div><label className="text-xs text-muted-foreground block mb-1">UPI ID</label><Input value={upiId} onChange={(e: any) => setUpiId(e.target.value)} placeholder="yourname@upi" className="bg-background border-border font-mono" /></div>
+        <div><label className="text-xs text-muted-foreground block mb-1">Phone (GPay/PhonePe)</label><Input value={phoneNumber} onChange={(e: any) => setPhoneNumber(e.target.value)} placeholder="+91..." className="bg-background border-border font-mono" /></div>
+        <div><label className="text-xs text-muted-foreground block mb-1">Crypto Wallet</label><Input value={cryptoWallet} onChange={(e: any) => setCryptoWallet(e.target.value)} placeholder="0x..." className="bg-background border-border font-mono" /></div>
+        <Button onClick={() => upsertSetting.mutate({ key: "payment_settings", value: { upi_id: upiId, phone_number: phoneNumber, crypto_wallet: cryptoWallet } })} className="w-full">Save Payment Settings</Button>
+      </div>
+    </div>
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">Social Links</h3>
+      <div className="space-y-3">
+        <div><label className="text-xs text-muted-foreground block mb-1">Instagram</label><Input value={instagram} onChange={(e: any) => setInstagram(e.target.value)} className="bg-background border-border" /></div>
+        <div><label className="text-xs text-muted-foreground block mb-1">Twitter / X</label><Input value={twitter} onChange={(e: any) => setTwitter(e.target.value)} className="bg-background border-border" /></div>
+        <div><label className="text-xs text-muted-foreground block mb-1">Telegram</label><Input value={telegram} onChange={(e: any) => setTelegram(e.target.value)} className="bg-background border-border" /></div>
+        <div><label className="text-xs text-muted-foreground block mb-1">Discord</label><Input value={discord} onChange={(e: any) => setDiscord(e.target.value)} className="bg-background border-border" /></div>
+        <Button onClick={() => upsertSetting.mutate({ key: "social_links", value: { instagram, twitter, telegram, discord } })} className="w-full">Save Social Links</Button>
+      </div>
+    </div>
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">Pricing (USD)</h3>
+      <div className="space-y-3">
+        <div><label className="text-xs text-muted-foreground block mb-1">Pro ($)</label><Input value={pricePro} onChange={(e: any) => setPricePro(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+        <div><label className="text-xs text-muted-foreground block mb-1">Pro+ ($)</label><Input value={priceProPlus} onChange={(e: any) => setPriceProPlus(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+        <div><label className="text-xs text-muted-foreground block mb-1">Elite ($)</label><Input value={priceElite} onChange={(e: any) => setPriceElite(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+        <Button onClick={() => upsertSetting.mutate({ key: "pricing", value: { free: 0, pro: parseFloat(pricePro), pro_plus: parseFloat(priceProPlus), elite: parseFloat(priceElite) } })} className="w-full">Save Pricing</Button>
+      </div>
+    </div>
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">INR Conversion Rate</h3>
+      <div className="space-y-3">
+        <div><label className="text-xs text-muted-foreground block mb-1">1 USD = ₹</label><Input value={inrRate} onChange={(e: any) => setInrRate(e.target.value)} className="bg-background border-border font-mono" type="number" step="0.1" /></div>
+        <Button onClick={() => upsertSetting.mutate({ key: "inr_rate", value: { rate: parseFloat(inrRate) } })} className="w-full">Save Rate</Button>
+      </div>
+    </div>
+  </div>
+);
 
 export default Admin;
