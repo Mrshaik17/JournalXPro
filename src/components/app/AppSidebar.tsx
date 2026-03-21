@@ -1,9 +1,9 @@
 import {
   LayoutDashboard, BookOpen, Wallet, BarChart3,
-  Calculator, Building2, Settings, LogOut, Zap, Crown
+  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar,
@@ -23,6 +23,7 @@ const navItems = [
   { title: "Accounts", url: "/app/accounts", icon: Wallet },
   { title: "Analytics", url: "/app/analytics", icon: BarChart3 },
   { title: "Tools", url: "/app/tools", icon: Calculator },
+  { title: "Calendar", url: "/app/calendar", icon: CalendarDays },
   { title: "Prop Firms", url: "/app/prop-firms", icon: Building2 },
   { title: "Upgrade", url: "/app/upgrade", icon: Crown },
   { title: "Settings", url: "/app/settings", icon: Settings },
