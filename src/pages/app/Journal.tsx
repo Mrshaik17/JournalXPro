@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, X } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Upload, Image } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -47,6 +47,8 @@ const Journal = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [newFieldLabel, setNewFieldLabel] = useState("");
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts", user?.id],
@@ -77,15 +79,21 @@ const Journal = () => {
   };
 
   const updateCustomField = (i: number, value: string) => {
-    setForm((f) => {
-      const cf = [...f.customFields];
-      cf[i] = { ...cf[i], value };
-      return { ...f, customFields: cf };
-    });
+    setForm((f) => { const cf = [...f.customFields]; cf[i] = { ...cf[i], value }; return { ...f, customFields: cf }; });
   };
 
   const removeCustomField = (i: number) => {
     setForm((f) => ({ ...f, customFields: f.customFields.filter((_, idx) => idx !== i) }));
+  };
+
+  const handleScreenshotSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setScreenshotFile(file);
+      const reader = new FileReader();
+      reader.onload = () => setScreenshotPreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   const saveTrade = useMutation({
@@ -99,9 +107,18 @@ const Journal = () => {
       const cfObj: Record<string, string> = {};
       form.customFields.forEach((cf) => { cfObj[cf.label] = cf.value; });
 
+      // Upload screenshot if exists
+      let screenshotUrl: string | null = null;
+      if (screenshotFile) {
+        const filePath = `${user.id}/${Date.now()}-${screenshotFile.name}`;
+        const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, screenshotFile);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(filePath);
+        screenshotUrl = urlData.publicUrl;
+      }
+
       if (editingId) {
-        // Update existing trade
-        const { error } = await supabase.from("trades").update({
+        const updateData: any = {
           account_id: form.accountId,
           pair: form.pair || null,
           direction: form.direction || null,
@@ -122,7 +139,9 @@ const Journal = () => {
           notes: form.notes || null,
           tags: form.tags ? form.tags.split(",").map((t) => t.trim()) : null,
           custom_fields: cfObj,
-        }).eq("id", editingId);
+        };
+        if (screenshotUrl) updateData.screenshot_url = screenshotUrl;
+        const { error } = await supabase.from("trades").update(updateData).eq("id", editingId);
         if (error) throw error;
       } else {
         const { error } = await supabase.rpc("add_trade_and_update_balance", {
@@ -149,6 +168,14 @@ const Journal = () => {
           p_custom_fields: cfObj,
         });
         if (error) throw error;
+        // Update screenshot_url separately if uploaded
+        if (screenshotUrl) {
+          // Get the latest trade to update
+          const { data: latestTrades } = await supabase.from("trades").select("id").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
+          if (latestTrades && latestTrades[0]) {
+            await supabase.from("trades").update({ screenshot_url: screenshotUrl } as any).eq("id", latestTrades[0].id);
+          }
+        }
       }
     },
     onSuccess: () => {
@@ -162,23 +189,12 @@ const Journal = () => {
   });
 
   const deleteTrade = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("trades").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["trades"] });
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success("Trade deleted.");
-    },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("trades").delete().eq("id", id); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["trades"] }); queryClient.invalidateQueries({ queryKey: ["accounts"] }); toast.success("Trade deleted."); },
     onError: (err: any) => toast.error(err.message),
   });
 
-  const resetForm = () => {
-    setForm(emptyForm);
-    setEditingId(null);
-    setNewFieldLabel("");
-  };
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); setNewFieldLabel(""); setScreenshotFile(null); setScreenshotPreview(null); };
 
   const openEdit = (trade: any) => {
     const cf = trade.custom_fields || {};
@@ -205,6 +221,7 @@ const Journal = () => {
       customFields: Object.entries(cf).map(([label, value]) => ({ label, value: String(value) })),
     });
     setEditingId(trade.id);
+    if ((trade as any).screenshot_url) setScreenshotPreview((trade as any).screenshot_url);
     setOpen(true);
   };
 
@@ -214,108 +231,73 @@ const Journal = () => {
         <label className="text-xs text-muted-foreground mb-1 block">Account *</label>
         <Select value={form.accountId} onValueChange={(v) => setField("accountId", v)}>
           <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select account" /></SelectTrigger>
-          <SelectContent className="bg-card border-border">
-            {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-          </SelectContent>
+          <SelectContent className="bg-card border-border">{accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Pair</label>
-          <Input value={form.pair} onChange={(e) => setField("pair", e.target.value)} placeholder="EURUSD" className="bg-background border-border font-mono" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Buy / Sell</label>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Pair</label><Input value={form.pair} onChange={(e) => setField("pair", e.target.value)} placeholder="EURUSD" className="bg-background border-border font-mono" /></div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Buy / Sell</label>
           <Select value={form.direction} onValueChange={(v) => setField("direction", v)}>
             <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Direction" /></SelectTrigger>
-            <SelectContent className="bg-card border-border">
-              <SelectItem value="buy">Buy</SelectItem>
-              <SelectItem value="sell">Sell</SelectItem>
-            </SelectContent>
+            <SelectContent className="bg-card border-border"><SelectItem value="buy">Buy</SelectItem><SelectItem value="sell">Sell</SelectItem></SelectContent>
           </Select>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Went</label>
-          <Input value={form.went} onChange={(e) => setField("went", e.target.value)} placeholder="Up/Down" className="bg-background border-border" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Lot Size</label>
-          <Input value={form.lotSize} onChange={(e) => setField("lotSize", e.target.value)} placeholder="0.01" className="bg-background border-border font-mono" type="number" step="0.01" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">1D Bias</label>
-          <Input value={form.bias1d} onChange={(e) => setField("bias1d", e.target.value)} placeholder="Bullish" className="bg-background border-border" />
-        </div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Went</label><Input value={form.went} onChange={(e) => setField("went", e.target.value)} placeholder="Up/Down" className="bg-background border-border" /></div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Lot Size</label><Input value={form.lotSize} onChange={(e) => setField("lotSize", e.target.value)} placeholder="0.01" className="bg-background border-border font-mono" type="number" step="0.01" /></div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">1D Bias</label><Input value={form.bias1d} onChange={(e) => setField("bias1d", e.target.value)} placeholder="Bullish" className="bg-background border-border" /></div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Entry</label>
-          <Input value={form.entryPrice} onChange={(e) => setField("entryPrice", e.target.value)} placeholder="0.00" className="bg-background border-border font-mono" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">SL</label>
-          <Input value={form.stopLoss} onChange={(e) => setField("stopLoss", e.target.value)} placeholder="0.00" className="bg-background border-border font-mono" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">TP</label>
-          <Input value={form.takeProfit} onChange={(e) => setField("takeProfit", e.target.value)} placeholder="0.00" className="bg-background border-border font-mono" />
-        </div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Entry</label><Input value={form.entryPrice} onChange={(e) => setField("entryPrice", e.target.value)} placeholder="0.00" className="bg-background border-border font-mono" /></div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">SL</label><Input value={form.stopLoss} onChange={(e) => setField("stopLoss", e.target.value)} placeholder="0.00" className="bg-background border-border font-mono" /></div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">TP</label><Input value={form.takeProfit} onChange={(e) => setField("takeProfit", e.target.value)} placeholder="0.00" className="bg-background border-border font-mono" /></div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Result *</label>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Result *</label>
           <Select value={form.result} onValueChange={(v) => setField("result", v)}>
             <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Win/Loss" /></SelectTrigger>
-            <SelectContent className="bg-card border-border">
-              <SelectItem value="win">Win</SelectItem>
-              <SelectItem value="loss">Loss</SelectItem>
-              <SelectItem value="breakeven">Breakeven</SelectItem>
-            </SelectContent>
+            <SelectContent className="bg-card border-border"><SelectItem value="win">Win</SelectItem><SelectItem value="loss">Loss</SelectItem><SelectItem value="breakeven">Breakeven</SelectItem></SelectContent>
           </Select>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">PnL Amount *</label>
-          <Input value={form.pnlAmount} onChange={(e) => setField("pnlAmount", e.target.value)} placeholder="100.00" className="bg-background border-border font-mono" type="number" step="0.01" />
-        </div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">PnL Amount *</label><Input value={form.pnlAmount} onChange={(e) => setField("pnlAmount", e.target.value)} placeholder="100.00" className="bg-background border-border font-mono" type="number" step="0.01" /></div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Pips +/-</label>
-          <Input value={form.pips} onChange={(e) => setField("pips", e.target.value)} placeholder="30" className="bg-background border-border font-mono" type="number" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Start Bal</label>
-          <Input value={form.startBalance} onChange={(e) => setField("startBalance", e.target.value)} placeholder="1000" className="bg-background border-border font-mono" type="number" />
-        </div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Pips +/-</label><Input value={form.pips} onChange={(e) => setField("pips", e.target.value)} placeholder="30" className="bg-background border-border font-mono" type="number" /></div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Start Bal</label><Input value={form.startBalance} onChange={(e) => setField("startBalance", e.target.value)} placeholder="1000" className="bg-background border-border font-mono" type="number" /></div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">End Bal</label>
-          <Input value={form.endBalance} onChange={(e) => setField("endBalance", e.target.value)} placeholder="1100" className="bg-background border-border font-mono" type="number" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Tags (comma sep)</label>
-          <Input value={form.tags} onChange={(e) => setField("tags", e.target.value)} placeholder="scalp, forex" className="bg-background border-border" />
-        </div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">End Bal</label><Input value={form.endBalance} onChange={(e) => setField("endBalance", e.target.value)} placeholder="1100" className="bg-background border-border font-mono" type="number" /></div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Tags (comma sep)</label><Input value={form.tags} onChange={(e) => setField("tags", e.target.value)} placeholder="scalp, forex" className="bg-background border-border" /></div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Entry Time</label>
-          <Input type="datetime-local" value={form.entryTime} onChange={(e) => setField("entryTime", e.target.value)} className="bg-background border-border text-xs" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Exit Time</label>
-          <Input type="datetime-local" value={form.exitTime} onChange={(e) => setField("exitTime", e.target.value)} className="bg-background border-border text-xs" />
-        </div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Entry Time</label><Input type="datetime-local" value={form.entryTime} onChange={(e) => setField("entryTime", e.target.value)} className="bg-background border-border text-xs" /></div>
+        <div><label className="text-xs text-muted-foreground mb-1 block">Exit Time</label><Input type="datetime-local" value={form.exitTime} onChange={(e) => setField("exitTime", e.target.value)} className="bg-background border-border text-xs" /></div>
+      </div>
+
+      {/* Trade Screenshot */}
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Trade Screenshot</label>
+        <label className="flex items-center gap-2 px-4 py-3 rounded-md border border-dashed border-border bg-background cursor-pointer hover:border-muted-foreground/30 transition-colors">
+          <Image className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">{screenshotFile ? screenshotFile.name : "Upload trade photo"}</span>
+          <input type="file" accept="image/*" className="hidden" onChange={handleScreenshotSelect} />
+        </label>
+        {screenshotPreview && (
+          <div className="mt-2 relative">
+            <img src={screenshotPreview} alt="Trade screenshot" className="rounded-md max-h-32 object-cover border border-border" />
+            <button onClick={() => { setScreenshotFile(null); setScreenshotPreview(null); }} className="absolute top-1 right-1 bg-background/80 rounded-full p-0.5 text-muted-foreground hover:text-destructive">
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
 
       <div>
@@ -359,14 +341,10 @@ const Journal = () => {
         </div>
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetForm(); }}>
           <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Plus className="mr-2 h-4 w-4" /> Add Trade
-            </Button>
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90"><Plus className="mr-2 h-4 w-4" /> Add Trade</Button>
           </DialogTrigger>
           <DialogContent className="bg-card border-border max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editingId ? "Edit Trade" : "Log Trade"}</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>{editingId ? "Edit Trade" : "Log Trade"}</DialogTitle></DialogHeader>
             {formFields}
           </DialogContent>
         </Dialog>
@@ -389,6 +367,7 @@ const Journal = () => {
                 <th className="text-right p-3">Pips</th>
                 <th className="text-right p-3">P&L</th>
                 <th className="text-center p-3">Plan</th>
+                <th className="text-center p-3">Photo</th>
                 <th className="text-left p-3">Tags</th>
                 <th className="text-center p-3">Actions</th>
               </tr>
@@ -403,17 +382,18 @@ const Journal = () => {
                     <td className="p-3 text-xs">{(trade as any).direction || "—"}</td>
                     <td className="p-3 text-xs">{account?.name || "—"}</td>
                     <td className="p-3">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        trade.result === "win" ? "bg-success/10 text-success" :
-                        trade.result === "loss" ? "bg-destructive/10 text-destructive" :
-                        "bg-muted text-muted-foreground"
-                      }`}>{trade.result}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${trade.result === "win" ? "bg-success/10 text-success" : trade.result === "loss" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>{trade.result}</span>
                     </td>
                     <td className="p-3 text-right font-mono text-xs">{(trade as any).pips ?? "—"}</td>
                     <td className={`p-3 text-right font-mono ${Number(trade.pnl_amount) >= 0 ? "text-success" : "text-destructive"}`}>
                       {Number(trade.pnl_amount) >= 0 ? "+" : ""}${Number(trade.pnl_amount).toFixed(2)}
                     </td>
                     <td className="p-3 text-center">{trade.follow_plan ? "✓" : "✗"}</td>
+                    <td className="p-3 text-center">
+                      {(trade as any).screenshot_url ? (
+                        <a href={(trade as any).screenshot_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">📷</a>
+                      ) : "—"}
+                    </td>
                     <td className="p-3 text-xs text-muted-foreground">{trade.tags?.join(", ") || "—"}</td>
                     <td className="p-3 text-center">
                       <div className="flex items-center justify-center gap-1">
