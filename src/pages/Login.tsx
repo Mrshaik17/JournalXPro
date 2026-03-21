@@ -2,18 +2,22 @@ import { Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect } from "react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -29,7 +33,12 @@ const Login = () => {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin },
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: {
+              referral_code_used: referralCode || undefined,
+            },
+          },
         });
         if (error) throw error;
         toast.success("Check your email to confirm your account!");
@@ -52,6 +61,23 @@ const Login = () => {
     if (error) toast.error("Google sign-in failed");
   };
 
+  const handleForgotPassword = async () => {
+    if (!resetEmail) { toast.error("Enter your email"); return; }
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success("Password reset email sent! Check your inbox.");
+      setForgotOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send reset email");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm space-y-6">
@@ -72,21 +98,26 @@ const Login = () => {
         </div>
 
         <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs">
-            <span className="bg-background px-2 text-muted-foreground">or</span>
-          </div>
+          <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+          <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground">or</span></div>
         </div>
 
         <form onSubmit={handleEmailAuth} className="space-y-3">
           <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-card border-border" required />
           <Input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="bg-card border-border" required minLength={6} />
+          {isSignUp && (
+            <Input placeholder="Referral code (optional)" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} className="bg-card border-border font-mono" />
+          )}
           <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading}>
             {loading ? "Loading..." : isSignUp ? "Sign Up" : "Sign In"}
           </Button>
         </form>
+
+        {!isSignUp && (
+          <div className="text-center">
+            <button onClick={() => setForgotOpen(true)} className="text-xs text-primary hover:underline">Forgot password?</button>
+          </div>
+        )}
 
         <p className="text-center text-xs text-muted-foreground">
           {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
@@ -95,6 +126,22 @@ const Login = () => {
           </button>
         </p>
       </div>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Enter your email and we'll send you a reset link to continue your journey with us.</p>
+            <Input placeholder="Your email" type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} className="bg-background border-border" />
+            <Button onClick={handleForgotPassword} disabled={resetLoading} className="w-full bg-primary text-primary-foreground">
+              {resetLoading ? "Sending..." : "Send Reset Link"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
