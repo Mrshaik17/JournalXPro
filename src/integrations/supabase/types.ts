@@ -49,6 +49,7 @@ export type Database = {
       }
       news: {
         Row: {
+          asset_name: string | null
           category: string | null
           content: string
           created_at: string
@@ -59,6 +60,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          asset_name?: string | null
           category?: string | null
           content: string
           created_at?: string
@@ -69,6 +71,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          asset_name?: string | null
           category?: string | null
           content?: string
           created_at?: string
@@ -146,6 +149,33 @@ export type Database = {
           plan?: string
           referral_code_used?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      prop_firms: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          url?: string | null
         }
         Relationships: []
       }
@@ -240,6 +270,7 @@ export type Database = {
           pips: number | null
           pnl_amount: number
           result: string | null
+          screenshot_url: string | null
           start_balance: number | null
           stop_loss: number | null
           tags: string[] | null
@@ -265,6 +296,7 @@ export type Database = {
           pips?: number | null
           pnl_amount?: number
           result?: string | null
+          screenshot_url?: string | null
           start_balance?: number | null
           stop_loss?: number | null
           tags?: string[] | null
@@ -290,6 +322,7 @@ export type Database = {
           pips?: number | null
           pnl_amount?: number
           result?: string | null
+          screenshot_url?: string | null
           start_balance?: number | null
           stop_loss?: number | null
           tags?: string[] | null
