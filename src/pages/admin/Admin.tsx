@@ -6,25 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Navigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Shield, Users, CreditCard, Link2, Settings, BarChart3, Newspaper,
   Trash2, Plus, MessageSquare, LayoutDashboard, Download, Bell,
-  ChevronLeft, ChevronRight, TrendingUp, DollarSign, UserPlus, Clock
+  ChevronLeft, ChevronRight, TrendingUp, DollarSign, UserPlus, Clock,
+  Building2, Zap, LogOut
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
-type AdminSection = "dashboard" | "users" | "payments" | "referrals" | "chat" | "news" | "settings";
+type AdminSection = "dashboard" | "users" | "payments" | "referrals" | "chat" | "news" | "propfirms" | "settings";
 
 const sidebarItems: { key: AdminSection; label: string; icon: any }[] = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "users", label: "Users", icon: Users },
   { key: "payments", label: "Payments", icon: CreditCard },
   { key: "referrals", label: "Referrals", icon: Link2 },
+  { key: "propfirms", label: "Prop Firms", icon: Building2 },
   { key: "chat", label: "Chat", icon: MessageSquare },
   { key: "news", label: "News", icon: Newspaper },
   { key: "settings", label: "Settings", icon: Settings },
@@ -37,6 +38,24 @@ const Admin = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [pendingNotif, setPendingNotif] = useState(0);
   const [chatNotif, setChatNotif] = useState(0);
+
+  // Admin login form state
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: adminEmail, password: adminPassword });
+      if (error) throw error;
+    } catch (err: any) {
+      toast.error(err.message || "Login failed");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   // ---- DATA QUERIES ----
   const { data: isAdmin, isLoading: roleLoading } = useQuery({
@@ -109,13 +128,20 @@ const Admin = () => {
     enabled: !!isAdmin,
   });
 
+  const { data: propFirms = [] } = useQuery({
+    queryKey: ["admin-propfirms"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("prop_firms").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!isAdmin,
+  });
+
   const { data: chatUsers = [] } = useQuery({
     queryKey: ["admin-chat-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("support_messages")
-        .select("user_id")
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("support_messages").select("user_id").order("created_at", { ascending: false });
       if (error) throw error;
       const uniqueIds = [...new Set(data.map((m: any) => m.user_id))];
       return uniqueIds as string[];
@@ -217,18 +243,37 @@ const Admin = () => {
   const [newsContent, setNewsContent] = useState("");
   const [newsSource, setNewsSource] = useState("");
   const [newsCategory, setNewsCategory] = useState("forex");
+  const [newsAsset, setNewsAsset] = useState("");
   const createNews = useMutation({
     mutationFn: async () => {
       if (!newsTitle || !newsContent) throw new Error("Title and content required");
-      const { error } = await supabase.from("news").insert({ title: newsTitle, content: newsContent, source: newsSource || null, category: newsCategory });
+      const { error } = await supabase.from("news").insert({ title: newsTitle, content: newsContent, source: newsSource || null, category: newsCategory, asset_name: newsAsset || null } as any);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Published!"); setNewsTitle(""); setNewsContent(""); setNewsSource(""); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Published!"); setNewsTitle(""); setNewsContent(""); setNewsSource(""); setNewsAsset(""); },
     onError: (err: any) => toast.error(err.message),
   });
   const deleteNews = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("news").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Deleted."); },
+  });
+
+  // Prop Firms
+  const [pfName, setPfName] = useState("");
+  const [pfUrl, setPfUrl] = useState("");
+  const [pfDesc, setPfDesc] = useState("");
+  const createPropFirm = useMutation({
+    mutationFn: async () => {
+      if (!pfName) throw new Error("Name required");
+      const { error } = await supabase.from("prop_firms").insert({ name: pfName, url: pfUrl || null, description: pfDesc || null });
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] }); toast.success("Prop firm added!"); setPfName(""); setPfUrl(""); setPfDesc(""); },
+    onError: (err: any) => toast.error(err.message),
+  });
+  const deletePropFirm = useMutation({
+    mutationFn: async (id: string) => { const { error } = await supabase.from("prop_firms").delete().eq("id", id); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] }); toast.success("Deleted."); },
   });
 
   // Settings state
@@ -287,47 +332,71 @@ const Admin = () => {
     let since = new Date(0);
     if (range === "week") since = new Date(now.getTime() - 7 * 86400000);
     if (range === "month") since = new Date(now.getTime() - 30 * 86400000);
-
     const filteredPayments = payments.filter((p) => new Date(p.created_at) >= since);
     const filteredUsers = profiles.filter((p) => new Date(p.created_at) >= since);
-
     if (format === "pdf") {
       const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text("Trader's Divine - Admin Report", 14, 20);
-      doc.setFontSize(10);
-      doc.text(`Range: ${range} | Generated: ${now.toLocaleDateString()}`, 14, 28);
-      doc.text(`Total Users: ${filteredUsers.length} | Payments: ${filteredPayments.length}`, 14, 34);
-      autoTable(doc, {
-        startY: 42,
-        head: [["Email", "Plan", "Joined"]],
-        body: filteredUsers.map((u) => [u.email || "", u.plan, new Date(u.created_at).toLocaleDateString()]),
-      });
-      const finalY = (doc as any).lastAutoTable?.finalY || 50;
-      autoTable(doc, {
-        startY: finalY + 10,
-        head: [["Amount", "Method", "Status", "Date"]],
-        body: filteredPayments.map((p) => [`$${Number(p.amount).toFixed(2)}`, p.method || "", p.status, new Date(p.created_at).toLocaleDateString()]),
-      });
+      doc.setFontSize(16); doc.text("Trader's Divine - Admin Report", 14, 20);
+      doc.setFontSize(10); doc.text(`Range: ${range} | Generated: ${now.toLocaleDateString()}`, 14, 28);
+      autoTable(doc, { startY: 36, head: [["Email", "Plan", "Joined"]], body: filteredUsers.map((u) => [u.email || "", u.plan, new Date(u.created_at).toLocaleDateString()]) });
+      const fy = (doc as any).lastAutoTable?.finalY || 50;
+      autoTable(doc, { startY: fy + 10, head: [["Amount", "Method", "Status", "Date"]], body: filteredPayments.map((p) => [`$${Number(p.amount).toFixed(2)}`, p.method || "", p.status, new Date(p.created_at).toLocaleDateString()]) });
       doc.save(`admin-report-${range}.pdf`);
       toast.success("PDF downloaded!");
     } else {
       const wb = XLSX.utils.book_new();
-      const usersWs = XLSX.utils.json_to_sheet(filteredUsers.map((u) => ({ Email: u.email, Name: u.full_name, Plan: u.plan, Referral: u.referral_code_used, Joined: new Date(u.created_at).toLocaleDateString() })));
-      XLSX.utils.book_append_sheet(wb, usersWs, "Users");
-      const paymentsWs = XLSX.utils.json_to_sheet(filteredPayments.map((p) => ({ Amount: p.amount, Method: p.method, Status: p.status, TxnID: p.transaction_id, Date: new Date(p.created_at).toLocaleDateString() })));
-      XLSX.utils.book_append_sheet(wb, paymentsWs, "Payments");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filteredUsers.map((u) => ({ Email: u.email, Name: u.full_name, Plan: u.plan, Referral: u.referral_code_used, Joined: new Date(u.created_at).toLocaleDateString() }))), "Users");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filteredPayments.map((p) => ({ Amount: p.amount, Method: p.method, Status: p.status, TxnID: p.transaction_id, Date: new Date(p.created_at).toLocaleDateString() }))), "Payments");
       XLSX.writeFile(wb, `admin-report-${range}.xlsx`);
       toast.success("Excel downloaded!");
     }
   };
 
-  // ---- LOADING / AUTH ----
-  if (loading || roleLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-pulse text-muted-foreground">Loading admin...</div></div>;
+  // ---- ADMIN LOGIN FORM ----
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-pulse text-muted-foreground">Loading...</div></div>;
   }
-  if (!user || !isAdmin) {
-    return <Navigate to="/" replace />;
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm space-y-6">
+          <div className="text-center">
+            <div className="inline-flex items-center gap-2 mb-4">
+              <Shield className="h-6 w-6 text-primary" />
+              <span className="text-xl font-bold">Admin Panel</span>
+            </div>
+            <p className="text-sm text-muted-foreground">Sign in with admin credentials</p>
+          </div>
+          <form onSubmit={handleAdminLogin} className="space-y-3">
+            <Input placeholder="Admin Email" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="bg-card border-border" required />
+            <Input placeholder="Password" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="bg-card border-border" required />
+            <Button type="submit" className="w-full bg-primary text-primary-foreground" disabled={loginLoading}>
+              {loginLoading ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (roleLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-pulse text-muted-foreground">Checking admin access...</div></div>;
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="text-center space-y-3">
+          <Shield className="h-10 w-10 text-destructive mx-auto" />
+          <h2 className="text-lg font-bold">Access Denied</h2>
+          <p className="text-sm text-muted-foreground">This account does not have admin privileges.</p>
+          <Button variant="outline" onClick={async () => { await supabase.auth.signOut(); }}>
+            <LogOut className="h-4 w-4 mr-2" />Sign Out & Try Again
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const totalUsers = profiles.length;
@@ -340,119 +409,52 @@ const Admin = () => {
   return (
     <div className="min-h-screen flex bg-background text-foreground">
       {/* SIDEBAR */}
-      <motion.aside
-        animate={{ width: collapsed ? 64 : 220 }}
-        transition={{ duration: 0.2 }}
-        className="fixed left-0 top-0 h-full bg-card border-r border-border z-50 flex flex-col"
-      >
+      <motion.aside animate={{ width: collapsed ? 64 : 220 }} transition={{ duration: 0.2 }} className="fixed left-0 top-0 h-full bg-card border-r border-border z-50 flex flex-col">
         <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
           <Shield className="h-5 w-5 text-primary shrink-0" />
           {!collapsed && <span className="font-bold text-sm truncate">Admin Panel</span>}
         </div>
-
-        <nav className="flex-1 py-2 space-y-0.5 px-2">
+        <nav className="flex-1 py-2 space-y-0.5 px-2 overflow-y-auto">
           {sidebarItems.map((item) => {
             const isActive = activeSection === item.key;
             const badge = item.key === "payments" ? pendingNotif : item.key === "chat" ? chatNotif : 0;
             return (
-              <button
-                key={item.key}
-                onClick={() => {
-                  setActiveSection(item.key);
-                  if (item.key === "payments") setPendingNotif(0);
-                  if (item.key === "chat") setChatNotif(0);
-                }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all relative ${
-                  isActive
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
-              >
+              <button key={item.key} onClick={() => { setActiveSection(item.key); if (item.key === "payments") setPendingNotif(0); if (item.key === "chat") setChatNotif(0); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all relative ${isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}>
                 <item.icon className="h-4 w-4 shrink-0" />
                 {!collapsed && <span className="truncate">{item.label}</span>}
-                {badge > 0 && (
-                  <span className="absolute right-2 top-1.5 h-4 min-w-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
-                    {badge}
-                  </span>
-                )}
+                {badge > 0 && <span className="absolute right-2 top-1.5 h-4 min-w-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">{badge}</span>}
               </button>
             );
           })}
         </nav>
-
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-3 border-t border-border text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4 mx-auto" /> : <ChevronLeft className="h-4 w-4 mx-auto" />}
-        </button>
+        <div className="border-t border-border p-2 space-y-1">
+          <button onClick={async () => { await supabase.auth.signOut(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-secondary transition-all">
+            <LogOut className="h-4 w-4 shrink-0" />{!collapsed && <span>Logout</span>}
+          </button>
+          <button onClick={() => setCollapsed(!collapsed)} className="w-full flex justify-center py-1 text-muted-foreground hover:text-foreground transition-colors">
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+        </div>
       </motion.aside>
 
-      {/* MAIN CONTENT */}
-      <motion.main
-        animate={{ marginLeft: collapsed ? 64 : 220 }}
-        transition={{ duration: 0.2 }}
-        className="flex-1 min-h-screen"
-      >
+      {/* MAIN */}
+      <motion.main animate={{ marginLeft: collapsed ? 64 : 220 }} transition={{ duration: 0.2 }} className="flex-1 min-h-screen">
         <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
-          <h2 className="font-bold text-lg capitalize">{activeSection}</h2>
-          <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Trader's Divine</span>
-          </div>
+          <h2 className="font-bold text-lg capitalize">{activeSection === "propfirms" ? "Prop Firms" : activeSection}</h2>
+          <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">Trader's Divine</span></div>
         </header>
-
         <div className="p-6">
           <AnimatePresence mode="wait">
-            <motion.div
-              key={activeSection}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.15 }}
-            >
-              {activeSection === "dashboard" && (
-                <DashboardSection
-                  totalUsers={totalUsers} paidUsers={paidUsers} totalTrades={totalTrades}
-                  pendingPayments={pendingPayments} totalRevenue={totalRevenue} thisWeekUsers={thisWeekUsers}
-                  profiles={profiles} payments={payments} exportData={exportData}
-                />
-              )}
+            <motion.div key={activeSection} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.15 }}>
+              {activeSection === "dashboard" && <DashboardSection totalUsers={totalUsers} paidUsers={paidUsers} totalTrades={totalTrades} pendingPayments={pendingPayments} totalRevenue={totalRevenue} thisWeekUsers={thisWeekUsers} profiles={profiles} payments={payments} exportData={exportData} />}
               {activeSection === "users" && <UsersSection profiles={profiles} updateUserPlan={updateUserPlan} />}
               {activeSection === "payments" && <PaymentsSection payments={payments} profiles={profiles} updatePaymentStatus={updatePaymentStatus} />}
-              {activeSection === "referrals" && (
-                <ReferralsSection
-                  referrals={referrals} profiles={profiles} payments={payments}
-                  refName={refName} setRefName={setRefName} refCode={refCode} setRefCode={setRefCode}
-                  refCommission={refCommission} setRefCommission={setRefCommission}
-                  createReferral={createReferral} deleteReferral={deleteReferral}
-                />
-              )}
-              {activeSection === "chat" && (
-                <ChatSection
-                  chatUsers={chatUsers} profiles={profiles} selectedChatUser={selectedChatUser}
-                  setSelectedChatUser={setSelectedChatUser} chatMessages={chatMessages}
-                  chatReply={chatReply} setChatReply={setChatReply} sendAdminReply={sendAdminReply} chatEndRef={chatEndRef}
-                />
-              )}
-              {activeSection === "news" && (
-                <NewsSection
-                  newsList={newsList} newsTitle={newsTitle} setNewsTitle={setNewsTitle}
-                  newsContent={newsContent} setNewsContent={setNewsContent} newsSource={newsSource} setNewsSource={setNewsSource}
-                  newsCategory={newsCategory} setNewsCategory={setNewsCategory} createNews={createNews} deleteNews={deleteNews}
-                />
-              )}
-              {activeSection === "settings" && (
-                <SettingsSection
-                  upiId={upiId} setUpiId={setUpiId} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber}
-                  cryptoWallet={cryptoWallet} setCryptoWallet={setCryptoWallet}
-                  instagram={instagram} setInstagram={setInstagram} twitter={twitter} setTwitter={setTwitter}
-                  telegram={telegram} setTelegram={setTelegram} discord={discord} setDiscord={setDiscord}
-                  pricePro={pricePro} setPricePro={setPricePro} priceProPlus={priceProPlus} setPriceProPlus={setPriceProPlus}
-                  priceElite={priceElite} setPriceElite={setPriceElite} inrRate={inrRate} setInrRate={setInrRate}
-                  upsertSetting={upsertSetting}
-                />
-              )}
+              {activeSection === "referrals" && <ReferralsSection referrals={referrals} profiles={profiles} payments={payments} refName={refName} setRefName={setRefName} refCode={refCode} setRefCode={setRefCode} refCommission={refCommission} setRefCommission={setRefCommission} createReferral={createReferral} deleteReferral={deleteReferral} />}
+              {activeSection === "propfirms" && <PropFirmsSection propFirms={propFirms} pfName={pfName} setPfName={setPfName} pfUrl={pfUrl} setPfUrl={setPfUrl} pfDesc={pfDesc} setPfDesc={setPfDesc} createPropFirm={createPropFirm} deletePropFirm={deletePropFirm} />}
+              {activeSection === "chat" && <ChatSection chatUsers={chatUsers} profiles={profiles} selectedChatUser={selectedChatUser} setSelectedChatUser={setSelectedChatUser} chatMessages={chatMessages} chatReply={chatReply} setChatReply={setChatReply} sendAdminReply={sendAdminReply} chatEndRef={chatEndRef} />}
+              {activeSection === "news" && <NewsSection newsList={newsList} newsTitle={newsTitle} setNewsTitle={setNewsTitle} newsContent={newsContent} setNewsContent={setNewsContent} newsSource={newsSource} setNewsSource={setNewsSource} newsCategory={newsCategory} setNewsCategory={setNewsCategory} newsAsset={newsAsset} setNewsAsset={setNewsAsset} createNews={createNews} deleteNews={deleteNews} />}
+              {activeSection === "settings" && <SettingsSection upiId={upiId} setUpiId={setUpiId} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} cryptoWallet={cryptoWallet} setCryptoWallet={setCryptoWallet} instagram={instagram} setInstagram={setInstagram} twitter={twitter} setTwitter={setTwitter} telegram={telegram} setTelegram={setTelegram} discord={discord} setDiscord={setDiscord} pricePro={pricePro} setPricePro={setPricePro} priceProPlus={priceProPlus} setPriceProPlus={setPriceProPlus} priceElite={priceElite} setPriceElite={setPriceElite} inrRate={inrRate} setInrRate={setInrRate} upsertSetting={upsertSetting} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -465,140 +467,84 @@ const Admin = () => {
 
 const StatCard = ({ label, value, icon: Icon, color = "text-primary" }: any) => (
   <div className="rounded-lg border border-border bg-card p-4 card-glow">
-    <div className="flex items-center gap-2 mb-2">
-      <Icon className={`h-4 w-4 ${color}`} />
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </div>
+    <div className="flex items-center gap-2 mb-2"><Icon className={`h-4 w-4 ${color}`} /><span className="text-xs text-muted-foreground">{label}</span></div>
     <div className="text-2xl font-bold font-mono">{value}</div>
   </div>
 );
 
-const DashboardSection = ({ totalUsers, paidUsers, totalTrades, pendingPayments, totalRevenue, thisWeekUsers, profiles, payments, exportData }: any) => {
-  const recentPayments = payments.filter((p: any) => p.status === "pending").slice(0, 5);
-  const recentUsers = profiles.slice(0, 5);
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatCard label="Total Users" value={totalUsers} icon={Users} />
-        <StatCard label="Paid Users" value={paidUsers} icon={CreditCard} color="text-green-400" />
-        <StatCard label="Total Trades" value={totalTrades} icon={BarChart3} />
-        <StatCard label="Pending" value={pendingPayments} icon={Clock} color="text-yellow-400" />
-        <StatCard label="Revenue" value={`$${totalRevenue.toFixed(0)}`} icon={DollarSign} color="text-green-400" />
-        <StatCard label="New (7d)" value={thisWeekUsers} icon={UserPlus} />
-      </div>
-
-      {/* Weekly revenue mini chart (text-based) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-lg border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" /> Weekly Revenue</h3>
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => {
-              const weekStart = new Date(Date.now() - (3 - i) * 7 * 86400000);
-              const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
-              const weekRevenue = payments.filter((p: any) => p.status === "approved" && new Date(p.created_at) >= weekStart && new Date(p.created_at) < weekEnd).reduce((s: number, p: any) => s + Number(p.amount), 0);
-              const maxRev = Math.max(totalRevenue, 1);
-              return (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-[10px] text-muted-foreground w-16 font-mono">{weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })}</span>
-                  <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.max((weekRevenue / maxRev) * 100, 2)}%` }}
-                      transition={{ duration: 0.5, delay: i * 0.1 }}
-                      className="h-full bg-primary/60 rounded-full"
-                    />
-                  </div>
-                  <span className="text-xs font-mono text-muted-foreground w-12 text-right">${weekRevenue.toFixed(0)}</span>
+const DashboardSection = ({ totalUsers, paidUsers, totalTrades, pendingPayments, totalRevenue, thisWeekUsers, profiles, payments, exportData }: any) => (
+  <div className="space-y-6">
+    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <StatCard label="Total Users" value={totalUsers} icon={Users} />
+      <StatCard label="Paid Users" value={paidUsers} icon={CreditCard} color="text-green-400" />
+      <StatCard label="Total Trades" value={totalTrades} icon={BarChart3} />
+      <StatCard label="Pending" value={pendingPayments} icon={Clock} color="text-yellow-400" />
+      <StatCard label="Revenue" value={`$${totalRevenue.toFixed(0)}`} icon={DollarSign} color="text-green-400" />
+      <StatCard label="New (7d)" value={thisWeekUsers} icon={UserPlus} />
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" /> Weekly Revenue</h3>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => {
+            const weekStart = new Date(Date.now() - (3 - i) * 7 * 86400000);
+            const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+            const weekRevenue = payments.filter((p: any) => p.status === "approved" && new Date(p.created_at) >= weekStart && new Date(p.created_at) < weekEnd).reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const maxRev = Math.max(totalRevenue, 1);
+            return (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-[10px] text-muted-foreground w-16 font-mono">{weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })}</span>
+                <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${Math.max((weekRevenue / maxRev) * 100, 2)}%` }} transition={{ duration: 0.5, delay: i * 0.1 }} className="h-full bg-primary/60 rounded-full" />
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary" /> User Growth</h3>
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => {
-              const weekStart = new Date(Date.now() - (3 - i) * 7 * 86400000);
-              const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
-              const weekUsers = profiles.filter((p: any) => new Date(p.created_at) >= weekStart && new Date(p.created_at) < weekEnd).length;
-              const maxU = Math.max(totalUsers, 1);
-              return (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-[10px] text-muted-foreground w-16 font-mono">{weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })}</span>
-                  <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.max((weekUsers / maxU) * 100, 2)}%` }}
-                      transition={{ duration: 0.5, delay: i * 0.1 }}
-                      className="h-full bg-green-500/60 rounded-full"
-                    />
-                  </div>
-                  <span className="text-xs font-mono text-muted-foreground w-8 text-right">{weekUsers}</span>
-                </div>
-              );
-            })}
-          </div>
+                <span className="text-xs font-mono text-muted-foreground w-12 text-right">${weekRevenue.toFixed(0)}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
-
-      {/* Export + Quick lists */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="rounded-lg border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Download className="h-4 w-4 text-primary" /> Export Data</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {(["week", "month", "all"] as const).map((range) => (
-              <div key={range} className="space-y-1.5">
-                <span className="text-[10px] text-muted-foreground uppercase">{range}</span>
-                <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => exportData("pdf", range)}>PDF</Button>
-                <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => exportData("excel", range)}>Excel</Button>
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary" /> User Growth</h3>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => {
+            const weekStart = new Date(Date.now() - (3 - i) * 7 * 86400000);
+            const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+            const weekUsers = profiles.filter((p: any) => new Date(p.created_at) >= weekStart && new Date(p.created_at) < weekEnd).length;
+            const maxU = Math.max(totalUsers, 1);
+            return (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-[10px] text-muted-foreground w-16 font-mono">{weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })}</span>
+                <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${Math.max((weekUsers / maxU) * 100, 2)}%` }} transition={{ duration: 0.5, delay: i * 0.1 }} className="h-full bg-green-500/60 rounded-full" />
+                </div>
+                <span className="text-xs font-mono text-muted-foreground w-8 text-right">{weekUsers}</span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-3">Pending Payments</h3>
-          <div className="space-y-2">
-            {recentPayments.length > 0 ? recentPayments.map((p: any) => (
-              <div key={p.id} className="flex items-center justify-between p-2 rounded bg-background border border-border">
-                <span className="text-xs font-mono">${Number(p.amount).toFixed(2)}</span>
-                <span className="text-[10px] text-yellow-400">{p.method}</span>
-              </div>
-            )) : <p className="text-xs text-muted-foreground">No pending payments.</p>}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-3">Recent Users</h3>
-          <div className="space-y-2">
-            {recentUsers.map((u: any) => (
-              <div key={u.id} className="flex items-center justify-between p-2 rounded bg-background border border-border">
-                <span className="text-xs truncate max-w-[140px]">{u.email}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${u.plan === "free" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>{u.plan}</span>
-              </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </div>
     </div>
-  );
-};
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Download className="h-4 w-4 text-primary" /> Export Data</h3>
+      <div className="flex flex-wrap gap-2">
+        {(["week", "month", "all"] as const).map((range) => (
+          <div key={range} className="flex gap-1.5 items-center">
+            <span className="text-[10px] text-muted-foreground uppercase w-10">{range}</span>
+            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportData("pdf", range)}>PDF</Button>
+            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportData("excel", range)}>Excel</Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
 
 const UsersSection = ({ profiles, updateUserPlan }: any) => (
   <div className="rounded-lg border border-border bg-card overflow-x-auto">
     <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-border text-muted-foreground text-xs uppercase">
-          <th className="text-left p-3">Email</th>
-          <th className="text-left p-3">Name</th>
-          <th className="text-left p-3">Plan</th>
-          <th className="text-left p-3">Referral</th>
-          <th className="text-left p-3">Joined</th>
-          <th className="text-center p-3">Actions</th>
-        </tr>
-      </thead>
+      <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
+        <th className="text-left p-3">Email</th><th className="text-left p-3">Name</th><th className="text-left p-3">Plan</th><th className="text-left p-3">Referral</th><th className="text-left p-3">Joined</th><th className="text-center p-3">Actions</th>
+      </tr></thead>
       <tbody>
         {profiles.map((p: any) => (
           <tr key={p.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
@@ -611,10 +557,7 @@ const UsersSection = ({ profiles, updateUserPlan }: any) => (
               <Select onValueChange={(v) => updateUserPlan.mutate({ userId: p.id, plan: v })}>
                 <SelectTrigger className="h-7 text-xs w-24 bg-background border-border"><SelectValue placeholder="Set plan" /></SelectTrigger>
                 <SelectContent className="bg-card border-border">
-                  <SelectItem value="free">Free</SelectItem>
-                  <SelectItem value="pro">Pro</SelectItem>
-                  <SelectItem value="pro_plus">Pro+</SelectItem>
-                  <SelectItem value="elite">Elite</SelectItem>
+                  <SelectItem value="free">Free</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem>
                 </SelectContent>
               </Select>
             </td>
@@ -628,19 +571,9 @@ const UsersSection = ({ profiles, updateUserPlan }: any) => (
 const PaymentsSection = ({ payments, profiles, updatePaymentStatus }: any) => (
   <div className="rounded-lg border border-border bg-card overflow-x-auto">
     <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-border text-muted-foreground text-xs uppercase">
-          <th className="text-left p-3">User</th>
-          <th className="text-right p-3">Amount</th>
-          <th className="text-left p-3">Plan</th>
-          <th className="text-left p-3">Method</th>
-          <th className="text-left p-3">TXN ID</th>
-          <th className="text-left p-3">Screenshot</th>
-          <th className="text-left p-3">Status</th>
-          <th className="text-left p-3">Date</th>
-          <th className="text-center p-3">Actions</th>
-        </tr>
-      </thead>
+      <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
+        <th className="text-left p-3">User</th><th className="text-right p-3">Amount</th><th className="text-left p-3">Plan</th><th className="text-left p-3">Method</th><th className="text-left p-3">TXN ID</th><th className="text-left p-3">Screenshot</th><th className="text-left p-3">Status</th><th className="text-left p-3">Date</th><th className="text-center p-3">Actions</th>
+      </tr></thead>
       <tbody>
         {payments.map((p: any) => {
           const profile = profiles.find((pr: any) => pr.id === p.user_id);
@@ -659,11 +592,7 @@ const PaymentsSection = ({ payments, profiles, updatePaymentStatus }: any) => (
                   <div className="flex gap-1 justify-center">
                     <Select onValueChange={(plan) => updatePaymentStatus.mutate({ id: p.id, status: "approved", userId: p.user_id, plan })}>
                       <SelectTrigger className="h-6 text-xs w-20 bg-background border-green-500/30 text-green-400"><SelectValue placeholder="Approve" /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        <SelectItem value="pro">Pro</SelectItem>
-                        <SelectItem value="pro_plus">Pro+</SelectItem>
-                        <SelectItem value="elite">Elite</SelectItem>
-                      </SelectContent>
+                      <SelectContent className="bg-card border-border"><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem></SelectContent>
                     </Select>
                     <Button size="sm" variant="outline" className="h-6 text-xs text-destructive border-destructive/30" onClick={() => updatePaymentStatus.mutate({ id: p.id, status: "rejected", userId: p.user_id })}>Reject</Button>
                   </div>
@@ -691,24 +620,15 @@ const ReferralsSection = ({ referrals, profiles, payments, refName, setRefName, 
     </div>
     <div className="lg:col-span-2 rounded-lg border border-border bg-card overflow-x-auto">
       <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-muted-foreground text-xs uppercase">
-            <th className="text-left p-3">Code</th>
-            <th className="text-left p-3">Name</th>
-            <th className="text-right p-3">Commission</th>
-            <th className="text-right p-3">Signups</th>
-            <th className="text-right p-3">Paid</th>
-            <th className="text-right p-3">Revenue</th>
-            <th className="text-center p-3">Actions</th>
-          </tr>
-        </thead>
+        <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
+          <th className="text-left p-3">Code</th><th className="text-left p-3">Name</th><th className="text-right p-3">Commission</th><th className="text-right p-3">Signups</th><th className="text-right p-3">Paid</th><th className="text-right p-3">Revenue</th><th className="text-center p-3">Actions</th>
+        </tr></thead>
         <tbody>
           {referrals.map((r: any) => {
             const signups = profiles.filter((p: any) => p.referral_code_used === r.code).length;
             const paidSignups = profiles.filter((p: any) => p.referral_code_used === r.code && p.plan !== "free");
             const revenue = paidSignups.reduce((sum: number, u: any) => {
-              const userPayments = payments.filter((pay: any) => pay.user_id === u.id && pay.status === "approved");
-              return sum + userPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+              return sum + payments.filter((pay: any) => pay.user_id === u.id && pay.status === "approved").reduce((s: number, p: any) => s + Number(p.amount), 0);
             }, 0);
             return (
               <tr key={r.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
@@ -718,13 +638,43 @@ const ReferralsSection = ({ referrals, profiles, payments, refName, setRefName, 
                 <td className="p-3 text-right text-xs font-mono">{signups}</td>
                 <td className="p-3 text-right text-xs font-mono">{paidSignups.length}</td>
                 <td className="p-3 text-right text-xs font-mono text-green-400">${revenue.toFixed(0)}</td>
-                <td className="p-3 text-center">
-                  <button onClick={() => deleteReferral.mutate(r.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
-                </td>
+                <td className="p-3 text-center"><button onClick={() => deleteReferral.mutate(r.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button></td>
               </tr>
             );
           })}
           {referrals.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground text-sm">No referral codes yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+const PropFirmsSection = ({ propFirms, pfName, setPfName, pfUrl, setPfUrl, pfDesc, setPfDesc, createPropFirm, deletePropFirm }: any) => (
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">Add Prop Firm</h3>
+      <div className="space-y-3">
+        <Input value={pfName} onChange={(e: any) => setPfName(e.target.value)} placeholder="Firm name" className="bg-background border-border" />
+        <Input value={pfUrl} onChange={(e: any) => setPfUrl(e.target.value)} placeholder="Website URL" className="bg-background border-border" />
+        <Textarea value={pfDesc} onChange={(e: any) => setPfDesc(e.target.value)} placeholder="Description" className="bg-background border-border" rows={3} />
+        <Button onClick={() => createPropFirm.mutate()} disabled={createPropFirm.isPending} className="w-full"><Plus className="h-4 w-4 mr-2" />{createPropFirm.isPending ? "Adding..." : "Add Firm"}</Button>
+      </div>
+    </div>
+    <div className="lg:col-span-2 rounded-lg border border-border bg-card overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
+          <th className="text-left p-3">Name</th><th className="text-left p-3">URL</th><th className="text-left p-3">Description</th><th className="text-center p-3">Actions</th>
+        </tr></thead>
+        <tbody>
+          {propFirms.map((f: any) => (
+            <tr key={f.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+              <td className="p-3 text-xs font-semibold">{f.name}</td>
+              <td className="p-3 text-xs">{f.url ? <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-primary underline">{f.url}</a> : "—"}</td>
+              <td className="p-3 text-xs text-muted-foreground max-w-[200px] truncate">{f.description || "—"}</td>
+              <td className="p-3 text-center"><button onClick={() => deletePropFirm.mutate(f.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button></td>
+            </tr>
+          ))}
+          {propFirms.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground text-sm">No prop firms added yet.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -739,25 +689,17 @@ const ChatSection = ({ chatUsers, profiles, selectedChatUser, setSelectedChatUse
         {chatUsers.length > 0 ? chatUsers.map((uid: string) => {
           const profile = profiles.find((p: any) => p.id === uid);
           return (
-            <button
-              key={uid}
-              onClick={() => setSelectedChatUser(uid)}
-              className={`w-full flex items-center gap-2 p-2.5 rounded-md text-left transition-colors ${selectedChatUser === uid ? "bg-primary/10 text-primary" : "hover:bg-secondary text-foreground"}`}
-            >
-              <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-              <span className="text-xs truncate">{profile?.email || uid.slice(0, 12)}</span>
+            <button key={uid} onClick={() => setSelectedChatUser(uid)} className={`w-full flex items-center gap-2 p-2.5 rounded-md text-left transition-colors ${selectedChatUser === uid ? "bg-primary/10 text-primary" : "hover:bg-secondary text-foreground"}`}>
+              <MessageSquare className="h-3.5 w-3.5 shrink-0" /><span className="text-xs truncate">{profile?.email || uid.slice(0, 12)}</span>
             </button>
           );
         }) : <p className="text-xs text-muted-foreground">No conversations yet.</p>}
       </div>
     </div>
-
     <div className="lg:col-span-2 rounded-lg border border-border bg-card flex flex-col">
       {selectedChatUser ? (
         <>
-          <div className="p-3 border-b border-border text-xs text-muted-foreground">
-            Chat with: {profiles.find((p: any) => p.id === selectedChatUser)?.email || selectedChatUser.slice(0, 12)}
-          </div>
+          <div className="p-3 border-b border-border text-xs text-muted-foreground">Chat with: {profiles.find((p: any) => p.id === selectedChatUser)?.email || selectedChatUser.slice(0, 12)}</div>
           <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
             {chatMessages.map((m: any) => (
               <div key={m.id} className={`flex ${m.sender === "admin" ? "justify-end" : "justify-start"}`}>
@@ -781,18 +723,19 @@ const ChatSection = ({ chatUsers, profiles, selectedChatUser, setSelectedChatUse
   </div>
 );
 
-const NewsSection = ({ newsList, newsTitle, setNewsTitle, newsContent, setNewsContent, newsSource, setNewsSource, newsCategory, setNewsCategory, createNews, deleteNews }: any) => (
+const NewsSection = ({ newsList, newsTitle, setNewsTitle, newsContent, setNewsContent, newsSource, setNewsSource, newsCategory, setNewsCategory, newsAsset, setNewsAsset, createNews, deleteNews }: any) => (
   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <div className="rounded-lg border border-border bg-card p-5">
       <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Newspaper className="h-4 w-4 text-primary" /> Post News</h3>
       <div className="space-y-3">
         <Input value={newsTitle} onChange={(e: any) => setNewsTitle(e.target.value)} placeholder="Headline" className="bg-background border-border" />
+        <Input value={newsAsset} onChange={(e: any) => setNewsAsset(e.target.value)} placeholder="Asset name (e.g. EURUSD, BTCUSD, Gold)" className="bg-background border-border font-mono" />
         <Textarea value={newsContent} onChange={(e: any) => setNewsContent(e.target.value)} placeholder="Content..." className="bg-background border-border" rows={4} />
-        <Input value={newsSource} onChange={(e: any) => setNewsSource(e.target.value)} placeholder="Source" className="bg-background border-border" />
+        <Input value={newsSource} onChange={(e: any) => setNewsSource(e.target.value)} placeholder="Source (e.g. Forex Factory)" className="bg-background border-border" />
         <Select value={newsCategory} onValueChange={setNewsCategory}>
           <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
           <SelectContent className="bg-card border-border">
-            <SelectItem value="forex">Forex</SelectItem><SelectItem value="crypto">Crypto</SelectItem><SelectItem value="stocks">Stocks</SelectItem><SelectItem value="economy">Economy</SelectItem><SelectItem value="general">General</SelectItem>
+            <SelectItem value="forex">Forex</SelectItem><SelectItem value="crypto">Crypto</SelectItem><SelectItem value="stocks">Stocks</SelectItem><SelectItem value="commodities">Commodities</SelectItem><SelectItem value="economy">Economy</SelectItem><SelectItem value="general">General</SelectItem>
           </SelectContent>
         </Select>
         <Button onClick={() => createNews.mutate()} disabled={createNews.isPending} className="w-full"><Plus className="h-4 w-4 mr-2" />{createNews.isPending ? "Publishing..." : "Publish"}</Button>
@@ -805,7 +748,10 @@ const NewsSection = ({ newsList, newsTitle, setNewsTitle, newsContent, setNewsCo
           <div key={n.id} className="p-3 rounded border border-border bg-background group hover:bg-secondary/30 transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                <span className="text-[10px] text-primary font-mono uppercase">{n.category}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-primary font-mono uppercase">{n.category}</span>
+                  {(n as any).asset_name && <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">{(n as any).asset_name}</span>}
+                </div>
                 <h4 className="text-sm font-semibold mt-0.5">{n.title}</h4>
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{n.content}</p>
                 <span className="text-[10px] text-muted-foreground font-mono mt-1 block">{new Date(n.created_at).toLocaleDateString()}</span>

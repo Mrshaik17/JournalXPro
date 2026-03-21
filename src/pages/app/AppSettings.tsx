@@ -9,13 +9,14 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, CreditCard, Palette, LogOut, Crown, Shield, Trash2, AlertTriangle } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
+import { useTheme } from "@/components/ThemeProvider";
 
 const AppSettings = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { theme, setTheme } = useTheme();
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -48,41 +49,27 @@ const AppSettings = () => {
   });
 
   const [fullName, setFullName] = useState("");
-  const [theme, setTheme] = useState("dark");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [deleteAccountId, setDeleteAccountId] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  useEffect(() => {
-    if (profile) setFullName(profile.full_name || "");
-  }, [profile]);
-
-  useEffect(() => {
-    setTheme(localStorage.getItem("td-theme") || "dark");
-  }, []);
+  useEffect(() => { if (profile) setFullName(profile.full_name || ""); }, [profile]);
 
   const updateProfile = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("profiles").update({ full_name: fullName }).eq("id", user!.id);
-      if (error) throw error;
-    },
+    mutationFn: async () => { const { error } = await supabase.from("profiles").update({ full_name: fullName }).eq("id", user!.id); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["profile"] }); toast.success("Profile updated!"); },
     onError: (err: any) => toast.error(err.message),
   });
 
   const updatePassword = useMutation({
-    mutationFn: async (pw: string) => {
-      const { error } = await supabase.auth.updateUser({ password: pw });
-      if (error) throw error;
-    },
+    mutationFn: async (pw: string) => { const { error } = await supabase.auth.updateUser({ password: pw }); if (error) throw error; },
     onSuccess: () => toast.success("Password updated!"),
     onError: (err: any) => toast.error(err.message),
   });
 
   const deleteAccountMutation = useMutation({
     mutationFn: async (id: string) => {
-      // Delete all trades for this account first
       const { error: tradesErr } = await supabase.from("trades").delete().eq("account_id", id);
       if (tradesErr) throw tradesErr;
       const { error } = await supabase.from("accounts").delete().eq("id", id);
@@ -92,8 +79,7 @@ const AppSettings = () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["trades"] });
       toast.success("Account and all its trades permanently deleted.");
-      setDeleteAccountId("");
-      setDeleteConfirm(false);
+      setDeleteAccountId(""); setDeleteConfirm(false);
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -103,12 +89,6 @@ const AppSettings = () => {
     if (newPassword !== confirmPassword) { toast.error("Passwords don't match"); return; }
     updatePassword.mutate(newPassword);
     setNewPassword(""); setConfirmPassword("");
-  };
-
-  const handleThemeChange = (t: string) => {
-    setTheme(t);
-    localStorage.setItem("td-theme", t);
-    toast.success(`Theme: ${t}`);
   };
 
   const handleSignOut = async () => { await signOut(); navigate("/"); };
@@ -154,9 +134,7 @@ const AppSettings = () => {
                   <h3 className="font-semibold">Current Plan</h3>
                   <p className="text-sm text-muted-foreground mt-0.5">You're on the <span className={`font-medium ${badge.color} px-1.5 py-0.5 rounded`}>{badge.label}</span> plan</p>
                 </div>
-                {profile?.plan === "free" && (
-                  <Button onClick={() => navigate("/app/upgrade")} className="bg-primary text-primary-foreground"><Crown className="h-3.5 w-3.5 mr-1.5" />Upgrade</Button>
-                )}
+                {profile?.plan === "free" && <Button onClick={() => navigate("/app/upgrade")} className="bg-primary text-primary-foreground"><Crown className="h-3.5 w-3.5 mr-1.5" />Upgrade</Button>}
               </div>
             </div>
             {myPayments.length > 0 && (
@@ -184,25 +162,13 @@ const AppSettings = () => {
               <h3 className="font-semibold mb-3">Theme</h3>
               <div className="flex gap-3">
                 {[
-                  { id: "dark", label: "Dark", desc: "Easy on the eyes" },
-                  { id: "midnight", label: "Midnight", desc: "Deep dark mode" },
-                  { id: "divine", label: "Divine", desc: "Cyan accent glow" },
+                  { id: "dark" as const, label: "Dark", desc: "Default dark theme" },
+                  { id: "light" as const, label: "Light", desc: "Clean light mode" },
                 ].map((t) => (
-                  <button key={t.id} onClick={() => handleThemeChange(t.id)} className={`flex-1 p-3 rounded-lg border text-left transition-all ${theme === t.id ? "border-primary bg-primary/5" : "border-border bg-background hover:border-muted-foreground/30"}`}>
+                  <button key={t.id} onClick={() => setTheme(t.id)} className={`flex-1 p-3 rounded-lg border text-left transition-all ${theme === t.id ? "border-primary bg-primary/5" : "border-border bg-background hover:border-muted-foreground/30"}`}>
                     <span className="text-sm font-medium block">{t.label}</span>
                     <span className="text-xs text-muted-foreground">{t.desc}</span>
                   </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-3">Notifications</h3>
-              <div className="space-y-3">
-                {["Trade reminders", "Plan expiry alerts", "New features"].map((item) => (
-                  <label key={item} className="flex items-center justify-between p-3 rounded border border-border bg-background">
-                    <span className="text-sm">{item}</span>
-                    <input type="checkbox" defaultChecked className="accent-primary" />
-                  </label>
                 ))}
               </div>
             </div>
@@ -218,23 +184,15 @@ const AppSettings = () => {
               <Button onClick={handlePasswordChange} disabled={updatePassword.isPending} className="bg-primary text-primary-foreground">{updatePassword.isPending ? "Updating..." : "Update Password"}</Button>
             </div>
 
-            {/* Delete Account Data */}
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 space-y-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-destructive" />
-                <h3 className="font-semibold text-destructive">Delete Account Data</h3>
-              </div>
+              <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive" /><h3 className="font-semibold text-destructive">Delete Account Data</h3></div>
               <p className="text-sm text-muted-foreground">Permanently delete a trading account and all its trades. This cannot be undone.</p>
               {accounts.length > 0 ? (
                 <div className="space-y-3">
                   <Select value={deleteAccountId} onValueChange={setDeleteAccountId}>
-                    <SelectTrigger className="bg-background border-border max-w-sm">
-                      <SelectValue placeholder="Select account to delete" />
-                    </SelectTrigger>
+                    <SelectTrigger className="bg-background border-border max-w-sm"><SelectValue placeholder="Select account to delete" /></SelectTrigger>
                     <SelectContent className="bg-card border-border">
-                      {accounts.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name} (${Number(a.current_balance).toFixed(0)})</SelectItem>
-                      ))}
+                      {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name} (${Number(a.current_balance).toFixed(0)})</SelectItem>)}
                     </SelectContent>
                   </Select>
                   {deleteAccountId && (
@@ -243,29 +201,19 @@ const AppSettings = () => {
                         <input type="checkbox" checked={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.checked)} className="accent-destructive" />
                         <span className="text-xs text-destructive">I understand this is permanent and irreversible</span>
                       </label>
-                      <Button
-                        variant="outline"
-                        className="border-destructive text-destructive hover:bg-destructive/10"
-                        onClick={() => deleteAccountMutation.mutate(deleteAccountId)}
-                        disabled={!deleteConfirm || deleteAccountMutation.isPending}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                        {deleteAccountMutation.isPending ? "Deleting..." : "Delete Account Permanently"}
+                      <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" onClick={() => deleteAccountMutation.mutate(deleteAccountId)} disabled={!deleteConfirm || deleteAccountMutation.isPending}>
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />{deleteAccountMutation.isPending ? "Deleting..." : "Delete Account Permanently"}
                       </Button>
                     </div>
                   )}
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">No accounts to delete.</p>
-              )}
+              ) : <p className="text-xs text-muted-foreground">No accounts to delete.</p>}
             </div>
 
             <div className="rounded-lg border border-border bg-card p-6">
               <h3 className="font-semibold mb-2">Sign Out</h3>
               <p className="text-sm text-muted-foreground mb-4">Sign out of your account on this device.</p>
-              <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" onClick={handleSignOut}>
-                <LogOut className="h-3.5 w-3.5 mr-1.5" />Sign Out
-              </Button>
+              <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" onClick={handleSignOut}><LogOut className="h-3.5 w-3.5 mr-1.5" />Sign Out</Button>
             </div>
           </div>
         </TabsContent>
