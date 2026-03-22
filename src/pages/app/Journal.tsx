@@ -199,7 +199,7 @@ const Journal = () => {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); setNewFieldLabel(""); setScreenshotFile(null); setScreenshotPreview(null); };
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); setNewFieldLabel(""); setScreenshotFiles([null, null]); setScreenshotPreviews([null, null]); };
 
   const openEdit = (trade: any) => {
     const cf = trade.custom_fields || {};
