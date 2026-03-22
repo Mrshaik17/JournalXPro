@@ -290,22 +290,28 @@ const Journal = () => {
         <div><label className="text-xs text-muted-foreground mb-1 block">Exit Time</label><Input type="datetime-local" value={form.exitTime} onChange={(e) => setField("exitTime", e.target.value)} className="bg-background border-border text-xs" /></div>
       </div>
 
-      {/* Trade Screenshot */}
+      {/* Trade Screenshots (max 2) */}
       <div>
-        <label className="text-xs text-muted-foreground mb-1 block">Trade Screenshot</label>
-        <label className="flex items-center gap-2 px-4 py-3 rounded-md border border-dashed border-border bg-background cursor-pointer hover:border-muted-foreground/30 transition-colors">
-          <Image className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">{screenshotFile ? screenshotFile.name : "Upload trade photo"}</span>
-          <input type="file" accept="image/*" className="hidden" onChange={handleScreenshotSelect} />
-        </label>
-        {screenshotPreview && (
-          <div className="mt-2 relative">
-            <img src={screenshotPreview} alt="Trade screenshot" className="rounded-md max-h-32 object-cover border border-border" />
-            <button onClick={() => { setScreenshotFile(null); setScreenshotPreview(null); }} className="absolute top-1 right-1 bg-background/80 rounded-full p-0.5 text-muted-foreground hover:text-destructive">
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        )}
+        <label className="text-xs text-muted-foreground mb-1 block">Trade Screenshots (max 2)</label>
+        <div className="grid grid-cols-2 gap-2">
+          {[0, 1].map((idx) => (
+            <div key={idx}>
+              <label className="flex items-center gap-2 px-3 py-2.5 rounded-md border border-dashed border-border bg-background cursor-pointer hover:border-muted-foreground/30 transition-colors">
+                <Image className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground truncate">{screenshotFiles[idx] ? screenshotFiles[idx]!.name : `Photo ${idx + 1}`}</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleScreenshotSelect(idx)} />
+              </label>
+              {screenshotPreviews[idx] && (
+                <div className="mt-1 relative">
+                  <img src={screenshotPreviews[idx]!} alt={`Screenshot ${idx + 1}`} className="rounded-md max-h-24 object-cover border border-border w-full" />
+                  <button onClick={() => { const nf = [...screenshotFiles]; nf[idx] = null; setScreenshotFiles(nf); const np = [...screenshotPreviews]; np[idx] = null; setScreenshotPreviews(np); }} className="absolute top-1 right-1 bg-background/80 rounded-full p-0.5 text-muted-foreground hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div>
