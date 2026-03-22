@@ -47,8 +47,8 @@ const Journal = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [newFieldLabel, setNewFieldLabel] = useState("");
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [screenshotFiles, setScreenshotFiles] = useState<(File | null)[]>([null, null]);
+  const [screenshotPreviews, setScreenshotPreviews] = useState<(string | null)[]>([null, null]);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts", user?.id],
