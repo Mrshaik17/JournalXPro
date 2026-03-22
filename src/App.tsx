@@ -17,6 +17,7 @@ import Journal from "./pages/app/Journal";
 import Accounts from "./pages/app/Accounts";
 import Analytics from "./pages/app/Analytics";
 import Tools from "./pages/app/Tools";
+import News from "./pages/app/News";
 import Calendar from "./pages/app/Calendar";
 import PropFirms from "./pages/app/PropFirms";
 import AppSettings from "./pages/app/AppSettings";
@@ -46,6 +47,7 @@ const App = () => (
                 <Route path="accounts" element={<Accounts />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="tools" element={<Tools />} />
+                <Route path="news" element={<News />} />
                 <Route path="calendar" element={<Calendar />} />
                 <Route path="prop-firms" element={<PropFirms />} />
                 <Route path="upgrade" element={<Upgrade />} />
