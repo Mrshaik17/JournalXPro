@@ -1,23 +1,27 @@
-import { Zap } from "lucide-react";
+import { Zap, Eye, EyeOff, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { motion } from "framer-motion";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [referralCode, setReferralCode] = useState("");
   const [forgotOpen, setForgotOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -25,8 +29,23 @@ const Login = () => {
     if (user) navigate("/app", { replace: true });
   }, [user, navigate]);
 
+  // Password validation
+  const pwRules = useMemo(() => ({
+    minLength: password.length >= 6,
+    hasUpper: /[A-Z]/.test(password),
+    hasLower: /[a-z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+  }), [password]);
+
+  const allPwValid = pwRules.minLength && pwRules.hasUpper && pwRules.hasLower && pwRules.hasNumber;
+  const passwordsMatch = password === confirmPassword && confirmPassword.length > 0;
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSignUp) {
+      if (!allPwValid) { toast.error("Password doesn't meet requirements"); return; }
+      if (!passwordsMatch) { toast.error("Passwords do not match"); return; }
+    }
     setLoading(true);
     try {
       if (isSignUp) {
@@ -35,9 +54,7 @@ const Login = () => {
           password,
           options: {
             emailRedirectTo: window.location.origin,
-            data: {
-              referral_code_used: referralCode || undefined,
-            },
+            data: { referral_code_used: referralCode || undefined },
           },
         });
         if (error) throw error;
@@ -78,9 +95,16 @@ const Login = () => {
     }
   };
 
+  const PwRule = ({ ok, text }: { ok: boolean; text: string }) => (
+    <div className={`flex items-center gap-1.5 text-xs ${ok ? "text-success" : "text-muted-foreground"}`}>
+      {ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+      {text}
+    </div>
+  );
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm space-y-6">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <Link to="/" className="inline-flex items-center gap-2 mb-6">
             <Zap className="h-6 w-6 text-primary" />
@@ -104,11 +128,37 @@ const Login = () => {
 
         <form onSubmit={handleEmailAuth} className="space-y-3">
           <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-card border-border" required />
-          <Input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="bg-card border-border" required minLength={6} />
+          <div className="relative">
+            <Input placeholder="Password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="bg-card border-border pr-10" required minLength={6} />
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+
           {isSignUp && (
-            <Input placeholder="Referral code (optional)" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} className="bg-card border-border font-mono" />
+            <>
+              {/* Password rules */}
+              {password.length > 0 && (
+                <div className="space-y-1 p-2 rounded bg-card border border-border">
+                  <PwRule ok={pwRules.minLength} text="At least 6 characters" />
+                  <PwRule ok={pwRules.hasUpper} text="At least 1 uppercase letter" />
+                  <PwRule ok={pwRules.hasLower} text="At least 1 lowercase letter" />
+                  <PwRule ok={pwRules.hasNumber} text="At least 1 number" />
+                </div>
+              )}
+              <div className="relative">
+                <Input placeholder="Confirm Password" type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="bg-card border-border pr-10" required />
+                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {confirmPassword.length > 0 && !passwordsMatch && (
+                <p className="text-xs text-destructive">Passwords do not match</p>
+              )}
+              <Input placeholder="Referral code (optional)" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} className="bg-card border-border font-mono" />
+            </>
           )}
-          <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading}>
+          <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading || (isSignUp && (!allPwValid || !passwordsMatch))}>
             {loading ? "Loading..." : isSignUp ? "Sign Up" : "Sign In"}
           </Button>
         </form>
@@ -121,18 +171,15 @@ const Login = () => {
 
         <p className="text-center text-xs text-muted-foreground">
           {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-          <button onClick={() => setIsSignUp(!isSignUp)} className="text-primary hover:underline">
+          <button onClick={() => { setIsSignUp(!isSignUp); setConfirmPassword(""); }} className="text-primary hover:underline">
             {isSignUp ? "Sign in" : "Sign up"}
           </button>
         </p>
-      </div>
+      </motion.div>
 
-      {/* Forgot Password Dialog */}
       <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
         <DialogContent className="bg-card border-border max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Reset Password</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Enter your email and we'll send you a reset link to continue your journey with us.</p>
             <Input placeholder="Your email" type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} className="bg-background border-border" />
