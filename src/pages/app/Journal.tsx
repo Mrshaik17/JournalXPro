@@ -86,12 +86,13 @@ const Journal = () => {
     setForm((f) => ({ ...f, customFields: f.customFields.filter((_, idx) => idx !== i) }));
   };
 
-  const handleScreenshotSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScreenshotSelect = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setScreenshotFile(file);
+      const newFiles = [...screenshotFiles]; newFiles[index] = file;
+      setScreenshotFiles(newFiles);
       const reader = new FileReader();
-      reader.onload = () => setScreenshotPreview(reader.result as string);
+      reader.onload = () => { const newPreviews = [...screenshotPreviews]; newPreviews[index] = reader.result as string; setScreenshotPreviews(newPreviews); };
       reader.readAsDataURL(file);
     }
   };
