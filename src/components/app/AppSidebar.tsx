@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, BookOpen, Wallet, BarChart3,
-  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays
+  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays, Newspaper
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
@@ -23,6 +23,7 @@ const navItems = [
   { title: "Accounts", url: "/app/accounts", icon: Wallet },
   { title: "Analytics", url: "/app/analytics", icon: BarChart3 },
   { title: "Tools", url: "/app/tools", icon: Calculator },
+  { title: "News", url: "/app/news", icon: Newspaper },
   { title: "Calendar", url: "/app/calendar", icon: CalendarDays },
   { title: "Prop Firms", url: "/app/prop-firms", icon: Building2 },
   { title: "Upgrade", url: "/app/upgrade", icon: Crown },

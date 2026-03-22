@@ -47,8 +47,8 @@ const Journal = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [newFieldLabel, setNewFieldLabel] = useState("");
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [screenshotFiles, setScreenshotFiles] = useState<(File | null)[]>([null, null]);
+  const [screenshotPreviews, setScreenshotPreviews] = useState<(string | null)[]>([null, null]);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts", user?.id],
@@ -86,12 +86,13 @@ const Journal = () => {
     setForm((f) => ({ ...f, customFields: f.customFields.filter((_, idx) => idx !== i) }));
   };
 
-  const handleScreenshotSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScreenshotSelect = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setScreenshotFile(file);
+      const newFiles = [...screenshotFiles]; newFiles[index] = file;
+      setScreenshotFiles(newFiles);
       const reader = new FileReader();
-      reader.onload = () => setScreenshotPreview(reader.result as string);
+      reader.onload = () => { const newPreviews = [...screenshotPreviews]; newPreviews[index] = reader.result as string; setScreenshotPreviews(newPreviews); };
       reader.readAsDataURL(file);
     }
   };
@@ -107,15 +108,19 @@ const Journal = () => {
       const cfObj: Record<string, string> = {};
       form.customFields.forEach((cf) => { cfObj[cf.label] = cf.value; });
 
-      // Upload screenshot if exists
+      // Upload screenshots if exist
       let screenshotUrl: string | null = null;
-      if (screenshotFile) {
-        const filePath = `${user.id}/${Date.now()}-${screenshotFile.name}`;
-        const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, screenshotFile);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(filePath);
-        screenshotUrl = urlData.publicUrl;
+      const uploadedUrls: string[] = [];
+      for (const file of screenshotFiles) {
+        if (file) {
+          const filePath = `${user.id}/${Date.now()}-${file.name}`;
+          const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, file);
+          if (uploadError) throw uploadError;
+          const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(filePath);
+          uploadedUrls.push(urlData.publicUrl);
+        }
       }
+      if (uploadedUrls.length > 0) screenshotUrl = uploadedUrls.join(",");
 
       if (editingId) {
         const updateData: any = {
@@ -194,7 +199,7 @@ const Journal = () => {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); setNewFieldLabel(""); setScreenshotFile(null); setScreenshotPreview(null); };
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); setNewFieldLabel(""); setScreenshotFiles([null, null]); setScreenshotPreviews([null, null]); };
 
   const openEdit = (trade: any) => {
     const cf = trade.custom_fields || {};
@@ -221,7 +226,10 @@ const Journal = () => {
       customFields: Object.entries(cf).map(([label, value]) => ({ label, value: String(value) })),
     });
     setEditingId(trade.id);
-    if ((trade as any).screenshot_url) setScreenshotPreview((trade as any).screenshot_url);
+    if ((trade as any).screenshot_url) {
+      const urls = (trade as any).screenshot_url.split(",");
+      setScreenshotPreviews([urls[0] || null, urls[1] || null]);
+    }
     setOpen(true);
   };
 
@@ -282,22 +290,28 @@ const Journal = () => {
         <div><label className="text-xs text-muted-foreground mb-1 block">Exit Time</label><Input type="datetime-local" value={form.exitTime} onChange={(e) => setField("exitTime", e.target.value)} className="bg-background border-border text-xs" /></div>
       </div>
 
-      {/* Trade Screenshot */}
+      {/* Trade Screenshots (max 2) */}
       <div>
-        <label className="text-xs text-muted-foreground mb-1 block">Trade Screenshot</label>
-        <label className="flex items-center gap-2 px-4 py-3 rounded-md border border-dashed border-border bg-background cursor-pointer hover:border-muted-foreground/30 transition-colors">
-          <Image className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">{screenshotFile ? screenshotFile.name : "Upload trade photo"}</span>
-          <input type="file" accept="image/*" className="hidden" onChange={handleScreenshotSelect} />
-        </label>
-        {screenshotPreview && (
-          <div className="mt-2 relative">
-            <img src={screenshotPreview} alt="Trade screenshot" className="rounded-md max-h-32 object-cover border border-border" />
-            <button onClick={() => { setScreenshotFile(null); setScreenshotPreview(null); }} className="absolute top-1 right-1 bg-background/80 rounded-full p-0.5 text-muted-foreground hover:text-destructive">
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        )}
+        <label className="text-xs text-muted-foreground mb-1 block">Trade Screenshots (max 2)</label>
+        <div className="grid grid-cols-2 gap-2">
+          {[0, 1].map((idx) => (
+            <div key={idx}>
+              <label className="flex items-center gap-2 px-3 py-2.5 rounded-md border border-dashed border-border bg-background cursor-pointer hover:border-muted-foreground/30 transition-colors">
+                <Image className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground truncate">{screenshotFiles[idx] ? screenshotFiles[idx]!.name : `Photo ${idx + 1}`}</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleScreenshotSelect(idx)} />
+              </label>
+              {screenshotPreviews[idx] && (
+                <div className="mt-1 relative">
+                  <img src={screenshotPreviews[idx]!} alt={`Screenshot ${idx + 1}`} className="rounded-md max-h-24 object-cover border border-border w-full" />
+                  <button onClick={() => { const nf = [...screenshotFiles]; nf[idx] = null; setScreenshotFiles(nf); const np = [...screenshotPreviews]; np[idx] = null; setScreenshotPreviews(np); }} className="absolute top-1 right-1 bg-background/80 rounded-full p-0.5 text-muted-foreground hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div>
