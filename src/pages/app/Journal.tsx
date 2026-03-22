@@ -108,15 +108,19 @@ const Journal = () => {
       const cfObj: Record<string, string> = {};
       form.customFields.forEach((cf) => { cfObj[cf.label] = cf.value; });
 
-      // Upload screenshot if exists
+      // Upload screenshots if exist
       let screenshotUrl: string | null = null;
-      if (screenshotFile) {
-        const filePath = `${user.id}/${Date.now()}-${screenshotFile.name}`;
-        const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, screenshotFile);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(filePath);
-        screenshotUrl = urlData.publicUrl;
+      const uploadedUrls: string[] = [];
+      for (const file of screenshotFiles) {
+        if (file) {
+          const filePath = `${user.id}/${Date.now()}-${file.name}`;
+          const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, file);
+          if (uploadError) throw uploadError;
+          const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(filePath);
+          uploadedUrls.push(urlData.publicUrl);
+        }
       }
+      if (uploadedUrls.length > 0) screenshotUrl = uploadedUrls.join(",");
 
       if (editingId) {
         const updateData: any = {
