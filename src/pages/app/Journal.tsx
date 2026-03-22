@@ -226,7 +226,10 @@ const Journal = () => {
       customFields: Object.entries(cf).map(([label, value]) => ({ label, value: String(value) })),
     });
     setEditingId(trade.id);
-    if ((trade as any).screenshot_url) setScreenshotPreview((trade as any).screenshot_url);
+    if ((trade as any).screenshot_url) {
+      const urls = (trade as any).screenshot_url.split(",");
+      setScreenshotPreviews([urls[0] || null, urls[1] || null]);
+    }
     setOpen(true);
   };
 
