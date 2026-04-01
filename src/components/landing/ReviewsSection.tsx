@@ -5,7 +5,7 @@ const reviews = [
   {
     name: "Arjun S.",
     role: "Forex Trader",
-    text: "Trader's Divine completely changed how I approach journaling. The Divine Score keeps me honest about my discipline.",
+    text: "JournalXPro completely changed how I approach journaling. The JournalX Score keeps me honest about my discipline.",
     stars: 5,
   },
   {
@@ -17,7 +17,7 @@ const reviews = [
   {
     name: "Rahul K.",
     role: "Prop Firm Trader",
-    text: "Managing multiple accounts is seamless. Real-time balance updates and the risk calculator are game changers.",
+    text: "Managing multiple accounts is seamless. The consistency score calculator and risk tools are game changers for prop firm challenges.",
     stars: 5,
   },
   {
@@ -25,6 +25,18 @@ const reviews = [
     role: "Day Trader",
     text: "Finally a journal that focuses on discipline, not just profit. The plan adherence tracking is exactly what I needed.",
     stars: 4,
+  },
+  {
+    name: "Mike D.",
+    role: "Swing Trader",
+    text: "The pricing is unbeatable compared to other journals. Getting AI insights and MT5 sync at this price is incredible value.",
+    stars: 5,
+  },
+  {
+    name: "Aisha R.",
+    role: "Gold Trader",
+    text: "Love the custom fields feature. I can track exactly what matters to my strategy. The photo upload for trade screenshots is perfect.",
+    stars: 5,
   },
 ];
 
@@ -40,10 +52,10 @@ export const ReviewsSection = () => {
           className="text-center mb-16"
         >
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Loved by Traders</h2>
-          <p className="text-muted-foreground text-lg">Join hundreds of disciplined traders worldwide.</p>
+          <p className="text-muted-foreground text-lg">Trusted by prop firm traders and brokers worldwide.</p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
           {reviews.map((review, i) => (
             <motion.div
               key={review.name}

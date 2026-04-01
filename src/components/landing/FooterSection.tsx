@@ -8,7 +8,7 @@ export const FooterSection = () => {
     queryKey: ["site-settings-social"],
     queryFn: async () => {
       const { data } = await supabase.from("site_settings").select("value").eq("key", "social_links").maybeSingle();
-      return (data?.value as { instagram?: string; twitter?: string; telegram?: string; discord?: string }) || {};
+      return (data?.value as { instagram?: string; twitter?: string; telegram?: string; discord?: string; youtube?: string; facebook?: string }) || {};
     },
   });
 
@@ -17,6 +17,8 @@ export const FooterSection = () => {
     { label: "Twitter / X", url: socialLinks?.twitter, icon: "𝕏" },
     { label: "Telegram", url: socialLinks?.telegram, icon: "✈️" },
     { label: "Discord", url: socialLinks?.discord, icon: "💬" },
+    { label: "YouTube", url: (socialLinks as any)?.youtube, icon: "▶️" },
+    { label: "Facebook", url: (socialLinks as any)?.facebook, icon: "📘" },
   ].filter((l) => l.url);
 
   return (
@@ -26,10 +28,10 @@ export const FooterSection = () => {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Zap className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold">Trader's Divine</span>
+              <span className="text-sm font-semibold">JournalXPro</span>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              The trading journal built for traders who treat the market like a monastery.
+              The trading journal built for traders who value precision, discipline, and consistency.
             </p>
           </div>
 
@@ -70,7 +72,7 @@ export const FooterSection = () => {
         </div>
 
         <div className="border-t border-border pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} Trader's Divine. All rights reserved.</p>
+          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} JournalXPro. All rights reserved.</p>
           <p className="text-xs text-muted-foreground">Made with discipline ⚡</p>
         </div>
       </div>
