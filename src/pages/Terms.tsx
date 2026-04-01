@@ -19,7 +19,7 @@ const Terms = () => (
         <h2 className="text-foreground text-lg font-semibold">4. Prohibited Use</h2>
         <p>Do not use the service for illegal activities, spam, or to harm other users.</p>
         <h2 className="text-foreground text-lg font-semibold">5. Disclaimer</h2>
-        <p>Trader's Divine is not a financial advisor. Trading involves risk. We are not responsible for any trading losses.</p>
+        <p>JournalXPro is not a financial advisor. Trading involves risk. We are not responsible for any trading losses.</p>
       </div>
     </div>
   </div>
