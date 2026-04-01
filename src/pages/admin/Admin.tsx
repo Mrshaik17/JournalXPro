@@ -322,7 +322,7 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
     const filteredUsers = profiles.filter((p: any) => new Date(p.created_at) >= since);
     if (format === "pdf") {
       const doc = new jsPDF();
-      doc.setFontSize(16); doc.text("Trader's Divine - Admin Report", 14, 20);
+      doc.setFontSize(16); doc.text("JournalXPro - Admin Report", 14, 20);
       doc.setFontSize(10); doc.text(`Range: ${range} | Generated: ${now.toLocaleDateString()}`, 14, 28);
       autoTable(doc, { startY: 36, head: [["Email", "Plan", "Joined"]], body: filteredUsers.map((u: any) => [u.email || "", u.plan, new Date(u.created_at).toLocaleDateString()]) });
       const fy = (doc as any).lastAutoTable?.finalY || 50;
