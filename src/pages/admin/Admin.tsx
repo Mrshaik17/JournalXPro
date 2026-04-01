@@ -10,7 +10,7 @@ import {
   Shield, Users, CreditCard, Link2, Settings, BarChart3, Newspaper,
   Trash2, Plus, MessageSquare, LayoutDashboard, Download, Bell,
   ChevronLeft, ChevronRight, TrendingUp, DollarSign, UserPlus, Clock,
-  Building2, Zap, LogOut, Lock, Eye, EyeOff
+  Building2, LogOut
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import jsPDF from "jspdf";
@@ -30,9 +30,6 @@ const sidebarItems: { key: AdminSection; label: string; icon: any }[] = [
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
-const ADMIN_EMAIL = "shaiktouheed17@gmail.com";
-const ADMIN_PASSKEY = "$Haik098@";
-
 const Admin = () => {
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<AdminSection>("dashboard");
@@ -40,130 +37,11 @@ const Admin = () => {
   const [pendingNotif, setPendingNotif] = useState(0);
   const [chatNotif, setChatNotif] = useState(0);
 
-  // ---- ADMIN AUTH (standalone, no user login needed) ----
-  const [adminAuthed, setAdminAuthed] = useState(false);
-  const [passKeyVerified, setPassKeyVerified] = useState(false);
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [passKeyInput, setPassKeyInput] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showPasskey, setShowPasskey] = useState(false);
-
-  // Check session on mount
-  useEffect(() => {
-    const stored = sessionStorage.getItem("admin_authed");
-    const storedPasskey = sessionStorage.getItem("admin_passkey");
-    if (stored === "true") setAdminAuthed(true);
-    if (storedPasskey === "true") setPassKeyVerified(true);
-  }, []);
-
-  const handleAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminEmail !== ADMIN_EMAIL) {
-      toast.error("Access denied. Invalid credentials.");
-      return;
-    }
-    setLoginLoading(true);
-    try {
-      // Sign in via supabase to verify password
-      const { error } = await supabase.auth.signInWithPassword({ email: adminEmail, password: adminPassword });
-      if (error) throw error;
-      // Verify admin role
-      const { data: session } = await supabase.auth.getSession();
-      if (session?.session?.user) {
-        const { data: hasRole } = await supabase.rpc("has_role", { _user_id: session.session.user.id, _role: "admin" as const });
-        if (!hasRole) {
-          toast.error("Access denied. Not an admin.");
-          await supabase.auth.signOut();
-          return;
-        }
-      }
-      setAdminAuthed(true);
-      sessionStorage.setItem("admin_authed", "true");
-      toast.success("Login successful. Enter passkey.");
-    } catch (err: any) {
-      toast.error(err.message || "Login failed");
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const handlePassKeyVerify = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passKeyInput === ADMIN_PASSKEY) {
-      setPassKeyVerified(true);
-      sessionStorage.setItem("admin_passkey", "true");
-      toast.success("Access granted!");
-    } else {
-      toast.error("Invalid passkey.");
-    }
-  };
-
-  const handleAdminLogout = async () => {
-    await supabase.auth.signOut();
-    setAdminAuthed(false);
-    setPassKeyVerified(false);
+  const handleAdminLogout = () => {
     sessionStorage.removeItem("admin_authed");
-    sessionStorage.removeItem("admin_passkey");
+    window.location.reload();
   };
 
-  // ---- LOGIN FORM ----
-  if (!adminAuthed) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm space-y-6">
-          <div className="text-center">
-            <div className="inline-flex items-center gap-2 mb-4">
-              <Shield className="h-8 w-8 text-primary" />
-            </div>
-            <h1 className="text-xl font-bold">Admin Panel</h1>
-            <p className="text-sm text-muted-foreground mt-1">Sign in with admin credentials</p>
-          </div>
-          <form onSubmit={handleAdminLogin} className="space-y-3">
-            <Input placeholder="Admin Email" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="bg-card border-border" required />
-            <div className="relative">
-              <Input placeholder="Password" type={showPassword ? "text" : "password"} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="bg-card border-border pr-10" required />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <Button type="submit" className="w-full bg-primary text-primary-foreground" disabled={loginLoading}>
-              {loginLoading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // ---- PASSKEY FORM ----
-  if (!passKeyVerified) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-6">
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-sm space-y-6">
-          <div className="text-center">
-            <div className="inline-flex items-center gap-2 mb-4">
-              <Lock className="h-8 w-8 text-primary" />
-            </div>
-            <h1 className="text-xl font-bold">Security Verification</h1>
-            <p className="text-sm text-muted-foreground mt-1">Enter your admin passkey to continue</p>
-          </div>
-          <form onSubmit={handlePassKeyVerify} className="space-y-3">
-            <div className="relative">
-              <Input placeholder="Enter passkey" type={showPasskey ? "text" : "password"} value={passKeyInput} onChange={(e) => setPassKeyInput(e.target.value)} className="bg-card border-border pr-10" required />
-              <button type="button" onClick={() => setShowPasskey(!showPasskey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {showPasskey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <Button type="submit" className="w-full bg-primary text-primary-foreground">Verify</Button>
-          </form>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // ---- ADMIN PANEL (authed + passkey verified) ----
   return <AdminDashboard queryClient={queryClient} activeSection={activeSection} setActiveSection={setActiveSection} collapsed={collapsed} setCollapsed={setCollapsed} pendingNotif={pendingNotif} setPendingNotif={setPendingNotif} chatNotif={chatNotif} setChatNotif={setChatNotif} handleAdminLogout={handleAdminLogout} />;
 };
 
@@ -444,7 +322,7 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
     const filteredUsers = profiles.filter((p: any) => new Date(p.created_at) >= since);
     if (format === "pdf") {
       const doc = new jsPDF();
-      doc.setFontSize(16); doc.text("Trader's Divine - Admin Report", 14, 20);
+      doc.setFontSize(16); doc.text("JournalXPro - Admin Report", 14, 20);
       doc.setFontSize(10); doc.text(`Range: ${range} | Generated: ${now.toLocaleDateString()}`, 14, 28);
       autoTable(doc, { startY: 36, head: [["Email", "Plan", "Joined"]], body: filteredUsers.map((u: any) => [u.email || "", u.plan, new Date(u.created_at).toLocaleDateString()]) });
       const fy = (doc as any).lastAutoTable?.finalY || 50;
@@ -503,7 +381,7 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
       <motion.main animate={{ marginLeft: collapsed ? 64 : 220 }} transition={{ duration: 0.2 }} className="flex-1 min-h-screen">
         <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
           <h2 className="font-bold text-lg capitalize">{activeSection === "propfirms" ? "Prop Firms" : activeSection}</h2>
-          <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">Trader's Divine</span></div>
+          <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">JournalXPro</span></div>
         </header>
         <div className="p-6">
           <AnimatePresence mode="wait">

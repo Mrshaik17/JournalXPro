@@ -45,7 +45,7 @@ const ResetPassword = () => {
         <div className="text-center">
           <div className="inline-flex items-center gap-2 mb-4">
             <Zap className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold">Trader's Divine</span>
+            <span className="text-xl font-bold">JournalXPro</span>
           </div>
           <h1 className="text-xl font-semibold mb-1">Set New Password</h1>
           <p className="text-sm text-muted-foreground">Enter your new password below</p>

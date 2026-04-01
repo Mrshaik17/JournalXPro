@@ -144,7 +144,7 @@ export const ChatWidget = () => {
             <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-primary/5">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-primary" />
-                <span className="font-semibold text-sm">Trader's Divine Support</span>
+                <span className="font-semibold text-sm">JournalXPro Support</span>
                 {isLive && <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />}
               </div>
               <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>

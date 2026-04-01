@@ -45,7 +45,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-border">
       <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
         <Zap className="h-5 w-5 text-primary flex-shrink-0" />
-        {!collapsed && <span className="text-sm font-semibold text-foreground">Trader's Divine</span>}
+        {!collapsed && <span className="text-sm font-semibold text-foreground">JournalXPro</span>}
       </div>
       <SidebarContent>
         <SidebarGroup>

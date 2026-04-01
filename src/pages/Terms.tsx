@@ -11,7 +11,7 @@ const Terms = () => (
       <div className="prose prose-invert prose-sm max-w-none space-y-6 text-muted-foreground">
         <p>Last updated: {new Date().toLocaleDateString()}</p>
         <h2 className="text-foreground text-lg font-semibold">1. Acceptance</h2>
-        <p>By using Trader's Divine, you agree to these terms. The service is a trading journal tool — not financial advice.</p>
+        <p>By using JournalXPro, you agree to these terms. The service is a trading journal tool — not financial advice.</p>
         <h2 className="text-foreground text-lg font-semibold">2. Account Responsibilities</h2>
         <p>You are responsible for maintaining the confidentiality of your account. All data you enter is your responsibility.</p>
         <h2 className="text-foreground text-lg font-semibold">3. Subscription & Payments</h2>
@@ -19,7 +19,7 @@ const Terms = () => (
         <h2 className="text-foreground text-lg font-semibold">4. Prohibited Use</h2>
         <p>Do not use the service for illegal activities, spam, or to harm other users.</p>
         <h2 className="text-foreground text-lg font-semibold">5. Disclaimer</h2>
-        <p>Trader's Divine is not a financial advisor. Trading involves risk. We are not responsible for any trading losses.</p>
+        <p>JournalXPro is not a financial advisor. Trading involves risk. We are not responsible for any trading losses.</p>
       </div>
     </div>
   </div>

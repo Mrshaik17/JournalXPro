@@ -6,7 +6,6 @@ import { ArrowRight, BarChart3, Shield, TrendingUp } from "lucide-react";
 export const HeroSection = () => {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
-      {/* Background grid */}
       <div className="absolute inset-0 bg-[linear-gradient(hsl(var(--muted-foreground)/0.03)_1px,transparent_1px),linear-gradient(90deg,hsl(var(--muted-foreground)/0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,hsl(187_100%_50%/0.05),transparent_70%)]" />
 
@@ -28,8 +27,8 @@ export const HeroSection = () => {
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            The trading journal built for traders who treat the market like a monastery. 
-            Track performance, measure discipline, and build consistency.
+            The trading journal built for traders who value precision and discipline. 
+            Track performance, measure consistency, and build winning habits — at a fraction of the cost.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
@@ -47,7 +46,6 @@ export const HeroSection = () => {
           </div>
         </motion.div>
 
-        {/* Stats */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -57,7 +55,7 @@ export const HeroSection = () => {
           {[
             { icon: BarChart3, label: "Trade Journaling", value: "10s" },
             { icon: TrendingUp, label: "Real-time P&L", value: "Live" },
-            { icon: Shield, label: "Divine Score", value: "100%" },
+            { icon: Shield, label: "JournalX Score", value: "100%" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <div className="font-mono text-2xl md:text-3xl font-bold text-foreground mb-1">{stat.value}</div>

@@ -8,7 +8,7 @@ export const LandingNav = () => {
       <div className="container mx-auto flex h-16 items-center justify-between px-6">
         <Link to="/" className="flex items-center gap-2">
           <Zap className="h-5 w-5 text-primary" />
-          <span className="text-lg font-semibold text-foreground">Trader's Divine</span>
+          <span className="text-lg font-semibold text-foreground">JournalXPro</span>
         </Link>
         <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
           <a href="#features" className="hover:text-foreground transition-colors">Features</a>
