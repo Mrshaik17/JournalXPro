@@ -1,18 +1,20 @@
 import { motion } from "framer-motion";
 import {
   BookOpen, Wallet, Target, BarChart3, Calculator,
-  Building2, History, Coins
+  Building2, History, Coins, Link2, Brain
 } from "lucide-react";
 
 const features = [
-  { icon: BookOpen, title: "Trade Journaling", desc: "Log trades in under 10 seconds. PnL, result, plan adherence — all tracked.", badge: null },
-  { icon: Wallet, title: "Account Tracking", desc: "Multiple accounts with real-time balance updates. Every trade counts.", badge: null },
-  { icon: Target, title: "Divine Score", desc: "Measure discipline, not just profit. Your plan adherence score.", badge: null },
-  { icon: BarChart3, title: "Analytics", desc: "Win rate, P&L curves, tag-based insights. Filter by account or time.", badge: null },
-  { icon: Calculator, title: "Risk Calculator", desc: "Position sizing and risk management tools built in.", badge: null },
-  { icon: Building2, title: "Prop Firms", desc: "Quick access to top prop firm programs and requirements.", badge: null },
+  { icon: BookOpen, title: "Trade Journaling", desc: "Log trades in under 10 seconds with photos, custom fields, and full analytics.", badge: null },
+  { icon: Wallet, title: "Account Tracking", desc: "Multiple accounts with real-time balance updates. Prop firm & broker support.", badge: null },
+  { icon: Target, title: "JournalX Score", desc: "Measure discipline, not just profit. Your plan adherence & consistency score.", badge: null },
+  { icon: BarChart3, title: "Analytics", desc: "Win rate, P&L curves, drawdown metrics, AI insights. Tiered by plan.", badge: null },
+  { icon: Calculator, title: "Trading Tools", desc: "Universal pip, lot size, risk & consistency calculators built in.", badge: null },
+  { icon: Building2, title: "Prop Firms", desc: "Quick access to top prop firm programs and consistency tracking.", badge: null },
+  { icon: Link2, title: "MT5 Auto Sync", desc: "Connect your MT5 account and auto-sync trades instantly.", badge: "Pro+" },
+  { icon: Brain, title: "AI Insights", desc: "AI-powered analysis: best hours, streak detection, discipline scoring.", badge: "Elite" },
   { icon: History, title: "Backtesting Tool", desc: "Test strategies against historical data.", badge: "Coming Soon" },
-  { icon: Coins, title: "Crypto Payments", desc: "Pay with cryptocurrency for your subscription.", badge: "Coming Soon" },
+  { icon: Coins, title: "Crypto Payments", desc: "Pay with cryptocurrency for your subscription.", badge: null },
 ];
 
 export const FeaturesSection = () => {
@@ -32,7 +34,7 @@ export const FeaturesSection = () => {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {features.map((feature, i) => (
             <motion.div
               key={feature.title}
@@ -53,6 +55,41 @@ export const FeaturesSection = () => {
             </motion.div>
           ))}
         </div>
+
+        {/* Comparison */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mt-20 max-w-2xl mx-auto"
+        >
+          <h3 className="text-2xl font-bold text-center mb-8">Why JournalXPro?</h3>
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border bg-muted/30">
+                <th className="text-left p-4 text-muted-foreground">Feature</th>
+                <th className="text-center p-4 text-primary font-bold">JournalXPro</th>
+                <th className="text-center p-4 text-muted-foreground">Others</th>
+              </tr></thead>
+              <tbody>
+                {[
+                  ["Starting Price", "₹400/mo", "₹2000+/mo"],
+                  ["MT5 Auto Sync", "✓", "Limited"],
+                  ["AI Insights", "✓ (Elite)", "Extra cost"],
+                  ["Prop Firm Tools", "✓ Built-in", "✗"],
+                  ["Trade Photos", "✓ (2 per trade)", "✗"],
+                  ["Custom Fields", "✓ Unlimited", "Limited"],
+                ].map(([feat, us, them], i) => (
+                  <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/10 transition-colors">
+                    <td className="p-4 text-foreground">{feat}</td>
+                    <td className="p-4 text-center text-primary font-medium">{us}</td>
+                    <td className="p-4 text-center text-muted-foreground">{them}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
       </div>
     </section>
   );
