@@ -381,7 +381,7 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
       <motion.main animate={{ marginLeft: collapsed ? 64 : 220 }} transition={{ duration: 0.2 }} className="flex-1 min-h-screen">
         <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
           <h2 className="font-bold text-lg capitalize">{activeSection === "propfirms" ? "Prop Firms" : activeSection}</h2>
-          <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">Trader's Divine</span></div>
+          <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">JournalXPro</span></div>
         </header>
         <div className="p-6">
           <AnimatePresence mode="wait">
