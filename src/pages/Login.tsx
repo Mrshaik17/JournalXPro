@@ -108,7 +108,7 @@ const Login = () => {
         <div className="text-center">
           <Link to="/" className="inline-flex items-center gap-2 mb-6">
             <Zap className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold text-foreground">Trader's Divine</span>
+            <span className="text-xl font-bold text-foreground">JournalXPro</span>
           </Link>
           <h1 className="text-xl font-semibold mb-1">{isSignUp ? "Create an account" : "Welcome back"}</h1>
           <p className="text-sm text-muted-foreground">{isSignUp ? "Sign up to start journaling" : "Sign in to your account"}</p>
