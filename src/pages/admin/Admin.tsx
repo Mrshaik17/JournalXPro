@@ -388,7 +388,7 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
           <AnimatePresence mode="wait">
             <motion.div key={activeSection} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.15 }}>
               {activeSection === "dashboard" && <DashboardSection totalUsers={totalUsers} paidUsers={paidUsers} totalTrades={totalTrades} pendingPayments={pendingPayments} totalRevenue={totalRevenue} thisWeekUsers={thisWeekUsers} profiles={profiles} payments={payments} exportData={exportData} />}
-              {activeSection === "users" && <UsersSection profiles={profiles} updateUserPlan={updateUserPlan} deleteUserMutation={deleteUserMutation} />}
+              {activeSection === "users" && <UsersSection profiles={profiles} updateUserPlan={updateUserPlan} deleteUserMutation={deleteUserMutation} upsertSetting={upsertSetting} siteSettings={siteSettings} />}
               {activeSection === "payments" && <PaymentsSection payments={payments} profiles={profiles} updatePaymentStatus={updatePaymentStatus} />}
               {activeSection === "referrals" && <ReferralsSection referrals={referrals} profiles={profiles} payments={payments} refName={refName} setRefName={setRefName} refCode={refCode} setRefCode={setRefCode} refCommission={refCommission} setRefCommission={setRefCommission} createReferral={createReferral} deleteReferral={deleteReferral} />}
               {activeSection === "propfirms" && <PropFirmsSection propFirms={propFirms} pfName={pfName} setPfName={setPfName} pfUrl={pfUrl} setPfUrl={setPfUrl} pfDesc={pfDesc} setPfDesc={setPfDesc} createPropFirm={createPropFirm} deletePropFirm={deletePropFirm} />}
