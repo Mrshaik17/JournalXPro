@@ -11,7 +11,7 @@ import {
   Shield, Users, CreditCard, Link2, Settings, BarChart3, Newspaper,
   Trash2, Plus, MessageSquare, LayoutDashboard, Download, Bell,
   ChevronLeft, ChevronRight, TrendingUp, DollarSign, UserPlus, Clock,
-  Building2, LogOut
+  Building2, LogOut, AlertTriangle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import jsPDF from "jspdf";
