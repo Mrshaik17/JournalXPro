@@ -114,8 +114,9 @@ const Journal = () => {
       const uploadedUrls: string[] = [];
       for (const file of screenshotFiles) {
         if (file) {
-          const filePath = `${user.id}/${Date.now()}-${file.name}`;
-          const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, file);
+          const compressed = await compressImage(file);
+          const filePath = `${user.id}/${Date.now()}-${compressed.name}`;
+          const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, compressed);
           if (uploadError) throw uploadError;
           const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(filePath);
           uploadedUrls.push(urlData.publicUrl);
