@@ -7,10 +7,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit2, Trash2, X, Upload, Image } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Image } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { compressImage } from "@/lib/compress";
 
 interface CustomField {
   label: string;
@@ -113,8 +114,9 @@ const Journal = () => {
       const uploadedUrls: string[] = [];
       for (const file of screenshotFiles) {
         if (file) {
-          const filePath = `${user.id}/${Date.now()}-${file.name}`;
-          const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, file);
+          const compressed = await compressImage(file);
+          const filePath = `${user.id}/${Date.now()}-${compressed.name}`;
+          const { error: uploadError } = await supabase.storage.from("trade-screenshots").upload(filePath, compressed);
           if (uploadError) throw uploadError;
           const { data: urlData } = supabase.storage.from("trade-screenshots").getPublicUrl(filePath);
           uploadedUrls.push(urlData.publicUrl);

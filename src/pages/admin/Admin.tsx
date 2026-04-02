@@ -1,3 +1,4 @@
+import React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
@@ -10,7 +11,7 @@ import {
   Shield, Users, CreditCard, Link2, Settings, BarChart3, Newspaper,
   Trash2, Plus, MessageSquare, LayoutDashboard, Download, Bell,
   ChevronLeft, ChevronRight, TrendingUp, DollarSign, UserPlus, Clock,
-  Building2, LogOut
+  Building2, LogOut, AlertTriangle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import jsPDF from "jspdf";
@@ -387,13 +388,13 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
           <AnimatePresence mode="wait">
             <motion.div key={activeSection} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.15 }}>
               {activeSection === "dashboard" && <DashboardSection totalUsers={totalUsers} paidUsers={paidUsers} totalTrades={totalTrades} pendingPayments={pendingPayments} totalRevenue={totalRevenue} thisWeekUsers={thisWeekUsers} profiles={profiles} payments={payments} exportData={exportData} />}
-              {activeSection === "users" && <UsersSection profiles={profiles} updateUserPlan={updateUserPlan} deleteUserMutation={deleteUserMutation} />}
+              {activeSection === "users" && <UsersSection profiles={profiles} updateUserPlan={updateUserPlan} deleteUserMutation={deleteUserMutation} upsertSetting={upsertSetting} siteSettings={siteSettings} />}
               {activeSection === "payments" && <PaymentsSection payments={payments} profiles={profiles} updatePaymentStatus={updatePaymentStatus} />}
               {activeSection === "referrals" && <ReferralsSection referrals={referrals} profiles={profiles} payments={payments} refName={refName} setRefName={setRefName} refCode={refCode} setRefCode={setRefCode} refCommission={refCommission} setRefCommission={setRefCommission} createReferral={createReferral} deleteReferral={deleteReferral} />}
               {activeSection === "propfirms" && <PropFirmsSection propFirms={propFirms} pfName={pfName} setPfName={setPfName} pfUrl={pfUrl} setPfUrl={setPfUrl} pfDesc={pfDesc} setPfDesc={setPfDesc} createPropFirm={createPropFirm} deletePropFirm={deletePropFirm} />}
               {activeSection === "chat" && <ChatSection chatUsers={chatUsers} profiles={profiles} selectedChatUser={selectedChatUser} setSelectedChatUser={setSelectedChatUser} chatMessages={chatMessages} chatReply={chatReply} setChatReply={setChatReply} sendAdminReply={sendAdminReply} chatEndRef={chatEndRef} />}
               {activeSection === "news" && <NewsSection newsList={newsList} newsTitle={newsTitle} setNewsTitle={setNewsTitle} newsContent={newsContent} setNewsContent={setNewsContent} newsSource={newsSource} setNewsSource={setNewsSource} newsCategory={newsCategory} setNewsCategory={setNewsCategory} newsAsset={newsAsset} setNewsAsset={setNewsAsset} createNews={createNews} deleteNews={deleteNews} />}
-              {activeSection === "settings" && <SettingsSection upiId={upiId} setUpiId={setUpiId} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} cryptoWallet={cryptoWallet} setCryptoWallet={setCryptoWallet} instagram={instagram} setInstagram={setInstagram} twitter={twitter} setTwitter={setTwitter} telegram={telegram} setTelegram={setTelegram} discord={discord} setDiscord={setDiscord} pricePro={pricePro} setPricePro={setPricePro} priceProPlus={priceProPlus} setPriceProPlus={setPriceProPlus} priceElite={priceElite} setPriceElite={setPriceElite} inrRate={inrRate} setInrRate={setInrRate} upsertSetting={upsertSetting} />}
+              {activeSection === "settings" && <SettingsSection upiId={upiId} setUpiId={setUpiId} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} cryptoWallet={cryptoWallet} setCryptoWallet={setCryptoWallet} instagram={instagram} setInstagram={setInstagram} twitter={twitter} setTwitter={setTwitter} telegram={telegram} setTelegram={setTelegram} discord={discord} setDiscord={setDiscord} pricePro={pricePro} setPricePro={setPricePro} priceProPlus={priceProPlus} setPriceProPlus={setPriceProPlus} priceElite={priceElite} setPriceElite={setPriceElite} inrRate={inrRate} setInrRate={setInrRate} upsertSetting={upsertSetting} siteSettings={siteSettings} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -478,39 +479,75 @@ const DashboardSection = ({ totalUsers, paidUsers, totalTrades, pendingPayments,
   </div>
 );
 
-const UsersSection = ({ profiles, updateUserPlan, deleteUserMutation }: any) => (
-  <div className="rounded-lg border border-border bg-card overflow-x-auto">
-    <table className="w-full text-sm">
-      <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
-        <th className="text-left p-3">Email</th><th className="text-left p-3">Name</th><th className="text-left p-3">Plan</th><th className="text-left p-3">Referral</th><th className="text-left p-3">Joined</th><th className="text-center p-3">Actions</th>
-      </tr></thead>
-      <tbody>
-        {profiles.map((p: any) => (
-          <tr key={p.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-            <td className="p-3 text-xs">{p.email}</td>
-            <td className="p-3 text-xs">{p.full_name || "—"}</td>
-            <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${p.plan === "free" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>{p.plan}</span></td>
-            <td className="p-3 text-xs font-mono">{p.referral_code_used || "—"}</td>
-            <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
-            <td className="p-3 text-center">
-              <div className="flex items-center justify-center gap-2">
-                <Select onValueChange={(v) => updateUserPlan.mutate({ userId: p.id, plan: v })}>
-                  <SelectTrigger className="h-7 text-xs w-24 bg-background border-border"><SelectValue placeholder="Set plan" /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    <SelectItem value="free">Free</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem>
-                  </SelectContent>
-                </Select>
-                <button onClick={() => { if (confirm(`Delete user ${p.email}? This cannot be undone.`)) deleteUserMutation.mutate(p.id); }} className="text-muted-foreground hover:text-destructive transition-colors">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
+const UsersSection = ({ profiles, updateUserPlan, deleteUserMutation, upsertSetting, siteSettings }: any) => {
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, any>>({});
+
+  const getSetting = (key: string): any => {
+    const s = siteSettings?.find((s: any) => s.key === key);
+    return s?.value || {};
+  };
+
+  const userOverrides = getSetting("user_overrides") || {};
+
+  const saveOverride = (userId: string) => {
+    const updated = { ...userOverrides, [userId]: overrides[userId] || {} };
+    upsertSetting.mutate({ key: "user_overrides", value: updated });
+    setEditingUser(null);
+    toast.success("User overrides saved.");
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
+          <th className="text-left p-3">Email</th><th className="text-left p-3">Name</th><th className="text-left p-3">Plan</th><th className="text-left p-3">Referral</th><th className="text-left p-3">Joined</th><th className="text-center p-3">Actions</th>
+        </tr></thead>
+        <tbody>
+          {profiles.map((p: any) => (
+            <React.Fragment key={p.id}>
+              <tr className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                <td className="p-3 text-xs">{p.email}</td>
+                <td className="p-3 text-xs">{p.full_name || "—"}</td>
+                <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${p.plan === "free" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>{p.plan}</span></td>
+                <td className="p-3 text-xs font-mono">{p.referral_code_used || "—"}</td>
+                <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
+                <td className="p-3 text-center">
+                  <div className="flex items-center justify-center gap-2">
+                    <Select onValueChange={(v) => updateUserPlan.mutate({ userId: p.id, plan: v })}>
+                      <SelectTrigger className="h-7 text-xs w-24 bg-background border-border"><SelectValue placeholder="Set plan" /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        <SelectItem value="free">Free</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+                      setEditingUser(editingUser === p.id ? null : p.id);
+                      setOverrides((o) => ({ ...o, [p.id]: userOverrides[p.id] || { max_trades: "", max_accounts: "", ai_enabled: false, mt5_enabled: false, backtesting_enabled: false } }));
+                    }}>⚙️</Button>
+                    <button onClick={() => { if (confirm(`Delete user ${p.email}? This cannot be undone.`)) deleteUserMutation.mutate(p.id); }} className="text-muted-foreground hover:text-destructive transition-colors">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              {editingUser === p.id && (
+                <tr><td colSpan={6} className="p-4 bg-secondary/20">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 items-end">
+                    <div><label className="text-xs text-muted-foreground block mb-1">Max Trades</label><Input value={overrides[p.id]?.max_trades || ""} onChange={(e: any) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], max_trades: e.target.value } }))} placeholder="Unlimited" className="h-8 text-xs bg-background border-border font-mono" /></div>
+                    <div><label className="text-xs text-muted-foreground block mb-1">Max Accounts</label><Input value={overrides[p.id]?.max_accounts || ""} onChange={(e: any) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], max_accounts: e.target.value } }))} placeholder="Unlimited" className="h-8 text-xs bg-background border-border font-mono" /></div>
+                    <div className="flex items-center gap-2"><input type="checkbox" checked={overrides[p.id]?.ai_enabled || false} onChange={(e) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], ai_enabled: e.target.checked } }))} /><label className="text-xs">AI Insights</label></div>
+                    <div className="flex items-center gap-2"><input type="checkbox" checked={overrides[p.id]?.mt5_enabled || false} onChange={(e) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], mt5_enabled: e.target.checked } }))} /><label className="text-xs">MT5 Sync</label></div>
+                    <Button size="sm" className="h-8 text-xs" onClick={() => saveOverride(p.id)}>Save Overrides</Button>
+                  </div>
+                </td></tr>
+              )}
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 const PaymentsSection = ({ payments, profiles, updatePaymentStatus }: any) => (
   <div className="rounded-lg border border-border bg-card overflow-x-auto">
@@ -710,44 +747,78 @@ const NewsSection = ({ newsList, newsTitle, setNewsTitle, newsContent, setNewsCo
   </div>
 );
 
-const SettingsSection = ({ upiId, setUpiId, phoneNumber, setPhoneNumber, cryptoWallet, setCryptoWallet, instagram, setInstagram, twitter, setTwitter, telegram, setTelegram, discord, setDiscord, pricePro, setPricePro, priceProPlus, setPriceProPlus, priceElite, setPriceElite, inrRate, setInrRate, upsertSetting }: any) => (
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div className="rounded-lg border border-border bg-card p-5">
-      <h3 className="text-sm font-semibold mb-3">Payment Settings</h3>
-      <div className="space-y-3">
-        <div><label className="text-xs text-muted-foreground block mb-1">UPI ID</label><Input value={upiId} onChange={(e: any) => setUpiId(e.target.value)} placeholder="yourname@upi" className="bg-background border-border font-mono" /></div>
-        <div><label className="text-xs text-muted-foreground block mb-1">Phone (GPay/PhonePe)</label><Input value={phoneNumber} onChange={(e: any) => setPhoneNumber(e.target.value)} placeholder="+91..." className="bg-background border-border font-mono" /></div>
-        <div><label className="text-xs text-muted-foreground block mb-1">Crypto Wallet</label><Input value={cryptoWallet} onChange={(e: any) => setCryptoWallet(e.target.value)} placeholder="0x..." className="bg-background border-border font-mono" /></div>
-        <Button onClick={() => upsertSetting.mutate({ key: "payment_settings", value: { upi_id: upiId, phone_number: phoneNumber, crypto_wallet: cryptoWallet } })} className="w-full">Save Payment Settings</Button>
+const SettingsSection = ({ upiId, setUpiId, phoneNumber, setPhoneNumber, cryptoWallet, setCryptoWallet, instagram, setInstagram, twitter, setTwitter, telegram, setTelegram, discord, setDiscord, pricePro, setPricePro, priceProPlus, setPriceProPlus, priceElite, setPriceElite, inrRate, setInrRate, upsertSetting, siteSettings }: any) => {
+  const getSetting = (key: string): any => {
+    const s = siteSettings?.find((s: any) => s.key === key);
+    return s?.value || {};
+  };
+
+  const [maintenanceMode, setMaintenanceMode] = useState(getSetting("maintenance")?.enabled || false);
+  const [maintenanceMsg, setMaintenanceMsg] = useState(getSetting("maintenance")?.message || "Website under maintenance, please wait…");
+  const [pointsForFree, setPointsForFree] = useState(getSetting("referral_settings")?.points_for_free_plan?.toString() || "500");
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Maintenance Mode */}
+      <div className="rounded-lg border border-destructive/30 bg-card p-5 lg:col-span-2">
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive" /> Maintenance Mode</h3>
+        <div className="flex items-center gap-4 mb-3">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={maintenanceMode} onChange={(e) => setMaintenanceMode(e.target.checked)} />
+            <span className="text-sm">{maintenanceMode ? "ACTIVE — Users see maintenance message" : "Disabled"}</span>
+          </label>
+        </div>
+        <Input value={maintenanceMsg} onChange={(e: any) => setMaintenanceMsg(e.target.value)} placeholder="Maintenance message" className="bg-background border-border mb-3" />
+        <Button size="sm" onClick={() => upsertSetting.mutate({ key: "maintenance", value: { enabled: maintenanceMode, message: maintenanceMsg } })}>Save Maintenance Settings</Button>
+      </div>
+
+      {/* Referral Settings */}
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold mb-3">Referral Settings</h3>
+        <div className="space-y-3">
+          <div><label className="text-xs text-muted-foreground block mb-1">Points for Free Plan (1 month)</label><Input value={pointsForFree} onChange={(e: any) => setPointsForFree(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+          <p className="text-xs text-muted-foreground">Default: 500 points. Users earn 10pts/signup, +20/30/50 for plan purchases.</p>
+          <Button onClick={() => upsertSetting.mutate({ key: "referral_settings", value: { points_for_free_plan: parseInt(pointsForFree) || 500 } })} className="w-full">Save Referral Settings</Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold mb-3">Payment Settings</h3>
+        <div className="space-y-3">
+          <div><label className="text-xs text-muted-foreground block mb-1">UPI ID</label><Input value={upiId} onChange={(e: any) => setUpiId(e.target.value)} placeholder="yourname@upi" className="bg-background border-border font-mono" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Phone (GPay/PhonePe)</label><Input value={phoneNumber} onChange={(e: any) => setPhoneNumber(e.target.value)} placeholder="+91..." className="bg-background border-border font-mono" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Crypto Wallet</label><Input value={cryptoWallet} onChange={(e: any) => setCryptoWallet(e.target.value)} placeholder="0x..." className="bg-background border-border font-mono" /></div>
+          <Button onClick={() => upsertSetting.mutate({ key: "payment_settings", value: { upi_id: upiId, phone_number: phoneNumber, crypto_wallet: cryptoWallet } })} className="w-full">Save Payment Settings</Button>
+        </div>
+      </div>
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold mb-3">Social Links</h3>
+        <div className="space-y-3">
+          <div><label className="text-xs text-muted-foreground block mb-1">Instagram</label><Input value={instagram} onChange={(e: any) => setInstagram(e.target.value)} className="bg-background border-border" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Twitter / X</label><Input value={twitter} onChange={(e: any) => setTwitter(e.target.value)} className="bg-background border-border" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Telegram</label><Input value={telegram} onChange={(e: any) => setTelegram(e.target.value)} className="bg-background border-border" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Discord</label><Input value={discord} onChange={(e: any) => setDiscord(e.target.value)} className="bg-background border-border" /></div>
+          <Button onClick={() => upsertSetting.mutate({ key: "social_links", value: { instagram, twitter, telegram, discord } })} className="w-full">Save Social Links</Button>
+        </div>
+      </div>
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold mb-3">Pricing (USD)</h3>
+        <div className="space-y-3">
+          <div><label className="text-xs text-muted-foreground block mb-1">Pro ($)</label><Input value={pricePro} onChange={(e: any) => setPricePro(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Pro+ ($)</label><Input value={priceProPlus} onChange={(e: any) => setPriceProPlus(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Elite ($)</label><Input value={priceElite} onChange={(e: any) => setPriceElite(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+          <Button onClick={() => upsertSetting.mutate({ key: "pricing", value: { free: 0, pro: parseFloat(pricePro), pro_plus: parseFloat(priceProPlus), elite: parseFloat(priceElite) } })} className="w-full">Save Pricing</Button>
+        </div>
+      </div>
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-sm font-semibold mb-3">INR Conversion Rate</h3>
+        <div className="space-y-3">
+          <div><label className="text-xs text-muted-foreground block mb-1">1 USD = ₹</label><Input value={inrRate} onChange={(e: any) => setInrRate(e.target.value)} className="bg-background border-border font-mono" type="number" step="0.1" /></div>
+          <Button onClick={() => upsertSetting.mutate({ key: "inr_rate", value: { rate: parseFloat(inrRate) } })} className="w-full">Save Rate</Button>
+        </div>
       </div>
     </div>
-    <div className="rounded-lg border border-border bg-card p-5">
-      <h3 className="text-sm font-semibold mb-3">Social Links</h3>
-      <div className="space-y-3">
-        <div><label className="text-xs text-muted-foreground block mb-1">Instagram</label><Input value={instagram} onChange={(e: any) => setInstagram(e.target.value)} className="bg-background border-border" /></div>
-        <div><label className="text-xs text-muted-foreground block mb-1">Twitter / X</label><Input value={twitter} onChange={(e: any) => setTwitter(e.target.value)} className="bg-background border-border" /></div>
-        <div><label className="text-xs text-muted-foreground block mb-1">Telegram</label><Input value={telegram} onChange={(e: any) => setTelegram(e.target.value)} className="bg-background border-border" /></div>
-        <div><label className="text-xs text-muted-foreground block mb-1">Discord</label><Input value={discord} onChange={(e: any) => setDiscord(e.target.value)} className="bg-background border-border" /></div>
-        <Button onClick={() => upsertSetting.mutate({ key: "social_links", value: { instagram, twitter, telegram, discord } })} className="w-full">Save Social Links</Button>
-      </div>
-    </div>
-    <div className="rounded-lg border border-border bg-card p-5">
-      <h3 className="text-sm font-semibold mb-3">Pricing (USD)</h3>
-      <div className="space-y-3">
-        <div><label className="text-xs text-muted-foreground block mb-1">Pro ($)</label><Input value={pricePro} onChange={(e: any) => setPricePro(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
-        <div><label className="text-xs text-muted-foreground block mb-1">Pro+ ($)</label><Input value={priceProPlus} onChange={(e: any) => setPriceProPlus(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
-        <div><label className="text-xs text-muted-foreground block mb-1">Elite ($)</label><Input value={priceElite} onChange={(e: any) => setPriceElite(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
-        <Button onClick={() => upsertSetting.mutate({ key: "pricing", value: { free: 0, pro: parseFloat(pricePro), pro_plus: parseFloat(priceProPlus), elite: parseFloat(priceElite) } })} className="w-full">Save Pricing</Button>
-      </div>
-    </div>
-    <div className="rounded-lg border border-border bg-card p-5">
-      <h3 className="text-sm font-semibold mb-3">INR Conversion Rate</h3>
-      <div className="space-y-3">
-        <div><label className="text-xs text-muted-foreground block mb-1">1 USD = ₹</label><Input value={inrRate} onChange={(e: any) => setInrRate(e.target.value)} className="bg-background border-border font-mono" type="number" step="0.1" /></div>
-        <Button onClick={() => upsertSetting.mutate({ key: "inr_rate", value: { rate: parseFloat(inrRate) } })} className="w-full">Save Rate</Button>
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 export default Admin;
