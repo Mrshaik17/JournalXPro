@@ -478,39 +478,75 @@ const DashboardSection = ({ totalUsers, paidUsers, totalTrades, pendingPayments,
   </div>
 );
 
-const UsersSection = ({ profiles, updateUserPlan, deleteUserMutation }: any) => (
-  <div className="rounded-lg border border-border bg-card overflow-x-auto">
-    <table className="w-full text-sm">
-      <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
-        <th className="text-left p-3">Email</th><th className="text-left p-3">Name</th><th className="text-left p-3">Plan</th><th className="text-left p-3">Referral</th><th className="text-left p-3">Joined</th><th className="text-center p-3">Actions</th>
-      </tr></thead>
-      <tbody>
-        {profiles.map((p: any) => (
-          <tr key={p.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-            <td className="p-3 text-xs">{p.email}</td>
-            <td className="p-3 text-xs">{p.full_name || "—"}</td>
-            <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${p.plan === "free" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>{p.plan}</span></td>
-            <td className="p-3 text-xs font-mono">{p.referral_code_used || "—"}</td>
-            <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
-            <td className="p-3 text-center">
-              <div className="flex items-center justify-center gap-2">
-                <Select onValueChange={(v) => updateUserPlan.mutate({ userId: p.id, plan: v })}>
-                  <SelectTrigger className="h-7 text-xs w-24 bg-background border-border"><SelectValue placeholder="Set plan" /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    <SelectItem value="free">Free</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem>
-                  </SelectContent>
-                </Select>
-                <button onClick={() => { if (confirm(`Delete user ${p.email}? This cannot be undone.`)) deleteUserMutation.mutate(p.id); }} className="text-muted-foreground hover:text-destructive transition-colors">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
+const UsersSection = ({ profiles, updateUserPlan, deleteUserMutation, upsertSetting, siteSettings }: any) => {
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, any>>({});
+
+  const getSetting = (key: string): any => {
+    const s = siteSettings?.find((s: any) => s.key === key);
+    return s?.value || {};
+  };
+
+  const userOverrides = getSetting("user_overrides") || {};
+
+  const saveOverride = (userId: string) => {
+    const updated = { ...userOverrides, [userId]: overrides[userId] || {} };
+    upsertSetting.mutate({ key: "user_overrides", value: updated });
+    setEditingUser(null);
+    toast.success("User overrides saved.");
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
+          <th className="text-left p-3">Email</th><th className="text-left p-3">Name</th><th className="text-left p-3">Plan</th><th className="text-left p-3">Referral</th><th className="text-left p-3">Joined</th><th className="text-center p-3">Actions</th>
+        </tr></thead>
+        <tbody>
+          {profiles.map((p: any) => (
+            <React.Fragment key={p.id}>
+              <tr className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                <td className="p-3 text-xs">{p.email}</td>
+                <td className="p-3 text-xs">{p.full_name || "—"}</td>
+                <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${p.plan === "free" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>{p.plan}</span></td>
+                <td className="p-3 text-xs font-mono">{p.referral_code_used || "—"}</td>
+                <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
+                <td className="p-3 text-center">
+                  <div className="flex items-center justify-center gap-2">
+                    <Select onValueChange={(v) => updateUserPlan.mutate({ userId: p.id, plan: v })}>
+                      <SelectTrigger className="h-7 text-xs w-24 bg-background border-border"><SelectValue placeholder="Set plan" /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        <SelectItem value="free">Free</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+                      setEditingUser(editingUser === p.id ? null : p.id);
+                      setOverrides((o) => ({ ...o, [p.id]: userOverrides[p.id] || { max_trades: "", max_accounts: "", ai_enabled: false, mt5_enabled: false, backtesting_enabled: false } }));
+                    }}>⚙️</Button>
+                    <button onClick={() => { if (confirm(`Delete user ${p.email}? This cannot be undone.`)) deleteUserMutation.mutate(p.id); }} className="text-muted-foreground hover:text-destructive transition-colors">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              {editingUser === p.id && (
+                <tr><td colSpan={6} className="p-4 bg-secondary/20">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 items-end">
+                    <div><label className="text-xs text-muted-foreground block mb-1">Max Trades</label><Input value={overrides[p.id]?.max_trades || ""} onChange={(e: any) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], max_trades: e.target.value } }))} placeholder="Unlimited" className="h-8 text-xs bg-background border-border font-mono" /></div>
+                    <div><label className="text-xs text-muted-foreground block mb-1">Max Accounts</label><Input value={overrides[p.id]?.max_accounts || ""} onChange={(e: any) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], max_accounts: e.target.value } }))} placeholder="Unlimited" className="h-8 text-xs bg-background border-border font-mono" /></div>
+                    <div className="flex items-center gap-2"><input type="checkbox" checked={overrides[p.id]?.ai_enabled || false} onChange={(e) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], ai_enabled: e.target.checked } }))} /><label className="text-xs">AI Insights</label></div>
+                    <div className="flex items-center gap-2"><input type="checkbox" checked={overrides[p.id]?.mt5_enabled || false} onChange={(e) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], mt5_enabled: e.target.checked } }))} /><label className="text-xs">MT5 Sync</label></div>
+                    <Button size="sm" className="h-8 text-xs" onClick={() => saveOverride(p.id)}>Save Overrides</Button>
+                  </div>
+                </td></tr>
+              )}
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 const PaymentsSection = ({ payments, profiles, updatePaymentStatus }: any) => (
   <div className="rounded-lg border border-border bg-card overflow-x-auto">
