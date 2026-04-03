@@ -96,6 +96,51 @@
     --divine-glow: 0 0 20px hsl(187 80% 40% / 0.15);
     --divine-border: hsl(187 80% 40% / 0.3);
   }
+
+  .premium {
+    --background: 250 20% 6%;
+    --foreground: 45 30% 92%;
+
+    --card: 250 18% 9%;
+    --card-foreground: 45 30% 92%;
+
+    --popover: 250 18% 9%;
+    --popover-foreground: 45 30% 92%;
+
+    --primary: 38 95% 55%;
+    --primary-foreground: 250 20% 6%;
+
+    --secondary: 250 14% 16%;
+    --secondary-foreground: 45 30% 92%;
+
+    --muted: 250 14% 16%;
+    --muted-foreground: 250 10% 50%;
+
+    --accent: 250 14% 16%;
+    --accent-foreground: 45 30% 92%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 45 30% 92%;
+
+    --success: 160 60% 40%;
+    --success-foreground: 45 30% 92%;
+
+    --border: 45 30% 92% / 0.08;
+    --input: 45 30% 92% / 0.08;
+    --ring: 38 95% 55%;
+
+    --sidebar-background: 250 18% 7%;
+    --sidebar-foreground: 250 10% 60%;
+    --sidebar-primary: 38 95% 55%;
+    --sidebar-primary-foreground: 250 20% 6%;
+    --sidebar-accent: 250 14% 12%;
+    --sidebar-accent-foreground: 45 30% 92%;
+    --sidebar-border: 45 30% 92% / 0.08;
+    --sidebar-ring: 38 95% 55%;
+
+    --divine-glow: 0 0 20px hsl(38 95% 55% / 0.3);
+    --divine-border: hsl(38 95% 55% / 0.3);
+  }
 }
 
 @layer base {
@@ -137,7 +182,7 @@
   }
 
   .text-gradient {
-    background: linear-gradient(135deg, hsl(187 100% 50%), hsl(187 80% 70%));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.7));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
