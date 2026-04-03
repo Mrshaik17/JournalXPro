@@ -11,22 +11,24 @@ import {
   Shield, Users, CreditCard, Link2, Settings, BarChart3, Newspaper,
   Trash2, Plus, MessageSquare, LayoutDashboard, Download, Bell,
   ChevronLeft, ChevronRight, TrendingUp, DollarSign, UserPlus, Clock,
-  Building2, LogOut, AlertTriangle
+  Building2, LogOut, AlertTriangle, Megaphone, Mail
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
-type AdminSection = "dashboard" | "users" | "payments" | "referrals" | "chat" | "news" | "propfirms" | "settings";
+type AdminSection = "dashboard" | "users" | "payments" | "referrals" | "chat" | "news" | "propfirms" | "announcements" | "contact" | "settings";
 
 const sidebarItems: { key: AdminSection; label: string; icon: any }[] = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "users", label: "Users", icon: Users },
   { key: "payments", label: "Payments", icon: CreditCard },
   { key: "referrals", label: "Referrals", icon: Link2 },
+  { key: "announcements", label: "Announcements", icon: Megaphone },
   { key: "propfirms", label: "Prop Firms", icon: Building2 },
   { key: "chat", label: "Chat", icon: MessageSquare },
+  { key: "contact", label: "Contact Inbox", icon: Mail },
   { key: "news", label: "News", icon: Newspaper },
   { key: "settings", label: "Settings", icon: Settings },
 ];
@@ -46,122 +48,36 @@ const Admin = () => {
   return <AdminDashboard queryClient={queryClient} activeSection={activeSection} setActiveSection={setActiveSection} collapsed={collapsed} setCollapsed={setCollapsed} pendingNotif={pendingNotif} setPendingNotif={setPendingNotif} chatNotif={chatNotif} setChatNotif={setChatNotif} handleAdminLogout={handleAdminLogout} />;
 };
 
-// ============== MAIN ADMIN DASHBOARD ==============
 const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapsed, setCollapsed, pendingNotif, setPendingNotif, chatNotif, setChatNotif, handleAdminLogout }: any) => {
 
-  const { data: profiles = [] } = useQuery({
-    queryKey: ["admin-profiles"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
+  const { data: profiles = [] } = useQuery({ queryKey: ["admin-profiles"], queryFn: async () => { const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false }); if (error) throw error; return data; } });
+  const { data: payments = [] } = useQuery({ queryKey: ["admin-payments"], queryFn: async () => { const { data, error } = await supabase.from("payments").select("*").order("created_at", { ascending: false }); if (error) throw error; return data; } });
+  const { data: referrals = [] } = useQuery({ queryKey: ["admin-referrals"], queryFn: async () => { const { data, error } = await supabase.from("referrals").select("*").order("created_at", { ascending: false }); if (error) throw error; return data; } });
+  const { data: trades = [] } = useQuery({ queryKey: ["admin-trades"], queryFn: async () => { const { data, error } = await supabase.from("trades").select("*"); if (error) throw error; return data; } });
+  const { data: siteSettings = [] } = useQuery({ queryKey: ["site-settings"], queryFn: async () => { const { data, error } = await supabase.from("site_settings").select("*"); if (error) throw error; return data; } });
+  const { data: newsList = [] } = useQuery({ queryKey: ["admin-news"], queryFn: async () => { const { data, error } = await supabase.from("news").select("*").order("created_at", { ascending: false }); if (error) throw error; return data; } });
+  const { data: propFirms = [] } = useQuery({ queryKey: ["admin-propfirms"], queryFn: async () => { const { data, error } = await supabase.from("prop_firms").select("*").order("created_at", { ascending: false }); if (error) throw error; return data; } });
+  const { data: announcements = [] } = useQuery({ queryKey: ["admin-announcements"], queryFn: async () => { const { data, error } = await supabase.from("announcements" as any).select("*").order("created_at", { ascending: false }); if (error) throw error; return data || []; } });
+  const { data: contactMessages = [] } = useQuery({ queryKey: ["admin-contact"], queryFn: async () => { const { data, error } = await supabase.from("contact_messages" as any).select("*").order("created_at", { ascending: false }); if (error) throw error; return data || []; } });
+  const { data: chatUsers = [] } = useQuery({ queryKey: ["admin-chat-users"], queryFn: async () => { const { data, error } = await supabase.from("support_messages").select("user_id").order("created_at", { ascending: false }); if (error) throw error; return [...new Set(data.map((m: any) => m.user_id))] as string[]; } });
 
-  const { data: payments = [] } = useQuery({
-    queryKey: ["admin-payments"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("payments").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: referrals = [] } = useQuery({
-    queryKey: ["admin-referrals"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("referrals").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: trades = [] } = useQuery({
-    queryKey: ["admin-trades"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("trades").select("*");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: siteSettings = [] } = useQuery({
-    queryKey: ["site-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("site_settings").select("*");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: newsList = [] } = useQuery({
-    queryKey: ["admin-news"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("news").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: propFirms = [] } = useQuery({
-    queryKey: ["admin-propfirms"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("prop_firms").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: chatUsers = [] } = useQuery({
-    queryKey: ["admin-chat-users"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("support_messages").select("user_id").order("created_at", { ascending: false });
-      if (error) throw error;
-      const uniqueIds = [...new Set(data.map((m: any) => m.user_id))];
-      return uniqueIds as string[];
-    },
-  });
-
-  // ---- REALTIME ----
   useEffect(() => {
-    const channel = supabase
-      .channel("admin-realtime")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
-        setPendingNotif((n: number) => n + 1);
-        toast.info("💰 New payment received!");
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" }, (payload: any) => {
-        if (payload.new?.sender === "user") {
-          queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
-          setChatNotif((n: number) => n + 1);
-          toast.info("💬 New chat message!");
-        }
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
-        toast.info("👤 New user signed up!");
-      })
+    const channel = supabase.channel("admin-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" }, () => { queryClient.invalidateQueries({ queryKey: ["admin-payments"] }); setPendingNotif((n: number) => n + 1); toast.info("💰 New payment received!"); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" }, (payload: any) => { if (payload.new?.sender === "user") { queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] }); setChatNotif((n: number) => n + 1); toast.info("💬 New chat message!"); } })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, () => { queryClient.invalidateQueries({ queryKey: ["admin-profiles"] }); toast.info("👤 New user signed up!"); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "contact_messages" }, () => { queryClient.invalidateQueries({ queryKey: ["admin-contact"] }); toast.info("📧 New contact message!"); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [queryClient]);
 
-  // ---- HELPERS ----
-  const getSetting = (key: string): any => {
-    const s = siteSettings.find((s: any) => s.key === key);
-    return s?.value || {};
-  };
+  const getSetting = (key: string): any => { const s = siteSettings.find((s: any) => s.key === key); return s?.value || {}; };
 
   const upsertSetting = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: any }) => {
       const existing = siteSettings.find((s: any) => s.key === key);
-      if (existing) {
-        const { error } = await supabase.from("site_settings").update({ value, updated_at: new Date().toISOString() }).eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("site_settings").insert({ key, value });
-        if (error) throw error;
-      }
+      if (existing) { const { error } = await supabase.from("site_settings").update({ value, updated_at: new Date().toISOString() }).eq("id", existing.id); if (error) throw error; }
+      else { const { error } = await supabase.from("site_settings").insert({ key, value }); if (error) throw error; }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["site-settings"] }); toast.success("Settings saved."); },
     onError: (err: any) => toast.error(err.message),
@@ -171,31 +87,20 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
     mutationFn: async ({ id, status, userId, plan }: { id: string; status: string; userId: string; plan?: string }) => {
       const { error } = await supabase.from("payments").update({ status }).eq("id", id);
       if (error) throw error;
-      if (status === "approved" && plan) {
-        await supabase.from("profiles").update({ plan }).eq("id", userId);
-      }
+      if (status === "approved" && plan) await supabase.from("profiles").update({ plan }).eq("id", userId);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
-      toast.success("Payment updated.");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-payments"] }); queryClient.invalidateQueries({ queryKey: ["admin-profiles"] }); toast.success("Payment updated."); },
     onError: (err: any) => toast.error(err.message),
   });
 
   const updateUserPlan = useMutation({
-    mutationFn: async ({ userId, plan }: { userId: string; plan: string }) => {
-      const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId);
-      if (error) throw error;
-    },
+    mutationFn: async ({ userId, plan }: { userId: string; plan: string }) => { const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-profiles"] }); toast.success("User plan updated."); },
     onError: (err: any) => toast.error(err.message),
   });
 
-  // Delete user (delete profile, which cascades)
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
-      // Delete trades, accounts, payments, support messages, then profile
       await supabase.from("trades").delete().eq("user_id", userId);
       await supabase.from("accounts").delete().eq("user_id", userId);
       await supabase.from("payments").delete().eq("user_id", userId);
@@ -207,136 +112,79 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
     onError: (err: any) => toast.error(err.message),
   });
 
-  // Referral
-  const [refName, setRefName] = useState("");
-  const [refCode, setRefCode] = useState("");
-  const [refCommission, setRefCommission] = useState("");
-  const createReferral = useMutation({
-    mutationFn: async () => {
-      if (!refName || !refCode) throw new Error("Name and code required");
-      const { error } = await supabase.from("referrals").insert({ name: refName, code: refCode, commission_percent: parseFloat(refCommission) || 0 });
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-referrals"] }); toast.success("Referral created."); setRefName(""); setRefCode(""); setRefCommission(""); },
-    onError: (err: any) => toast.error(err.message),
-  });
-  const deleteReferral = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("referrals").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-referrals"] }); toast.success("Deleted."); },
-  });
+  // Referral CRUD
+  const [refName, setRefName] = useState(""); const [refCode, setRefCode] = useState(""); const [refCommission, setRefCommission] = useState("");
+  const createReferral = useMutation({ mutationFn: async () => { if (!refName || !refCode) throw new Error("Required"); const { error } = await supabase.from("referrals").insert({ name: refName, code: refCode, commission_percent: parseFloat(refCommission) || 0 }); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-referrals"] }); toast.success("Created."); setRefName(""); setRefCode(""); setRefCommission(""); }, onError: (err: any) => toast.error(err.message) });
+  const deleteReferral = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("referrals").delete().eq("id", id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-referrals"] }); toast.success("Deleted."); } });
 
   // News
-  const [newsTitle, setNewsTitle] = useState("");
-  const [newsContent, setNewsContent] = useState("");
-  const [newsSource, setNewsSource] = useState("");
-  const [newsCategory, setNewsCategory] = useState("forex");
-  const [newsAsset, setNewsAsset] = useState("");
-  const createNews = useMutation({
-    mutationFn: async () => {
-      if (!newsTitle || !newsContent) throw new Error("Title and content required");
-      const { error } = await supabase.from("news").insert({ title: newsTitle, content: newsContent, source: newsSource || null, category: newsCategory, asset_name: newsAsset || null } as any);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Published!"); setNewsTitle(""); setNewsContent(""); setNewsSource(""); setNewsAsset(""); },
-    onError: (err: any) => toast.error(err.message),
-  });
-  const deleteNews = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("news").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Deleted."); },
-  });
+  const [newsTitle, setNewsTitle] = useState(""); const [newsContent, setNewsContent] = useState(""); const [newsSource, setNewsSource] = useState(""); const [newsCategory, setNewsCategory] = useState("forex"); const [newsAsset, setNewsAsset] = useState("");
+  const createNews = useMutation({ mutationFn: async () => { if (!newsTitle || !newsContent) throw new Error("Required"); const { error } = await supabase.from("news").insert({ title: newsTitle, content: newsContent, source: newsSource || null, category: newsCategory, asset_name: newsAsset || null } as any); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Published!"); setNewsTitle(""); setNewsContent(""); setNewsSource(""); setNewsAsset(""); }, onError: (err: any) => toast.error(err.message) });
+  const deleteNews = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("news").delete().eq("id", id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-news"] }); toast.success("Deleted."); } });
 
   // Prop Firms
-  const [pfName, setPfName] = useState("");
-  const [pfUrl, setPfUrl] = useState("");
-  const [pfDesc, setPfDesc] = useState("");
-  const createPropFirm = useMutation({
-    mutationFn: async () => {
-      if (!pfName) throw new Error("Name required");
-      const { error } = await supabase.from("prop_firms").insert({ name: pfName, url: pfUrl || null, description: pfDesc || null });
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] }); toast.success("Prop firm added!"); setPfName(""); setPfUrl(""); setPfDesc(""); },
-    onError: (err: any) => toast.error(err.message),
-  });
-  const deletePropFirm = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("prop_firms").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] }); toast.success("Deleted."); },
-  });
+  const [pfName, setPfName] = useState(""); const [pfUrl, setPfUrl] = useState(""); const [pfDesc, setPfDesc] = useState("");
+  const createPropFirm = useMutation({ mutationFn: async () => { if (!pfName) throw new Error("Required"); const { error } = await supabase.from("prop_firms").insert({ name: pfName, url: pfUrl || null, description: pfDesc || null }); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] }); toast.success("Added!"); setPfName(""); setPfUrl(""); setPfDesc(""); }, onError: (err: any) => toast.error(err.message) });
+  const deletePropFirm = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("prop_firms").delete().eq("id", id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] }); toast.success("Deleted."); } });
+
+  // Announcements
+  const [annTitle, setAnnTitle] = useState(""); const [annContent, setAnnContent] = useState(""); const [annType, setAnnType] = useState("update");
+  const createAnnouncement = useMutation({ mutationFn: async () => { if (!annTitle || !annContent) throw new Error("Required"); const { error } = await supabase.from("announcements" as any).insert({ title: annTitle, content: annContent, type: annType } as any); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-announcements"] }); toast.success("Announced!"); setAnnTitle(""); setAnnContent(""); }, onError: (err: any) => toast.error(err.message) });
+  const deleteAnnouncement = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.from("announcements" as any).delete().eq("id", id); if (error) throw error; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-announcements"] }); toast.success("Deleted."); } });
 
   // Settings state
-  const [upiId, setUpiId] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [cryptoWallet, setCryptoWallet] = useState("");
-  const [instagram, setInstagram] = useState("");
-  const [twitter, setTwitter] = useState("");
-  const [telegram, setTelegram] = useState("");
-  const [discord, setDiscord] = useState("");
-  const [pricePro, setPricePro] = useState("5");
-  const [priceProPlus, setPriceProPlus] = useState("10");
-  const [priceElite, setPriceElite] = useState("14");
-  const [inrRate, setInrRate] = useState("83.5");
+  const [upiId, setUpiId] = useState(""); const [phoneNumber, setPhoneNumber] = useState(""); const [cryptoWallet, setCryptoWallet] = useState("");
+  const [instagram, setInstagram] = useState(""); const [twitter, setTwitter] = useState(""); const [telegram, setTelegram] = useState(""); const [discord, setDiscord] = useState(""); const [youtube, setYoutube] = useState(""); const [facebook, setFacebook] = useState("");
+  const [pricePro, setPricePro] = useState("5"); const [priceProPlus, setPriceProPlus] = useState("10"); const [priceElite, setPriceElite] = useState("14"); const [inrRate, setInrRate] = useState("83.5");
 
   useEffect(() => {
     if (siteSettings.length > 0) {
-      const ps = getSetting("payment_settings");
-      setUpiId(ps.upi_id || ""); setPhoneNumber(ps.phone_number || ""); setCryptoWallet(ps.crypto_wallet || "");
-      const social = getSetting("social_links");
-      setInstagram(social.instagram || ""); setTwitter(social.twitter || ""); setTelegram(social.telegram || ""); setDiscord(social.discord || "");
-      const pricing = getSetting("pricing");
-      setPricePro(pricing.pro?.toString() || "5"); setPriceProPlus(pricing.pro_plus?.toString() || "10"); setPriceElite(pricing.elite?.toString() || "14");
-      const rate = getSetting("inr_rate");
-      setInrRate(rate.rate?.toString() || "83.5");
+      const ps = getSetting("payment_settings"); setUpiId(ps.upi_id || ""); setPhoneNumber(ps.phone_number || ""); setCryptoWallet(ps.crypto_wallet || "");
+      const social = getSetting("social_links"); setInstagram(social.instagram || ""); setTwitter(social.twitter || ""); setTelegram(social.telegram || ""); setDiscord(social.discord || ""); setYoutube(social.youtube || ""); setFacebook(social.facebook || "");
+      const pricing = getSetting("pricing"); setPricePro(pricing.pro?.toString() || "5"); setPriceProPlus(pricing.pro_plus?.toString() || "10"); setPriceElite(pricing.elite?.toString() || "14");
+      const rate = getSetting("inr_rate"); setInrRate(rate.rate?.toString() || "83.5");
     }
   }, [siteSettings]);
 
-  // ---- CHAT ----
+  // Chat
   const [selectedChatUser, setSelectedChatUser] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [chatReply, setChatReply] = useState("");
+  const [chatMessages, setChatMessages] = useState<any[]>([]); const [chatReply, setChatReply] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!selectedChatUser) return;
-    const fetchMessages = async () => {
-      const { data } = await supabase.from("support_messages").select("*").eq("user_id", selectedChatUser).order("created_at", { ascending: true });
-      setChatMessages(data || []);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    };
+    const fetchMessages = async () => { const { data } = await supabase.from("support_messages").select("*").eq("user_id", selectedChatUser).order("created_at", { ascending: true }); setChatMessages(data || []); setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100); };
     fetchMessages();
     const channel = supabase.channel(`chat-${selectedChatUser}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages", filter: `user_id=eq.${selectedChatUser}` }, () => fetchMessages()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [selectedChatUser]);
 
-  const sendAdminReply = async () => {
-    if (!chatReply.trim() || !selectedChatUser) return;
-    await supabase.from("support_messages").insert({ user_id: selectedChatUser, sender: "admin", message: chatReply.trim() });
-    setChatReply("");
-  };
+  const sendAdminReply = async () => { if (!chatReply.trim() || !selectedChatUser) return; await supabase.from("support_messages").insert({ user_id: selectedChatUser, sender: "admin", message: chatReply.trim() }); setChatReply(""); };
 
-  // ---- EXPORT ----
-  const exportData = (format: "pdf" | "excel", range: "week" | "month" | "all") => {
-    const now = new Date();
-    let since = new Date(0);
+  // Export
+  const exportData = (format: "pdf" | "excel", range: string) => {
+    const now = new Date(); let since = new Date(0);
     if (range === "week") since = new Date(now.getTime() - 7 * 86400000);
     if (range === "month") since = new Date(now.getTime() - 30 * 86400000);
-    const filteredPayments = payments.filter((p: any) => new Date(p.created_at) >= since);
-    const filteredUsers = profiles.filter((p: any) => new Date(p.created_at) >= since);
+    if (range === "3month") since = new Date(now.getTime() - 90 * 86400000);
+    if (range === "6month") since = new Date(now.getTime() - 180 * 86400000);
+    const fp = payments.filter((p: any) => new Date(p.created_at) >= since);
+    const fu = profiles.filter((p: any) => new Date(p.created_at) >= since);
     if (format === "pdf") {
       const doc = new jsPDF();
       doc.setFontSize(16); doc.text("JournalXPro - Admin Report", 14, 20);
       doc.setFontSize(10); doc.text(`Range: ${range} | Generated: ${now.toLocaleDateString()}`, 14, 28);
-      autoTable(doc, { startY: 36, head: [["Email", "Plan", "Joined"]], body: filteredUsers.map((u: any) => [u.email || "", u.plan, new Date(u.created_at).toLocaleDateString()]) });
+      autoTable(doc, { startY: 36, head: [["Email", "Plan", "Joined"]], body: fu.map((u: any) => [u.email || "", u.plan, new Date(u.created_at).toLocaleDateString()]) });
       const fy = (doc as any).lastAutoTable?.finalY || 50;
-      autoTable(doc, { startY: fy + 10, head: [["Amount", "Method", "Status", "Date"]], body: filteredPayments.map((p: any) => [`$${Number(p.amount).toFixed(2)}`, p.method || "", p.status, new Date(p.created_at).toLocaleDateString()]) });
+      autoTable(doc, { startY: fy + 10, head: [["Amount", "Method", "Status", "Date"]], body: fp.map((p: any) => [`$${Number(p.amount).toFixed(2)}`, p.method || "", p.status, new Date(p.created_at).toLocaleDateString()]) });
       doc.save(`admin-report-${range}.pdf`);
-      toast.success("PDF downloaded!");
     } else {
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filteredUsers.map((u: any) => ({ Email: u.email, Name: u.full_name, Plan: u.plan, Referral: u.referral_code_used, Joined: new Date(u.created_at).toLocaleDateString() }))), "Users");
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filteredPayments.map((p: any) => ({ Amount: p.amount, Method: p.method, Status: p.status, TxnID: p.transaction_id, Date: new Date(p.created_at).toLocaleDateString() }))), "Payments");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fu.map((u: any) => ({ Email: u.email, Name: u.full_name, Plan: u.plan, Referral: u.referral_code_used, Joined: new Date(u.created_at).toLocaleDateString() }))), "Users");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fp.map((p: any) => ({ Amount: p.amount, Method: p.method, Status: p.status, TxnID: p.transaction_id, Date: new Date(p.created_at).toLocaleDateString() }))), "Payments");
       XLSX.writeFile(wb, `admin-report-${range}.xlsx`);
-      toast.success("Excel downloaded!");
     }
+    toast.success(`${format.toUpperCase()} downloaded!`);
   };
 
   const totalUsers = profiles.length;
@@ -348,7 +196,6 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
 
   return (
     <div className="min-h-screen flex bg-background text-foreground">
-      {/* SIDEBAR */}
       <motion.aside animate={{ width: collapsed ? 64 : 220 }} transition={{ duration: 0.2 }} className="fixed left-0 top-0 h-full bg-card border-r border-border z-50 flex flex-col">
         <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
           <Shield className="h-5 w-5 text-primary shrink-0" />
@@ -378,23 +225,24 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
         </div>
       </motion.aside>
 
-      {/* MAIN */}
       <motion.main animate={{ marginLeft: collapsed ? 64 : 220 }} transition={{ duration: 0.2 }} className="flex-1 min-h-screen">
-        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
+        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b border-border px-4 sm:px-6 py-3 flex items-center justify-between">
           <h2 className="font-bold text-lg capitalize">{activeSection === "propfirms" ? "Prop Firms" : activeSection}</h2>
-          <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-muted-foreground" /><span className="text-xs text-muted-foreground">JournalXPro</span></div>
+          <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-muted-foreground" /><span className="text-xs text-muted-foreground hidden sm:inline">JournalXPro</span></div>
         </header>
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <AnimatePresence mode="wait">
             <motion.div key={activeSection} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.15 }}>
               {activeSection === "dashboard" && <DashboardSection totalUsers={totalUsers} paidUsers={paidUsers} totalTrades={totalTrades} pendingPayments={pendingPayments} totalRevenue={totalRevenue} thisWeekUsers={thisWeekUsers} profiles={profiles} payments={payments} exportData={exportData} />}
               {activeSection === "users" && <UsersSection profiles={profiles} updateUserPlan={updateUserPlan} deleteUserMutation={deleteUserMutation} upsertSetting={upsertSetting} siteSettings={siteSettings} />}
-              {activeSection === "payments" && <PaymentsSection payments={payments} profiles={profiles} updatePaymentStatus={updatePaymentStatus} />}
+              {activeSection === "payments" && <PaymentsSection payments={payments} profiles={profiles} updatePaymentStatus={updatePaymentStatus} exportData={exportData} />}
               {activeSection === "referrals" && <ReferralsSection referrals={referrals} profiles={profiles} payments={payments} refName={refName} setRefName={setRefName} refCode={refCode} setRefCode={setRefCode} refCommission={refCommission} setRefCommission={setRefCommission} createReferral={createReferral} deleteReferral={deleteReferral} />}
+              {activeSection === "announcements" && <AnnouncementsSection announcements={announcements} annTitle={annTitle} setAnnTitle={setAnnTitle} annContent={annContent} setAnnContent={setAnnContent} annType={annType} setAnnType={setAnnType} createAnnouncement={createAnnouncement} deleteAnnouncement={deleteAnnouncement} />}
               {activeSection === "propfirms" && <PropFirmsSection propFirms={propFirms} pfName={pfName} setPfName={setPfName} pfUrl={pfUrl} setPfUrl={setPfUrl} pfDesc={pfDesc} setPfDesc={setPfDesc} createPropFirm={createPropFirm} deletePropFirm={deletePropFirm} />}
               {activeSection === "chat" && <ChatSection chatUsers={chatUsers} profiles={profiles} selectedChatUser={selectedChatUser} setSelectedChatUser={setSelectedChatUser} chatMessages={chatMessages} chatReply={chatReply} setChatReply={setChatReply} sendAdminReply={sendAdminReply} chatEndRef={chatEndRef} />}
+              {activeSection === "contact" && <ContactInboxSection messages={contactMessages} queryClient={queryClient} />}
               {activeSection === "news" && <NewsSection newsList={newsList} newsTitle={newsTitle} setNewsTitle={setNewsTitle} newsContent={newsContent} setNewsContent={setNewsContent} newsSource={newsSource} setNewsSource={setNewsSource} newsCategory={newsCategory} setNewsCategory={setNewsCategory} newsAsset={newsAsset} setNewsAsset={setNewsAsset} createNews={createNews} deleteNews={deleteNews} />}
-              {activeSection === "settings" && <SettingsSection upiId={upiId} setUpiId={setUpiId} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} cryptoWallet={cryptoWallet} setCryptoWallet={setCryptoWallet} instagram={instagram} setInstagram={setInstagram} twitter={twitter} setTwitter={setTwitter} telegram={telegram} setTelegram={setTelegram} discord={discord} setDiscord={setDiscord} pricePro={pricePro} setPricePro={setPricePro} priceProPlus={priceProPlus} setPriceProPlus={setPriceProPlus} priceElite={priceElite} setPriceElite={setPriceElite} inrRate={inrRate} setInrRate={setInrRate} upsertSetting={upsertSetting} siteSettings={siteSettings} />}
+              {activeSection === "settings" && <SettingsSection upiId={upiId} setUpiId={setUpiId} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} cryptoWallet={cryptoWallet} setCryptoWallet={setCryptoWallet} instagram={instagram} setInstagram={setInstagram} twitter={twitter} setTwitter={setTwitter} telegram={telegram} setTelegram={setTelegram} discord={discord} setDiscord={setDiscord} youtube={youtube} setYoutube={setYoutube} facebook={facebook} setFacebook={setFacebook} pricePro={pricePro} setPricePro={setPricePro} priceProPlus={priceProPlus} setPriceProPlus={setPriceProPlus} priceElite={priceElite} setPriceElite={setPriceElite} inrRate={inrRate} setInrRate={setInrRate} upsertSetting={upsertSetting} siteSettings={siteSettings} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -403,10 +251,10 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
   );
 };
 
-// ============== SUB COMPONENTS ==============
+// ===== SUB COMPONENTS =====
 
 const StatCard = ({ label, value, icon: Icon, color = "text-primary" }: any) => (
-  <motion.div whileHover={{ scale: 1.02, y: -2 }} className="rounded-lg border border-border bg-card p-4 card-glow transition-shadow hover:shadow-lg">
+  <motion.div whileHover={{ scale: 1.02, y: -2 }} className="rounded-lg border border-border bg-card p-4 card-glow">
     <div className="flex items-center gap-2 mb-2"><Icon className={`h-4 w-4 ${color}`} /><span className="text-xs text-muted-foreground">{label}</span></div>
     <div className="text-2xl font-bold font-mono">{value}</div>
   </motion.div>
@@ -422,54 +270,12 @@ const DashboardSection = ({ totalUsers, paidUsers, totalTrades, pendingPayments,
       <StatCard label="Revenue" value={`$${totalRevenue.toFixed(0)}`} icon={DollarSign} color="text-green-400" />
       <StatCard label="New (7d)" value={thisWeekUsers} icon={UserPlus} />
     </div>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="rounded-lg border border-border bg-card p-5">
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" /> Weekly Revenue</h3>
-        <div className="space-y-2">
-          {Array.from({ length: 4 }).map((_, i) => {
-            const weekStart = new Date(Date.now() - (3 - i) * 7 * 86400000);
-            const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
-            const weekRevenue = payments.filter((p: any) => p.status === "approved" && new Date(p.created_at) >= weekStart && new Date(p.created_at) < weekEnd).reduce((s: number, p: any) => s + Number(p.amount), 0);
-            const maxRev = Math.max(totalRevenue, 1);
-            return (
-              <div key={i} className="flex items-center gap-3">
-                <span className="text-[10px] text-muted-foreground w-16 font-mono">{weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })}</span>
-                <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${Math.max((weekRevenue / maxRev) * 100, 2)}%` }} transition={{ duration: 0.5, delay: i * 0.1 }} className="h-full bg-primary/60 rounded-full" />
-                </div>
-                <span className="text-xs font-mono text-muted-foreground w-12 text-right">${weekRevenue.toFixed(0)}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="rounded-lg border border-border bg-card p-5">
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary" /> User Growth</h3>
-        <div className="space-y-2">
-          {Array.from({ length: 4 }).map((_, i) => {
-            const weekStart = new Date(Date.now() - (3 - i) * 7 * 86400000);
-            const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
-            const weekUsers = profiles.filter((p: any) => new Date(p.created_at) >= weekStart && new Date(p.created_at) < weekEnd).length;
-            const maxU = Math.max(totalUsers, 1);
-            return (
-              <div key={i} className="flex items-center gap-3">
-                <span className="text-[10px] text-muted-foreground w-16 font-mono">{weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })}</span>
-                <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${Math.max((weekUsers / maxU) * 100, 2)}%` }} transition={{ duration: 0.5, delay: i * 0.1 }} className="h-full bg-green-500/60 rounded-full" />
-                </div>
-                <span className="text-xs font-mono text-muted-foreground w-8 text-right">{weekUsers}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
     <div className="rounded-lg border border-border bg-card p-5">
       <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Download className="h-4 w-4 text-primary" /> Export Data</h3>
       <div className="flex flex-wrap gap-2">
-        {(["week", "month", "all"] as const).map((range) => (
+        {["week", "month", "3month", "6month", "all"].map((range) => (
           <div key={range} className="flex gap-1.5 items-center">
-            <span className="text-[10px] text-muted-foreground uppercase w-10">{range}</span>
+            <span className="text-[10px] text-muted-foreground uppercase w-14">{range}</span>
             <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportData("pdf", range)}>PDF</Button>
             <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportData("excel", range)}>Excel</Button>
           </div>
@@ -482,19 +288,13 @@ const DashboardSection = ({ totalUsers, paidUsers, totalTrades, pendingPayments,
 const UsersSection = ({ profiles, updateUserPlan, deleteUserMutation, upsertSetting, siteSettings }: any) => {
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<string, any>>({});
-
-  const getSetting = (key: string): any => {
-    const s = siteSettings?.find((s: any) => s.key === key);
-    return s?.value || {};
-  };
-
+  const getSetting = (key: string): any => { const s = siteSettings?.find((s: any) => s.key === key); return s?.value || {}; };
   const userOverrides = getSetting("user_overrides") || {};
 
   const saveOverride = (userId: string) => {
     const updated = { ...userOverrides, [userId]: overrides[userId] || {} };
     upsertSetting.mutate({ key: "user_overrides", value: updated });
     setEditingUser(null);
-    toast.success("User overrides saved.");
   };
 
   return (
@@ -513,20 +313,13 @@ const UsersSection = ({ profiles, updateUserPlan, deleteUserMutation, upsertSett
                 <td className="p-3 text-xs font-mono">{p.referral_code_used || "—"}</td>
                 <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
                 <td className="p-3 text-center">
-                  <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
                     <Select onValueChange={(v) => updateUserPlan.mutate({ userId: p.id, plan: v })}>
                       <SelectTrigger className="h-7 text-xs w-24 bg-background border-border"><SelectValue placeholder="Set plan" /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        <SelectItem value="free">Free</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem>
-                      </SelectContent>
+                      <SelectContent className="bg-card border-border"><SelectItem value="free">Free</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem></SelectContent>
                     </Select>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
-                      setEditingUser(editingUser === p.id ? null : p.id);
-                      setOverrides((o) => ({ ...o, [p.id]: userOverrides[p.id] || { max_trades: "", max_accounts: "", ai_enabled: false, mt5_enabled: false, backtesting_enabled: false } }));
-                    }}>⚙️</Button>
-                    <button onClick={() => { if (confirm(`Delete user ${p.email}? This cannot be undone.`)) deleteUserMutation.mutate(p.id); }} className="text-muted-foreground hover:text-destructive transition-colors">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditingUser(editingUser === p.id ? null : p.id); setOverrides((o) => ({ ...o, [p.id]: userOverrides[p.id] || { max_trades: "", max_accounts: "", ai_enabled: false, mt5_enabled: false, backtesting_enabled: false } })); }}>⚙️</Button>
+                    <button onClick={() => { if (confirm(`Delete user ${p.email}? This cannot be undone.`)) deleteUserMutation.mutate(p.id); }} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </td>
               </tr>
@@ -535,9 +328,9 @@ const UsersSection = ({ profiles, updateUserPlan, deleteUserMutation, upsertSett
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 items-end">
                     <div><label className="text-xs text-muted-foreground block mb-1">Max Trades</label><Input value={overrides[p.id]?.max_trades || ""} onChange={(e: any) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], max_trades: e.target.value } }))} placeholder="Unlimited" className="h-8 text-xs bg-background border-border font-mono" /></div>
                     <div><label className="text-xs text-muted-foreground block mb-1">Max Accounts</label><Input value={overrides[p.id]?.max_accounts || ""} onChange={(e: any) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], max_accounts: e.target.value } }))} placeholder="Unlimited" className="h-8 text-xs bg-background border-border font-mono" /></div>
-                    <div className="flex items-center gap-2"><input type="checkbox" checked={overrides[p.id]?.ai_enabled || false} onChange={(e) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], ai_enabled: e.target.checked } }))} /><label className="text-xs">AI Insights</label></div>
-                    <div className="flex items-center gap-2"><input type="checkbox" checked={overrides[p.id]?.mt5_enabled || false} onChange={(e) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], mt5_enabled: e.target.checked } }))} /><label className="text-xs">MT5 Sync</label></div>
-                    <Button size="sm" className="h-8 text-xs" onClick={() => saveOverride(p.id)}>Save Overrides</Button>
+                    <div className="flex items-center gap-2"><input type="checkbox" checked={overrides[p.id]?.ai_enabled || false} onChange={(e) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], ai_enabled: e.target.checked } }))} /><label className="text-xs">AI</label></div>
+                    <div className="flex items-center gap-2"><input type="checkbox" checked={overrides[p.id]?.mt5_enabled || false} onChange={(e) => setOverrides((o) => ({ ...o, [p.id]: { ...o[p.id], mt5_enabled: e.target.checked } }))} /><label className="text-xs">MT5</label></div>
+                    <Button size="sm" className="h-8 text-xs" onClick={() => saveOverride(p.id)}>Save</Button>
                   </div>
                 </td></tr>
               )}
@@ -549,44 +342,152 @@ const UsersSection = ({ profiles, updateUserPlan, deleteUserMutation, upsertSett
   );
 };
 
-const PaymentsSection = ({ payments, profiles, updatePaymentStatus }: any) => (
-  <div className="rounded-lg border border-border bg-card overflow-x-auto">
-    <table className="w-full text-sm">
-      <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
-        <th className="text-left p-3">User</th><th className="text-right p-3">Amount</th><th className="text-left p-3">Plan</th><th className="text-left p-3">Method</th><th className="text-left p-3">TXN ID</th><th className="text-left p-3">Screenshot</th><th className="text-left p-3">Status</th><th className="text-left p-3">Date</th><th className="text-center p-3">Actions</th>
-      </tr></thead>
-      <tbody>
-        {payments.map((p: any) => {
-          const profile = profiles.find((pr: any) => pr.id === p.user_id);
-          return (
-            <tr key={p.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-              <td className="p-3 text-xs">{profile?.email || p.user_id.slice(0, 8)}</td>
-              <td className="p-3 text-right font-mono">${Number(p.amount).toFixed(2)}{p.amount_inr ? <span className="text-muted-foreground ml-1">(₹{Number(p.amount_inr).toFixed(0)})</span> : ""}</td>
-              <td className="p-3 text-xs">{p.requested_plan || "—"}</td>
-              <td className="p-3 text-xs">{p.method || "—"}</td>
-              <td className="p-3 text-xs font-mono">{p.transaction_id || "—"}</td>
-              <td className="p-3 text-xs">{p.screenshot_url ? <a href={p.screenshot_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View</a> : "—"}</td>
-              <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "approved" ? "bg-green-500/10 text-green-400" : p.status === "rejected" ? "bg-destructive/10 text-destructive" : "bg-yellow-500/10 text-yellow-400"}`}>{p.status}</span></td>
-              <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
-              <td className="p-3 text-center">
-                {p.status === "pending" && (
-                  <div className="flex gap-1 justify-center">
-                    <Select onValueChange={(plan) => updatePaymentStatus.mutate({ id: p.id, status: "approved", userId: p.user_id, plan })}>
-                      <SelectTrigger className="h-6 text-xs w-20 bg-background border-green-500/30 text-green-400"><SelectValue placeholder="Approve" /></SelectTrigger>
-                      <SelectContent className="bg-card border-border"><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem></SelectContent>
-                    </Select>
-                    <Button size="sm" variant="outline" className="h-6 text-xs text-destructive border-destructive/30" onClick={() => updatePaymentStatus.mutate({ id: p.id, status: "rejected", userId: p.user_id })}>Reject</Button>
-                  </div>
-                )}
-              </td>
-            </tr>
-          );
-        })}
-        {payments.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-muted-foreground text-sm">No payments yet.</td></tr>}
-      </tbody>
-    </table>
+const PaymentsSection = ({ payments, profiles, updatePaymentStatus, exportData }: any) => {
+  const [filter, setFilter] = useState("all");
+  const now = new Date();
+  let since = new Date(0);
+  if (filter === "week") since = new Date(now.getTime() - 7 * 86400000);
+  if (filter === "month") since = new Date(now.getTime() - 30 * 86400000);
+  if (filter === "3month") since = new Date(now.getTime() - 90 * 86400000);
+  if (filter === "6month") since = new Date(now.getTime() - 180 * 86400000);
+  const filtered = payments.filter((p: any) => new Date(p.created_at) >= since);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {["all", "week", "month", "3month", "6month"].map((f) => (
+          <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${filter === f ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}>{f === "all" ? "All" : f}</button>
+        ))}
+        <div className="ml-auto flex gap-1">
+          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportData("pdf", filter)}>PDF</Button>
+          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportData("excel", filter)}>Excel</Button>
+        </div>
+      </div>
+      <div className="rounded-lg border border-border bg-card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
+            <th className="text-left p-3">User</th><th className="text-right p-3">Amount</th><th className="text-left p-3">Plan</th><th className="text-left p-3">Method</th><th className="text-left p-3">TXN ID</th><th className="text-left p-3">Screenshot</th><th className="text-left p-3">Status</th><th className="text-left p-3">Date</th><th className="text-center p-3">Actions</th>
+          </tr></thead>
+          <tbody>
+            {filtered.map((p: any) => {
+              const profile = profiles.find((pr: any) => pr.id === p.user_id);
+              return (
+                <tr key={p.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
+                  <td className="p-3 text-xs">{profile?.email || p.user_id.slice(0, 8)}</td>
+                  <td className="p-3 text-right font-mono">${Number(p.amount).toFixed(2)}{p.amount_inr ? <span className="text-muted-foreground ml-1">(₹{Number(p.amount_inr).toFixed(0)})</span> : ""}</td>
+                  <td className="p-3 text-xs">{p.requested_plan || "—"}</td>
+                  <td className="p-3 text-xs">{p.method || "—"}</td>
+                  <td className="p-3 text-xs font-mono">{p.transaction_id || "—"}</td>
+                  <td className="p-3 text-xs">{p.screenshot_url ? <a href={p.screenshot_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">View</a> : "—"}</td>
+                  <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "approved" ? "bg-green-500/10 text-green-400" : p.status === "rejected" ? "bg-destructive/10 text-destructive" : "bg-yellow-500/10 text-yellow-400"}`}>{p.status}</span></td>
+                  <td className="p-3 text-xs font-mono">{new Date(p.created_at).toLocaleDateString()}</td>
+                  <td className="p-3 text-center">
+                    {p.status === "pending" && (
+                      <div className="flex gap-1 justify-center">
+                        <Select onValueChange={(plan) => updatePaymentStatus.mutate({ id: p.id, status: "approved", userId: p.user_id, plan })}>
+                          <SelectTrigger className="h-6 text-xs w-20 bg-background border-green-500/30 text-green-400"><SelectValue placeholder="Approve" /></SelectTrigger>
+                          <SelectContent className="bg-card border-border"><SelectItem value="pro">Pro</SelectItem><SelectItem value="pro_plus">Pro+</SelectItem><SelectItem value="elite">Elite</SelectItem></SelectContent>
+                        </Select>
+                        <Button size="sm" variant="outline" className="h-6 text-xs text-destructive border-destructive/30" onClick={() => updatePaymentStatus.mutate({ id: p.id, status: "rejected", userId: p.user_id })}>Reject</Button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-muted-foreground text-sm">No payments for this period.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const AnnouncementsSection = ({ announcements, annTitle, setAnnTitle, annContent, setAnnContent, annType, setAnnType, createAnnouncement, deleteAnnouncement }: any) => (
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">New Announcement</h3>
+      <div className="space-y-3">
+        <Input value={annTitle} onChange={(e: any) => setAnnTitle(e.target.value)} placeholder="Title" className="bg-background border-border" />
+        <Textarea value={annContent} onChange={(e: any) => setAnnContent(e.target.value)} placeholder="Content..." className="bg-background border-border" rows={4} />
+        <Select value={annType} onValueChange={setAnnType}>
+          <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+          <SelectContent className="bg-card border-border">
+            <SelectItem value="update">Update</SelectItem>
+            <SelectItem value="giveaway">Giveaway</SelectItem>
+            <SelectItem value="winner">Winner</SelectItem>
+            <SelectItem value="maintenance">Maintenance</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={() => createAnnouncement.mutate()} disabled={createAnnouncement.isPending} className="w-full">
+          <Plus className="h-4 w-4 mr-2" />{createAnnouncement.isPending ? "Posting..." : "Post Announcement"}
+        </Button>
+      </div>
+    </div>
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold mb-3">All Announcements ({announcements.length})</h3>
+      <div className="space-y-2 max-h-[500px] overflow-y-auto">
+        {announcements.map((a: any) => (
+          <div key={a.id} className="p-3 rounded border border-border bg-background group hover:bg-secondary/30 transition-colors">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${a.type === "giveaway" ? "bg-yellow-500/10 text-yellow-400" : a.type === "winner" ? "bg-green-500/10 text-green-400" : a.type === "maintenance" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}`}>{a.type}</span>
+                </div>
+                <h4 className="text-sm font-semibold">{a.title}</h4>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{a.content}</p>
+                <span className="text-[10px] text-muted-foreground font-mono mt-1 block">{new Date(a.created_at).toLocaleDateString()}</span>
+              </div>
+              <button onClick={() => deleteAnnouncement.mutate(a.id)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
+        ))}
+        {announcements.length === 0 && <p className="text-sm text-muted-foreground">No announcements.</p>}
+      </div>
+    </div>
   </div>
 );
+
+const ContactInboxSection = ({ messages, queryClient }: any) => {
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [reply, setReply] = useState("");
+
+  const sendReply = async (id: string) => {
+    if (!reply.trim()) return;
+    await supabase.from("contact_messages" as any).update({ admin_reply: reply, is_read: true } as any).eq("id", id);
+    queryClient.invalidateQueries({ queryKey: ["admin-contact"] });
+    setReply(""); setReplyingTo(null);
+    toast.success("Reply saved.");
+  };
+
+  return (
+    <div className="space-y-3">
+      {messages.map((m: any) => (
+        <div key={m.id} className={`rounded-lg border bg-card p-4 ${m.is_read ? "border-border" : "border-primary/30"}`}>
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div>
+              <span className="text-sm font-semibold">{m.name}</span>
+              <span className="text-xs text-muted-foreground ml-2">{m.email}</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground font-mono">{new Date(m.created_at).toLocaleDateString()}</span>
+          </div>
+          <p className="text-sm text-foreground mb-2">{m.message}</p>
+          {m.admin_reply && <p className="text-xs text-primary bg-primary/5 p-2 rounded">↩ {m.admin_reply}</p>}
+          {replyingTo === m.id ? (
+            <div className="flex gap-2 mt-2">
+              <Input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Type reply..." className="bg-background border-border text-sm" />
+              <Button size="sm" onClick={() => sendReply(m.id)}>Send</Button>
+              <Button size="sm" variant="outline" onClick={() => setReplyingTo(null)}>Cancel</Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline" className="mt-2 text-xs" onClick={() => setReplyingTo(m.id)}>Reply</Button>
+          )}
+        </div>
+      ))}
+      {messages.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No contact messages yet.</p>}
+    </div>
+  );
+};
 
 const ReferralsSection = ({ referrals, profiles, payments, refName, setRefName, refCode, setRefCode, refCommission, setRefCommission, createReferral, deleteReferral }: any) => (
   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -608,17 +509,10 @@ const ReferralsSection = ({ referrals, profiles, payments, refName, setRefName, 
           {referrals.map((r: any) => {
             const signups = profiles.filter((p: any) => p.referral_code_used === r.code).length;
             const paidSignups = profiles.filter((p: any) => p.referral_code_used === r.code && p.plan !== "free");
-            const revenue = paidSignups.reduce((sum: number, u: any) => {
-              return sum + payments.filter((pay: any) => pay.user_id === u.id && pay.status === "approved").reduce((s: number, p: any) => s + Number(p.amount), 0);
-            }, 0);
+            const revenue = paidSignups.reduce((sum: number, u: any) => sum + payments.filter((pay: any) => pay.user_id === u.id && pay.status === "approved").reduce((s: number, p: any) => s + Number(p.amount), 0), 0);
             return (
               <tr key={r.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                <td className="p-3 font-mono text-primary text-xs">{r.code}</td>
-                <td className="p-3 text-xs">{r.name}</td>
-                <td className="p-3 text-right text-xs font-mono">{r.commission_percent}%</td>
-                <td className="p-3 text-right text-xs font-mono">{signups}</td>
-                <td className="p-3 text-right text-xs font-mono">{paidSignups.length}</td>
-                <td className="p-3 text-right text-xs font-mono text-green-400">${revenue.toFixed(0)}</td>
+                <td className="p-3 font-mono text-primary text-xs">{r.code}</td><td className="p-3 text-xs">{r.name}</td><td className="p-3 text-right text-xs font-mono">{r.commission_percent}%</td><td className="p-3 text-right text-xs font-mono">{signups}</td><td className="p-3 text-right text-xs font-mono">{paidSignups.length}</td><td className="p-3 text-right text-xs font-mono text-green-400">${revenue.toFixed(0)}</td>
                 <td className="p-3 text-center"><button onClick={() => deleteReferral.mutate(r.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button></td>
               </tr>
             );
@@ -643,19 +537,15 @@ const PropFirmsSection = ({ propFirms, pfName, setPfName, pfUrl, setPfUrl, pfDes
     </div>
     <div className="lg:col-span-2 rounded-lg border border-border bg-card overflow-x-auto">
       <table className="w-full text-sm">
-        <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase">
-          <th className="text-left p-3">Name</th><th className="text-left p-3">URL</th><th className="text-left p-3">Description</th><th className="text-center p-3">Actions</th>
-        </tr></thead>
+        <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase"><th className="text-left p-3">Name</th><th className="text-left p-3">URL</th><th className="text-left p-3">Description</th><th className="text-center p-3">Actions</th></tr></thead>
         <tbody>
           {propFirms.map((f: any) => (
             <tr key={f.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-              <td className="p-3 text-xs font-semibold">{f.name}</td>
-              <td className="p-3 text-xs">{f.url ? <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-primary underline">{f.url}</a> : "—"}</td>
-              <td className="p-3 text-xs text-muted-foreground max-w-[200px] truncate">{f.description || "—"}</td>
+              <td className="p-3 text-xs font-semibold">{f.name}</td><td className="p-3 text-xs">{f.url ? <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-primary underline">{f.url}</a> : "—"}</td><td className="p-3 text-xs text-muted-foreground max-w-[200px] truncate">{f.description || "—"}</td>
               <td className="p-3 text-center"><button onClick={() => deletePropFirm.mutate(f.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button></td>
             </tr>
           ))}
-          {propFirms.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground text-sm">No prop firms added yet.</td></tr>}
+          {propFirms.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground text-sm">No prop firms yet.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -669,11 +559,7 @@ const ChatSection = ({ chatUsers, profiles, selectedChatUser, setSelectedChatUse
       <div className="space-y-1">
         {chatUsers.length > 0 ? chatUsers.map((uid: string) => {
           const profile = profiles.find((p: any) => p.id === uid);
-          return (
-            <button key={uid} onClick={() => setSelectedChatUser(uid)} className={`w-full flex items-center gap-2 p-2.5 rounded-md text-left transition-colors ${selectedChatUser === uid ? "bg-primary/10 text-primary" : "hover:bg-secondary text-foreground"}`}>
-              <MessageSquare className="h-3.5 w-3.5 shrink-0" /><span className="text-xs truncate">{profile?.email || uid.slice(0, 12)}</span>
-            </button>
-          );
+          return (<button key={uid} onClick={() => setSelectedChatUser(uid)} className={`w-full flex items-center gap-2 p-2.5 rounded-md text-left transition-colors ${selectedChatUser === uid ? "bg-primary/10 text-primary" : "hover:bg-secondary text-foreground"}`}><MessageSquare className="h-3.5 w-3.5 shrink-0" /><span className="text-xs truncate">{profile?.email || uid.slice(0, 12)}</span></button>);
         }) : <p className="text-xs text-muted-foreground">No conversations yet.</p>}
       </div>
     </div>
@@ -685,8 +571,7 @@ const ChatSection = ({ chatUsers, profiles, selectedChatUser, setSelectedChatUse
             {chatMessages.map((m: any) => (
               <div key={m.id} className={`flex ${m.sender === "admin" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[70%] px-3 py-2 rounded-lg text-xs ${m.sender === "admin" ? "bg-primary/20 text-foreground" : "bg-secondary text-foreground"}`}>
-                  {m.message}
-                  <div className="text-[9px] text-muted-foreground mt-1">{new Date(m.created_at).toLocaleTimeString()}</div>
+                  {m.message}<div className="text-[9px] text-muted-foreground mt-1">{new Date(m.created_at).toLocaleTimeString()}</div>
                 </div>
               </div>
             ))}
@@ -697,9 +582,7 @@ const ChatSection = ({ chatUsers, profiles, selectedChatUser, setSelectedChatUse
             <Button size="sm" onClick={sendAdminReply}>Send</Button>
           </div>
         </>
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Select a conversation</div>
-      )}
+      ) : (<div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Select a conversation</div>)}
     </div>
   </div>
 );
@@ -710,14 +593,12 @@ const NewsSection = ({ newsList, newsTitle, setNewsTitle, newsContent, setNewsCo
       <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Newspaper className="h-4 w-4 text-primary" /> Post News</h3>
       <div className="space-y-3">
         <Input value={newsTitle} onChange={(e: any) => setNewsTitle(e.target.value)} placeholder="Headline" className="bg-background border-border" />
-        <Input value={newsAsset} onChange={(e: any) => setNewsAsset(e.target.value)} placeholder="Asset name (e.g. EURUSD, BTCUSD, Gold)" className="bg-background border-border font-mono" />
+        <Input value={newsAsset} onChange={(e: any) => setNewsAsset(e.target.value)} placeholder="Asset name (e.g. EURUSD, Gold)" className="bg-background border-border font-mono" />
         <Textarea value={newsContent} onChange={(e: any) => setNewsContent(e.target.value)} placeholder="Content..." className="bg-background border-border" rows={4} />
         <Input value={newsSource} onChange={(e: any) => setNewsSource(e.target.value)} placeholder="Source (e.g. Forex Factory)" className="bg-background border-border" />
         <Select value={newsCategory} onValueChange={setNewsCategory}>
           <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
-          <SelectContent className="bg-card border-border">
-            <SelectItem value="forex">Forex</SelectItem><SelectItem value="crypto">Crypto</SelectItem><SelectItem value="stocks">Stocks</SelectItem><SelectItem value="commodities">Commodities</SelectItem><SelectItem value="economy">Economy</SelectItem><SelectItem value="general">General</SelectItem>
-          </SelectContent>
+          <SelectContent className="bg-card border-border"><SelectItem value="forex">Forex</SelectItem><SelectItem value="crypto">Crypto</SelectItem><SelectItem value="stocks">Stocks</SelectItem><SelectItem value="commodities">Commodities</SelectItem><SelectItem value="economy">Economy</SelectItem><SelectItem value="general">General</SelectItem></SelectContent>
         </Select>
         <Button onClick={() => createNews.mutate()} disabled={createNews.isPending} className="w-full"><Plus className="h-4 w-4 mr-2" />{createNews.isPending ? "Publishing..." : "Publish"}</Button>
       </div>
@@ -729,10 +610,7 @@ const NewsSection = ({ newsList, newsTitle, setNewsTitle, newsContent, setNewsCo
           <div key={n.id} className="p-3 rounded border border-border bg-background group hover:bg-secondary/30 transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-primary font-mono uppercase">{n.category}</span>
-                  {(n as any).asset_name && <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">{(n as any).asset_name}</span>}
-                </div>
+                <div className="flex items-center gap-2"><span className="text-[10px] text-primary font-mono uppercase">{n.category}</span>{(n as any).asset_name && <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">{(n as any).asset_name}</span>}</div>
                 <h4 className="text-sm font-semibold mt-0.5">{n.title}</h4>
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{n.content}</p>
                 <span className="text-[10px] text-muted-foreground font-mono mt-1 block">{new Date(n.created_at).toLocaleDateString()}</span>
@@ -747,50 +625,92 @@ const NewsSection = ({ newsList, newsTitle, setNewsTitle, newsContent, setNewsCo
   </div>
 );
 
-const SettingsSection = ({ upiId, setUpiId, phoneNumber, setPhoneNumber, cryptoWallet, setCryptoWallet, instagram, setInstagram, twitter, setTwitter, telegram, setTelegram, discord, setDiscord, pricePro, setPricePro, priceProPlus, setPriceProPlus, priceElite, setPriceElite, inrRate, setInrRate, upsertSetting, siteSettings }: any) => {
-  const getSetting = (key: string): any => {
-    const s = siteSettings?.find((s: any) => s.key === key);
-    return s?.value || {};
-  };
+const SettingsSection = ({ upiId, setUpiId, phoneNumber, setPhoneNumber, cryptoWallet, setCryptoWallet, instagram, setInstagram, twitter, setTwitter, telegram, setTelegram, discord, setDiscord, youtube, setYoutube, facebook, setFacebook, pricePro, setPricePro, priceProPlus, setPriceProPlus, priceElite, setPriceElite, inrRate, setInrRate, upsertSetting, siteSettings }: any) => {
+  const getSetting = (key: string): any => { const s = siteSettings?.find((s: any) => s.key === key); return s?.value || {}; };
 
   const [maintenanceMode, setMaintenanceMode] = useState(getSetting("maintenance")?.enabled || false);
   const [maintenanceMsg, setMaintenanceMsg] = useState(getSetting("maintenance")?.message || "Website under maintenance, please wait…");
   const [pointsForFree, setPointsForFree] = useState(getSetting("referral_settings")?.points_for_free_plan?.toString() || "500");
+  const [referralEnabled, setReferralEnabled] = useState(getSetting("referral_toggle")?.enabled !== false);
+
+  // Coupons
+  const existingCoupons = getSetting("active_coupons");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponDiscount, setCouponDiscount] = useState("");
+  const [couponsEnabled, setCouponsEnabled] = useState(existingCoupons?.enabled !== false);
+  const [couponsList, setCouponsList] = useState<{ code: string; discount: string }[]>(existingCoupons?.codes || []);
+
+  const addCoupon = () => {
+    if (!couponCode || !couponDiscount) return;
+    const updated = [...couponsList, { code: couponCode.toUpperCase(), discount: couponDiscount }];
+    setCouponsList(updated);
+    upsertSetting.mutate({ key: "active_coupons", value: { enabled: couponsEnabled, codes: updated } });
+    setCouponCode(""); setCouponDiscount("");
+  };
+
+  const removeCoupon = (idx: number) => {
+    const updated = couponsList.filter((_, i) => i !== idx);
+    setCouponsList(updated);
+    upsertSetting.mutate({ key: "active_coupons", value: { enabled: couponsEnabled, codes: updated } });
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Maintenance Mode */}
+      {/* Maintenance */}
       <div className="rounded-lg border border-destructive/30 bg-card p-5 lg:col-span-2">
         <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive" /> Maintenance Mode</h3>
         <div className="flex items-center gap-4 mb-3">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={maintenanceMode} onChange={(e) => setMaintenanceMode(e.target.checked)} />
-            <span className="text-sm">{maintenanceMode ? "ACTIVE — Users see maintenance message" : "Disabled"}</span>
-          </label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={maintenanceMode} onChange={(e) => setMaintenanceMode(e.target.checked)} /><span className="text-sm">{maintenanceMode ? "ACTIVE" : "Disabled"}</span></label>
         </div>
         <Input value={maintenanceMsg} onChange={(e: any) => setMaintenanceMsg(e.target.value)} placeholder="Maintenance message" className="bg-background border-border mb-3" />
-        <Button size="sm" onClick={() => upsertSetting.mutate({ key: "maintenance", value: { enabled: maintenanceMode, message: maintenanceMsg } })}>Save Maintenance Settings</Button>
+        <Button size="sm" onClick={() => upsertSetting.mutate({ key: "maintenance", value: { enabled: maintenanceMode, message: maintenanceMsg } })}>Save</Button>
+      </div>
+
+      {/* Coupons */}
+      <div className="rounded-lg border border-border bg-card p-5 lg:col-span-2">
+        <h3 className="text-sm font-semibold mb-3">Active Coupons (Landing Page Marquee)</h3>
+        <div className="flex items-center gap-4 mb-3">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={couponsEnabled} onChange={(e) => { setCouponsEnabled(e.target.checked); upsertSetting.mutate({ key: "active_coupons", value: { enabled: e.target.checked, codes: couponsList } }); }} /><span className="text-sm">{couponsEnabled ? "Enabled" : "Disabled"}</span></label>
+        </div>
+        <div className="flex gap-2 mb-3">
+          <Input value={couponCode} onChange={(e: any) => setCouponCode(e.target.value)} placeholder="Code (e.g. SAVE20)" className="bg-background border-border font-mono" />
+          <Input value={couponDiscount} onChange={(e: any) => setCouponDiscount(e.target.value)} placeholder="Discount (e.g. 20%)" className="bg-background border-border" />
+          <Button size="sm" onClick={addCoupon}>Add</Button>
+        </div>
+        <div className="space-y-1">
+          {couponsList.map((c, i) => (
+            <div key={i} className="flex items-center justify-between p-2 rounded border border-border bg-background">
+              <span className="font-mono text-sm text-primary">{c.code} — {c.discount}</span>
+              <button onClick={() => removeCoupon(i)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Referral Settings */}
       <div className="rounded-lg border border-border bg-card p-5">
         <h3 className="text-sm font-semibold mb-3">Referral Settings</h3>
         <div className="space-y-3">
-          <div><label className="text-xs text-muted-foreground block mb-1">Points for Free Plan (1 month)</label><Input value={pointsForFree} onChange={(e: any) => setPointsForFree(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
-          <p className="text-xs text-muted-foreground">Default: 500 points. Users earn 10pts/signup, +20/30/50 for plan purchases.</p>
-          <Button onClick={() => upsertSetting.mutate({ key: "referral_settings", value: { points_for_free_plan: parseInt(pointsForFree) || 500 } })} className="w-full">Save Referral Settings</Button>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={referralEnabled} onChange={(e) => { setReferralEnabled(e.target.checked); upsertSetting.mutate({ key: "referral_toggle", value: { enabled: e.target.checked } }); }} /><span className="text-sm">{referralEnabled ? "Referral Enabled" : "Referral Disabled"}</span></label>
+          </div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Points for Free Plan</label><Input value={pointsForFree} onChange={(e: any) => setPointsForFree(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
+          <Button onClick={() => upsertSetting.mutate({ key: "referral_settings", value: { points_for_free_plan: parseInt(pointsForFree) || 500 } })} className="w-full">Save</Button>
         </div>
       </div>
 
+      {/* Payment */}
       <div className="rounded-lg border border-border bg-card p-5">
         <h3 className="text-sm font-semibold mb-3">Payment Settings</h3>
         <div className="space-y-3">
           <div><label className="text-xs text-muted-foreground block mb-1">UPI ID</label><Input value={upiId} onChange={(e: any) => setUpiId(e.target.value)} placeholder="yourname@upi" className="bg-background border-border font-mono" /></div>
           <div><label className="text-xs text-muted-foreground block mb-1">Phone (GPay/PhonePe)</label><Input value={phoneNumber} onChange={(e: any) => setPhoneNumber(e.target.value)} placeholder="+91..." className="bg-background border-border font-mono" /></div>
           <div><label className="text-xs text-muted-foreground block mb-1">Crypto Wallet</label><Input value={cryptoWallet} onChange={(e: any) => setCryptoWallet(e.target.value)} placeholder="0x..." className="bg-background border-border font-mono" /></div>
-          <Button onClick={() => upsertSetting.mutate({ key: "payment_settings", value: { upi_id: upiId, phone_number: phoneNumber, crypto_wallet: cryptoWallet } })} className="w-full">Save Payment Settings</Button>
+          <Button onClick={() => upsertSetting.mutate({ key: "payment_settings", value: { upi_id: upiId, phone_number: phoneNumber, crypto_wallet: cryptoWallet } })} className="w-full">Save</Button>
         </div>
       </div>
+
+      {/* Social */}
       <div className="rounded-lg border border-border bg-card p-5">
         <h3 className="text-sm font-semibold mb-3">Social Links</h3>
         <div className="space-y-3">
@@ -798,23 +718,29 @@ const SettingsSection = ({ upiId, setUpiId, phoneNumber, setPhoneNumber, cryptoW
           <div><label className="text-xs text-muted-foreground block mb-1">Twitter / X</label><Input value={twitter} onChange={(e: any) => setTwitter(e.target.value)} className="bg-background border-border" /></div>
           <div><label className="text-xs text-muted-foreground block mb-1">Telegram</label><Input value={telegram} onChange={(e: any) => setTelegram(e.target.value)} className="bg-background border-border" /></div>
           <div><label className="text-xs text-muted-foreground block mb-1">Discord</label><Input value={discord} onChange={(e: any) => setDiscord(e.target.value)} className="bg-background border-border" /></div>
-          <Button onClick={() => upsertSetting.mutate({ key: "social_links", value: { instagram, twitter, telegram, discord } })} className="w-full">Save Social Links</Button>
+          <div><label className="text-xs text-muted-foreground block mb-1">YouTube</label><Input value={youtube} onChange={(e: any) => setYoutube(e.target.value)} className="bg-background border-border" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Facebook</label><Input value={facebook} onChange={(e: any) => setFacebook(e.target.value)} className="bg-background border-border" /></div>
+          <Button onClick={() => upsertSetting.mutate({ key: "social_links", value: { instagram, twitter, telegram, discord, youtube, facebook } })} className="w-full">Save</Button>
         </div>
       </div>
+
+      {/* Pricing */}
       <div className="rounded-lg border border-border bg-card p-5">
         <h3 className="text-sm font-semibold mb-3">Pricing (USD)</h3>
         <div className="space-y-3">
           <div><label className="text-xs text-muted-foreground block mb-1">Pro ($)</label><Input value={pricePro} onChange={(e: any) => setPricePro(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
           <div><label className="text-xs text-muted-foreground block mb-1">Pro+ ($)</label><Input value={priceProPlus} onChange={(e: any) => setPriceProPlus(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
           <div><label className="text-xs text-muted-foreground block mb-1">Elite ($)</label><Input value={priceElite} onChange={(e: any) => setPriceElite(e.target.value)} className="bg-background border-border font-mono" type="number" /></div>
-          <Button onClick={() => upsertSetting.mutate({ key: "pricing", value: { free: 0, pro: parseFloat(pricePro), pro_plus: parseFloat(priceProPlus), elite: parseFloat(priceElite) } })} className="w-full">Save Pricing</Button>
+          <Button onClick={() => upsertSetting.mutate({ key: "pricing", value: { free: 0, pro: parseFloat(pricePro), pro_plus: parseFloat(priceProPlus), elite: parseFloat(priceElite) } })} className="w-full">Save</Button>
         </div>
       </div>
+
+      {/* INR Rate */}
       <div className="rounded-lg border border-border bg-card p-5">
         <h3 className="text-sm font-semibold mb-3">INR Conversion Rate</h3>
         <div className="space-y-3">
           <div><label className="text-xs text-muted-foreground block mb-1">1 USD = ₹</label><Input value={inrRate} onChange={(e: any) => setInrRate(e.target.value)} className="bg-background border-border font-mono" type="number" step="0.1" /></div>
-          <Button onClick={() => upsertSetting.mutate({ key: "inr_rate", value: { rate: parseFloat(inrRate) } })} className="w-full">Save Rate</Button>
+          <Button onClick={() => upsertSetting.mutate({ key: "inr_rate", value: { rate: parseFloat(inrRate) } })} className="w-full">Save</Button>
         </div>
       </div>
     </div>
