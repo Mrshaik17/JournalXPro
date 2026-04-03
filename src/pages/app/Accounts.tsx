@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, ArrowLeft, TrendingUp, Target, BarChart3, Activity, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, TrendingUp, Target, BarChart3, Activity, AlertTriangle, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
@@ -23,6 +23,10 @@ const Accounts = () => {
   const [name, setName] = useState("");
   const [initialBalance, setInitialBalance] = useState("");
   const [accountCategory, setAccountCategory] = useState<"broker" | "propfirm">("broker");
+  const [syncMode, setSyncMode] = useState<"manual" | "mt5" | "both">("manual");
+  const [mt5Server, setMt5Server] = useState("");
+  const [mt5Login, setMt5Login] = useState("");
+  const [mt5Password, setMt5Password] = useState("");
   const [dailyDrawdown, setDailyDrawdown] = useState("");
   const [maxDrawdown, setMaxDrawdown] = useState("");
   const [hasConsistency, setHasConsistency] = useState(false);
@@ -53,9 +57,14 @@ const Accounts = () => {
       if (!user) throw new Error("Not authenticated");
       if (!name) throw new Error("Name required");
       const bal = parseFloat(initialBalance) || 0;
-      const typeStr = accountCategory === "propfirm"
+      let typeStr = accountCategory === "propfirm"
         ? `Prop Firm${dailyDrawdown ? ` | DD:${dailyDrawdown}%` : ""}${maxDrawdown ? ` | MaxDD:${maxDrawdown}%` : ""}${hasConsistency && consistencyValue ? ` | CS:${consistencyValue}%` : ""}`
         : "Broker";
+      // Append sync mode & MT5 info
+      typeStr += ` | Sync:${syncMode}`;
+      if ((syncMode === "mt5" || syncMode === "both") && mt5Server) {
+        typeStr += ` | MT5:${mt5Server}/${mt5Login}`;
+      }
       const { error } = await supabase.from("accounts").insert({
         user_id: user.id, name, initial_balance: bal, current_balance: bal, account_type: typeStr,
       });
@@ -64,7 +73,9 @@ const Accounts = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       toast.success("Account created.");
-      setName(""); setInitialBalance(""); setAccountCategory("broker"); setDailyDrawdown(""); setMaxDrawdown(""); setHasConsistency(false); setConsistencyValue(""); setOpen(false);
+      setName(""); setInitialBalance(""); setAccountCategory("broker"); setSyncMode("manual");
+      setMt5Server(""); setMt5Login(""); setMt5Password("");
+      setDailyDrawdown(""); setMaxDrawdown(""); setHasConsistency(false); setConsistencyValue(""); setOpen(false);
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -102,7 +113,6 @@ const Accounts = () => {
       ? (tradesWithRR.reduce((s, t) => { const r = Math.abs(Number(t.entry_price) - Number(t.stop_loss)); const rw = Math.abs(Number(t.take_profit) - Number(t.entry_price)); return s + (r > 0 ? rw / r : 0); }, 0) / tradesWithRR.length).toFixed(2)
       : "—";
 
-    // Equity curve for this account
     let eq = Number(selectedAccount.initial_balance);
     const sortedTrades = [...accountTrades].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     const eqData = sortedTrades.map((t) => {
@@ -110,20 +120,24 @@ const Accounts = () => {
       return { date: format(new Date(t.created_at), "MMM dd"), equity: eq };
     });
 
-    // Parse prop firm info
     const isPropFirm = selectedAccount.account_type?.startsWith("Prop Firm");
     const ddMatch = selectedAccount.account_type?.match(/DD:([\d.]+)%/);
     const maxDDMatch = selectedAccount.account_type?.match(/MaxDD:([\d.]+)%/);
+    const syncMatch = selectedAccount.account_type?.match(/Sync:(\w+)/);
     const accDailyDD = ddMatch ? parseFloat(ddMatch[1]) : null;
     const accMaxDD = maxDDMatch ? parseFloat(maxDDMatch[1]) : null;
+    const accSyncMode = syncMatch?.[1] || "manual";
 
     return (
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button onClick={() => setSearchParams({})} className="text-muted-foreground hover:text-foreground transition-colors"><ArrowLeft className="h-5 w-5" /></button>
-          <div>
-            <h1 className="text-2xl font-bold">{selectedAccount.name}</h1>
-            {selectedAccount.account_type && <p className="text-sm text-muted-foreground">{selectedAccount.account_type}</p>}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold truncate">{selectedAccount.name}</h1>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {selectedAccount.account_type && <span className="text-xs text-muted-foreground">{selectedAccount.account_type.split("|")[0]?.trim()}</span>}
+              {accSyncMode !== "manual" && <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1"><RefreshCw className="h-3 w-3" /> MT5 {accSyncMode === "both" ? "+ Manual" : "Auto"}</span>}
+            </div>
           </div>
         </div>
 
@@ -138,17 +152,16 @@ const Accounts = () => {
             { label: "Avg Profit", value: `$${avgProfit.toFixed(2)}`, icon: TrendingUp, color: "text-success" },
             { label: "Avg Loss", value: `$${avgLoss.toFixed(2)}`, icon: AlertTriangle, color: "text-destructive" },
           ].map((s, i) => (
-            <motion.div key={s.label} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} className="rounded-lg border border-border bg-card p-4 card-glow">
+            <motion.div key={s.label} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} className="rounded-lg border border-border bg-card p-3 sm:p-4 card-glow">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
                 <s.icon className={`h-3.5 w-3.5 ${s.color}`} />
               </div>
-              <div className="font-mono text-lg font-bold">{s.value}</div>
+              <div className="font-mono text-base sm:text-lg font-bold">{s.value}</div>
             </motion.div>
           ))}
         </div>
 
-        {/* Prop Firm Tracker */}
         {isPropFirm && (accDailyDD || accMaxDD) && (
           <div className="rounded-lg border border-border bg-card p-5 card-glow">
             <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive" /> Prop Firm Limits</h3>
@@ -180,7 +193,6 @@ const Accounts = () => {
           </div>
         )}
 
-        {/* Equity Curve */}
         {eqData.length > 1 && (
           <div className="rounded-lg border border-border bg-card p-5 card-glow">
             <h3 className="text-sm font-semibold mb-4">Equity Curve</h3>
@@ -201,7 +213,7 @@ const Accounts = () => {
         <div>
           <h2 className="text-lg font-semibold mb-3">Trade History</h2>
           {accountTrades.length > 0 ? (
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="rounded-lg border border-border bg-card overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-muted-foreground text-xs uppercase tracking-wider">
@@ -233,16 +245,16 @@ const Accounts = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Accounts</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Accounts</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage your trading accounts</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90"><Plus className="mr-2 h-4 w-4" /> New Account</Button>
           </DialogTrigger>
-          <DialogContent className="bg-card border-border max-w-sm">
+          <DialogContent className="bg-card border-border max-w-sm max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Create Account</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div><label className="text-xs text-muted-foreground mb-1 block">Account Name *</label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Trading Account" className="bg-background border-border" /></div>
@@ -258,6 +270,34 @@ const Accounts = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Sync Mode */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Trade Sync Mode *</label>
+                <Select value={syncMode} onValueChange={(v: "manual" | "mt5" | "both") => setSyncMode(v)}>
+                  <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="manual">Manual Only</SelectItem>
+                    <SelectItem value="mt5">MT5 Auto Sync</SelectItem>
+                    <SelectItem value="both">Both (MT5 + Manual)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <AnimatePresence>
+                {(syncMode === "mt5" || syncMode === "both") && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-3 overflow-hidden">
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+                      <p className="text-xs text-muted-foreground mb-2">Enter your MT5 credentials to auto-sync trades</p>
+                      <div className="space-y-2">
+                        <Input value={mt5Server} onChange={(e) => setMt5Server(e.target.value)} placeholder="Server (e.g. ICMarkets-Demo)" className="bg-background border-border font-mono text-xs" />
+                        <Input value={mt5Login} onChange={(e) => setMt5Login(e.target.value)} placeholder="Login ID" className="bg-background border-border font-mono text-xs" />
+                        <Input value={mt5Password} onChange={(e) => setMt5Password(e.target.value)} placeholder="Investor Password (read-only)" type="password" className="bg-background border-border font-mono text-xs" />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <AnimatePresence>
                 {accountCategory === "propfirm" && (
@@ -294,6 +334,8 @@ const Accounts = () => {
             const w = accTrades.filter((t) => t.result === "win").length;
             const wr = accTrades.length > 0 ? ((w / accTrades.length) * 100).toFixed(0) : "0";
             const totalLots = accTrades.reduce((s, t) => s + (Number(t.lot_size) || 0), 0);
+            const syncMatch = acc.account_type?.match(/Sync:(\w+)/);
+            const hasMt5 = syncMatch && syncMatch[1] !== "manual";
             return (
               <motion.div
                 key={acc.id}
@@ -304,9 +346,12 @@ const Accounts = () => {
                 className="rounded-lg border border-border bg-card p-5 card-glow group hover:divine-border transition-all duration-300 cursor-pointer"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold group-hover:text-primary transition-colors">{acc.name}</h3>
-                    {acc.account_type && <span className="text-xs text-muted-foreground">{acc.account_type?.split("|")[0]?.trim()}</span>}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold group-hover:text-primary transition-colors truncate">{acc.name}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {acc.account_type && <span className="text-xs text-muted-foreground">{acc.account_type?.split("|")[0]?.trim()}</span>}
+                      {hasMt5 && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full flex items-center gap-0.5"><RefreshCw className="h-2.5 w-2.5" /> MT5</span>}
+                    </div>
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); deleteAccount.mutate(acc.id); }} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-4 w-4" /></button>
                 </div>

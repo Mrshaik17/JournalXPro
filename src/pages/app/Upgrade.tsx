@@ -14,6 +14,13 @@ const plans = [
   { id: "elite", name: "Elite", icon: Star, features: ["Unlimited trades", "10 Accounts", "Unlimited MT5 Sync", "Advanced Analytics", "Dedicated Support"] },
 ];
 
+// Generate a unique referral code from user email
+const generateReferralCode = (email: string) => {
+  const base = email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6);
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `${base}${rand}`;
+};
+
 const Upgrade = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -56,21 +63,35 @@ const Upgrade = () => {
     enabled: !!user,
   });
 
-  // Referral data
+  // Check referral enabled
+  const getSetting = (key: string): any => {
+    const s = siteSettings.find((s: any) => s.key === key);
+    return s?.value || {};
+  };
+
+  const referralEnabled = getSetting("referral_toggle")?.enabled !== false;
+
+  // Generate user's unique referral code
+  const userReferralCode = profile?.email ? generateReferralCode(profile.email) : "";
+
+  // Referral data - users who used a code that starts with this user's email prefix
   const { data: referredUsers = [] } = useQuery({
-    queryKey: ["my-referrals", user?.id],
+    queryKey: ["my-referrals", user?.id, profile?.email],
     queryFn: async () => {
       if (!profile?.email) return [];
-      // Find referral code for this user (check if user has a code or referred others)
-      const { data } = await supabase.from("profiles").select("id, email, plan, created_at").eq("referral_code_used", profile.email.split("@")[0].toUpperCase());
-      return data || [];
+      // Find users who used any code that references this user
+      const emailPrefix = profile.email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6);
+      const { data } = await supabase.from("profiles").select("id, email, plan, created_at, referral_code_used")
+        .not("id", "eq", user!.id);
+      // Filter those whose referral_code_used starts with this user's prefix
+      return (data || []).filter((u: any) => u.referral_code_used && u.referral_code_used.startsWith(emailPrefix));
     },
     enabled: !!profile,
   });
 
   // Calculate referral points
   const referralPoints = (() => {
-    let points = referredUsers.length * 10; // 10 per signup
+    let points = referredUsers.length * 10;
     referredUsers.forEach((u: any) => {
       if (u.plan === "pro") points += 20;
       else if (u.plan === "pro_plus") points += 30;
@@ -78,11 +99,6 @@ const Upgrade = () => {
     });
     return points;
   })();
-
-  const getSetting = (key: string): any => {
-    const s = siteSettings.find((s: any) => s.key === key);
-    return s?.value || {};
-  };
 
   const pricing = getSetting("pricing");
   const paymentSettings = getSetting("payment_settings");
@@ -100,7 +116,7 @@ const Upgrade = () => {
     const base = getPrice(planId);
     if (usePoints && referralPoints >= pointsForFreePlan) return 0;
     if (usePoints) {
-      const discount = (referralPoints / 2) / inrRate; // 2 points = ₹1
+      const discount = (referralPoints / 2) / inrRate;
       return Math.max(base - discount, 0);
     }
     return base;
@@ -108,6 +124,7 @@ const Upgrade = () => {
 
   const maskEmail = (email: string) => {
     const [name, domain] = email.split("@");
+    if (!name || !domain) return "***@***.com";
     if (name.length <= 2) return `${name[0]}***@${domain}`;
     return `${name.slice(0, 2)}***@${domain}`;
   };
@@ -141,7 +158,6 @@ const Upgrade = () => {
       });
       if (error) throw error;
 
-      // If paid with points (free plan), activate immediately
       if (finalAmount === 0) {
         await supabase.from("profiles").update({ plan: selectedPlan }).eq("id", user!.id);
       }
@@ -162,7 +178,7 @@ const Upgrade = () => {
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="text-2xl font-bold">Upgrade Plan</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">Upgrade Plan</h1>
         <p className="text-sm text-muted-foreground mt-1">Current plan: <span className="text-primary font-semibold capitalize">{profile?.plan || "free"}</span></p>
       </div>
 
@@ -207,14 +223,13 @@ const Upgrade = () => {
       </div>
 
       {selectedPlan && !hasPendingPayment && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-card p-6 space-y-5">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-card p-4 sm:p-6 space-y-5">
           <h2 className="text-lg font-semibold">Complete Payment</h2>
 
-          {/* Points or Coupon toggle */}
           {referralPoints > 0 && (
-            <div className="flex items-center gap-4 p-3 rounded-lg border border-border bg-background">
-              <Gift className="h-5 w-5 text-primary" />
-              <div className="flex-1">
+            <div className="flex items-center gap-4 p-3 rounded-lg border border-border bg-background flex-wrap">
+              <Gift className="h-5 w-5 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">You have <span className="text-primary font-mono">{referralPoints}</span> referral points</p>
                 <p className="text-xs text-muted-foreground">{referralPoints >= pointsForFreePlan ? "Enough for a free month!" : `${pointsForFreePlan - referralPoints} more needed for free plan`}</p>
               </div>
@@ -240,7 +255,7 @@ const Upgrade = () => {
             <>
               <div>
                 <label className="text-xs text-muted-foreground block mb-2">Payment Method</label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {["upi", "gpay", "crypto"].map((m) => (
                     <button key={m} onClick={() => setPaymentMethod(m)} className={`px-4 py-2 rounded-md text-sm font-medium border transition-all ${paymentMethod === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:border-muted-foreground/30"}`}>
                       {m === "upi" ? "UPI" : m === "gpay" ? "GPay/PhonePe" : "Crypto"}
@@ -251,13 +266,13 @@ const Upgrade = () => {
               <div className="rounded-md border border-border bg-background p-4 space-y-2">
                 <p className="text-xs text-muted-foreground">Send <span className="text-primary font-mono font-bold">${getDiscountedPrice(selectedPlan).toFixed(2)} (≈₹{Math.round(getDiscountedPrice(selectedPlan) * inrRate)})</span> to:</p>
                 {paymentMethod === "upi" && paymentSettings.upi_id && (
-                  <div className="flex items-center justify-between"><span className="font-mono text-sm">{paymentSettings.upi_id}</span><Button size="sm" variant="ghost" onClick={() => copyToClipboard(paymentSettings.upi_id)}><Copy className="h-3.5 w-3.5" /></Button></div>
+                  <div className="flex items-center justify-between"><span className="font-mono text-sm break-all">{paymentSettings.upi_id}</span><Button size="sm" variant="ghost" onClick={() => copyToClipboard(paymentSettings.upi_id)}><Copy className="h-3.5 w-3.5" /></Button></div>
                 )}
                 {paymentMethod === "gpay" && paymentSettings.phone_number && (
                   <div className="flex items-center justify-between"><span className="font-mono text-sm">{paymentSettings.phone_number}</span><Button size="sm" variant="ghost" onClick={() => copyToClipboard(paymentSettings.phone_number)}><Copy className="h-3.5 w-3.5" /></Button></div>
                 )}
                 {paymentMethod === "crypto" && paymentSettings.crypto_wallet && (
-                  <div className="flex items-center justify-between"><span className="font-mono text-sm text-xs break-all">{paymentSettings.crypto_wallet}</span><Button size="sm" variant="ghost" onClick={() => copyToClipboard(paymentSettings.crypto_wallet)}><Copy className="h-3.5 w-3.5" /></Button></div>
+                  <div className="flex items-center justify-between"><span className="font-mono text-xs break-all">{paymentSettings.crypto_wallet}</span><Button size="sm" variant="ghost" onClick={() => copyToClipboard(paymentSettings.crypto_wallet)}><Copy className="h-3.5 w-3.5" /></Button></div>
                 )}
                 {!paymentSettings.upi_id && !paymentSettings.phone_number && !paymentSettings.crypto_wallet && (
                   <p className="text-sm text-muted-foreground">Payment details not configured yet. Contact support.</p>
@@ -268,7 +283,7 @@ const Upgrade = () => {
                 <label className="text-xs text-muted-foreground block mb-1">Payment Screenshot (optional)</label>
                 <label className="flex items-center gap-2 px-4 py-3 rounded-md border border-dashed border-border bg-background cursor-pointer hover:border-muted-foreground/30 transition-colors">
                   <Upload className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{screenshotFile ? screenshotFile.name : "Click to upload"}</span>
+                  <span className="text-sm text-muted-foreground truncate">{screenshotFile ? screenshotFile.name : "Click to upload"}</span>
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
                 </label>
               </div>
@@ -286,7 +301,7 @@ const Upgrade = () => {
           <h3 className="text-sm font-semibold mb-3">Payment History</h3>
           <div className="space-y-2">
             {myPayments.map((p) => (
-              <div key={p.id} className="flex items-center justify-between p-3 rounded border border-border bg-background">
+              <div key={p.id} className="flex items-center justify-between p-3 rounded border border-border bg-background flex-wrap gap-2">
                 <div><span className="font-mono text-sm">${Number(p.amount).toFixed(2)}</span><span className="text-xs text-muted-foreground ml-2">{p.method}</span></div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-mono text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</span>
@@ -299,51 +314,53 @@ const Upgrade = () => {
       )}
 
       {/* Referral Section */}
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> Referral Program</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="rounded-lg border border-border bg-background p-4 text-center">
-            <div className="text-2xl font-bold font-mono text-primary">{referredUsers.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Total Referrals</p>
-          </div>
-          <div className="rounded-lg border border-border bg-background p-4 text-center">
-            <div className="text-2xl font-bold font-mono text-primary">{referralPoints}</div>
-            <p className="text-xs text-muted-foreground mt-1">Total Points</p>
-          </div>
-          <div className="rounded-lg border border-border bg-background p-4 text-center">
-            <div className="text-2xl font-bold font-mono text-success">₹{(referralPoints / 2).toFixed(0)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Points Value (2pts = ₹1)</p>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-background p-4 mb-4">
-          <p className="text-sm mb-2"><span className="text-primary font-semibold">{pointsForFreePlan} points</span> = 1 month free plan</p>
-          <p className="text-xs text-muted-foreground">Share your referral code with friends. Earn 10 points per signup, +20/30/50 when they upgrade!</p>
-          <div className="flex items-center gap-2 mt-3">
-            <Input value={profile?.email?.split("@")[0]?.toUpperCase() || ""} readOnly className="bg-card border-border font-mono text-sm" />
-            <Button size="sm" variant="outline" onClick={() => copyToClipboard(profile?.email?.split("@")[0]?.toUpperCase() || "")}>
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        {referredUsers.length > 0 && (
-          <div>
-            <h4 className="text-sm font-semibold mb-2">Your Referrals</h4>
-            <div className="space-y-1.5">
-              {referredUsers.map((u: any) => (
-                <div key={u.id} className="flex items-center justify-between p-2 rounded border border-border bg-background text-xs">
-                  <span className="font-mono">{maskEmail(u.email || "user@email.com")}</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-full ${u.plan !== "free" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{u.plan}</span>
-                    <span className="text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              ))}
+      {referralEnabled && (
+        <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> Referral Program</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="rounded-lg border border-border bg-background p-4 text-center">
+              <div className="text-2xl font-bold font-mono text-primary">{referredUsers.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total Referrals</p>
+            </div>
+            <div className="rounded-lg border border-border bg-background p-4 text-center">
+              <div className="text-2xl font-bold font-mono text-primary">{referralPoints}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total Points</p>
+            </div>
+            <div className="rounded-lg border border-border bg-background p-4 text-center">
+              <div className="text-2xl font-bold font-mono text-success">₹{(referralPoints / 2).toFixed(0)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Points Value (2pts = ₹1)</p>
             </div>
           </div>
-        )}
-      </div>
+
+          <div className="rounded-lg border border-border bg-background p-4 mb-4">
+            <p className="text-sm mb-2"><span className="text-primary font-semibold">{pointsForFreePlan} points</span> = 1 month free plan</p>
+            <p className="text-xs text-muted-foreground">Share your unique referral code with friends. Earn 10 points per signup, +20/30/50 when they upgrade!</p>
+            <div className="flex items-center gap-2 mt-3">
+              <Input value={userReferralCode} readOnly className="bg-card border-border font-mono text-sm" />
+              <Button size="sm" variant="outline" onClick={() => copyToClipboard(userReferralCode)}>
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          {referredUsers.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Your Referrals</h4>
+              <div className="space-y-1.5">
+                {referredUsers.map((u: any) => (
+                  <div key={u.id} className="flex items-center justify-between p-2 rounded border border-border bg-background text-xs flex-wrap gap-1">
+                    <span className="font-mono">{maskEmail(u.email || "user@email.com")}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full ${u.plan !== "free" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{u.plan}</span>
+                      <span className="text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
