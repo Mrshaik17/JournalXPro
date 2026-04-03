@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import {
   BookOpen, Wallet, Target, BarChart3, Calculator,
-  Building2, History, Coins, Link2, Brain
+  Building2, History, Coins, Link2, Brain, Check, X
 } from "lucide-react";
 
 const features = [
@@ -15,6 +15,21 @@ const features = [
   { icon: Brain, title: "AI Insights", desc: "AI-powered analysis: best hours, streak detection, discipline scoring.", badge: "Elite" },
   { icon: History, title: "Backtesting Tool", desc: "Test strategies against historical data.", badge: "Coming Soon" },
   { icon: Coins, title: "Crypto Payments", desc: "Pay with cryptocurrency for your subscription.", badge: null },
+];
+
+const comparisonRows = [
+  { feature: "Trade Journaling", us: true, them: true },
+  { feature: "Multiple Accounts", us: true, them: true },
+  { feature: "JournalX Score (Discipline)", us: true, them: false },
+  { feature: "Custom Fields", us: true, them: false },
+  { feature: "MT5 Auto Sync", us: true, them: true },
+  { feature: "AI Trade Analysis", us: true, them: true },
+  { feature: "Screenshot Uploads (2/trade)", us: true, them: false },
+  { feature: "Indian Payment (UPI)", us: true, them: false },
+  { feature: "Affordable Pricing", us: true, them: false },
+  { feature: "Priority Support", us: true, them: false },
+  { feature: "Prop Firm Drawdown Tracker", us: true, them: false },
+  { feature: "Referral Rewards System", us: true, them: false },
 ];
 
 export const FeaturesSection = () => {
@@ -34,7 +49,7 @@ export const FeaturesSection = () => {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {features.map((feature, i) => (
             <motion.div
               key={feature.title}
@@ -56,36 +71,37 @@ export const FeaturesSection = () => {
           ))}
         </div>
 
-        {/* Comparison */}
+        {/* Comparison Table */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           className="mt-20 max-w-2xl mx-auto"
         >
-          <h3 className="text-2xl font-bold text-center mb-8">Why JournalXPro?</h3>
+          <h3 className="text-2xl md:text-3xl font-bold text-center mb-3">Why Choose Us?</h3>
+          <p className="text-center text-muted-foreground mb-8">
+            Starting at just <span className="text-primary font-bold">₹350/$3.5</span>/month vs Others charging <span className="text-destructive line-through font-bold">₹2000+</span>
+          </p>
           <div className="rounded-lg border border-border bg-card overflow-hidden">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-border bg-muted/30">
-                <th className="text-left p-4 text-muted-foreground">Feature</th>
-                <th className="text-center p-4 text-primary font-bold">JournalXPro</th>
-                <th className="text-center p-4 text-muted-foreground">Others</th>
+                <th className="text-left p-4 text-muted-foreground uppercase text-xs tracking-wider">Feature</th>
+                <th className="text-center p-4 text-primary font-bold uppercase text-xs tracking-wider">JournalXPro</th>
+                <th className="text-center p-4 text-muted-foreground uppercase text-xs tracking-wider">Others</th>
               </tr></thead>
               <tbody>
-                {[
-                  ["Starting Price", "₹400/mo", "₹2000+/mo"],
-                  ["MT5 Auto Sync", "✓", "Limited"],
-                  ["AI Insights", "✓ (Elite)", "Extra cost"],
-                  ["Prop Firm Tools", "✓ Built-in", "✗"],
-                  ["Trade Photos", "✓ (2 per trade)", "✗"],
-                  ["Custom Fields", "✓ Unlimited", "Limited"],
-                ].map(([feat, us, them], i) => (
+                {comparisonRows.map((row, i) => (
                   <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/10 transition-colors">
-                    <td className="p-4 text-foreground">{feat}</td>
-                    <td className="p-4 text-center text-primary font-medium">{us}</td>
-                    <td className="p-4 text-center text-muted-foreground">{them}</td>
+                    <td className="p-4 text-foreground font-medium">{row.feature}</td>
+                    <td className="p-4 text-center">{row.us ? <Check className="h-4 w-4 text-primary mx-auto" /> : <X className="h-4 w-4 text-destructive mx-auto" />}</td>
+                    <td className="p-4 text-center">{row.them ? <Check className="h-4 w-4 text-muted-foreground mx-auto" /> : <X className="h-4 w-4 text-destructive mx-auto" />}</td>
                   </tr>
                 ))}
+                <tr className="bg-primary/5">
+                  <td className="p-4 font-bold text-foreground">Monthly Price</td>
+                  <td className="p-4 text-center font-bold text-primary">₹350</td>
+                  <td className="p-4 text-center text-muted-foreground">₹2000+</td>
+                </tr>
               </tbody>
             </table>
           </div>
