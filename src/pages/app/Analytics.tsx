@@ -229,11 +229,12 @@ const Analytics = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: "Total Trades", value: String(totalTrades) },
-              { label: "Best Trade", value: `$${bestTrade.toFixed(2)}` },
-              { label: "Worst Trade", value: `$${worstTrade.toFixed(2)}` },
-              { label: `${streakType === "win" ? "Win" : "Loss"} Streak`, value: String(currentStreak) },
-            ].map((s) => (
-              <div key={s.label} className="rounded-lg border border-border bg-card p-3 card-glow">
+              { label: "Best Trade", value: `$${bestTrade.toFixed(2)}`, locked: isFree },
+              { label: "Worst Trade", value: `$${worstTrade.toFixed(2)}`, locked: isFree },
+              { label: `${streakType === "win" ? "Win" : "Loss"} Streak`, value: String(currentStreak), locked: isFree },
+            ].map((s: any) => (
+              <div key={s.label} className={`rounded-lg border border-border bg-card p-3 card-glow relative ${s.locked ? "overflow-hidden" : ""}`}>
+                {s.locked && <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg"><Lock className="h-4 w-4 text-muted-foreground" /><span className="text-[9px] text-muted-foreground mt-1">Upgrade</span></div>}
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{s.label}</span>
                 <div className="font-mono text-sm font-bold">{s.value}</div>
               </div>
@@ -276,9 +277,10 @@ const Analytics = () => {
             </div>
           </div>
 
-          {/* Equity Curve */}
-          <div className="rounded-lg border border-border bg-card p-5 card-glow">
-            <h3 className="text-sm font-semibold mb-4">Equity Curve</h3>
+          {/* Equity Curve - locked for free */}
+          <div className="rounded-lg border border-border bg-card p-5 card-glow relative overflow-hidden">
+            {isFree && <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg"><Lock className="h-6 w-6 text-muted-foreground mb-1" /><span className="text-xs text-muted-foreground">Upgrade to unlock Equity Curve</span><a href="/app/upgrade" className="text-[10px] text-primary underline mt-1">View Plans →</a></div>}
+            <h3 className="text-sm font-semibold mb-4">Equity Curve {isFree && "🔒"}</h3>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={equityData}>
