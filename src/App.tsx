@@ -22,6 +22,7 @@ import Calendar from "./pages/app/Calendar";
 import PropFirms from "./pages/app/PropFirms";
 import AppSettings from "./pages/app/AppSettings";
 import Upgrade from "./pages/app/Upgrade";
+import Payouts from "./pages/app/Payouts";
 import Admin from "./pages/admin/Admin";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
@@ -51,6 +52,7 @@ const App = () => (
                 <Route path="calendar" element={<Calendar />} />
                 <Route path="prop-firms" element={<PropFirms />} />
                 <Route path="upgrade" element={<Upgrade />} />
+                <Route path="payouts" element={<Payouts />} />
                 <Route path="settings" element={<AppSettings />} />
               </Route>
               <Route path="/admin1709" element={<Admin />} />

@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, BookOpen, Wallet, BarChart3,
-  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays, Newspaper
+  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays, Newspaper, DollarSign
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
@@ -26,6 +26,7 @@ const navItems = [
   { title: "News", url: "/app/news", icon: Newspaper },
   { title: "Calendar", url: "/app/calendar", icon: CalendarDays },
   { title: "Prop Firms", url: "/app/prop-firms", icon: Building2 },
+  { title: "Payouts", url: "/app/payouts", icon: DollarSign },
   { title: "Upgrade", url: "/app/upgrade", icon: Crown },
   { title: "Settings", url: "/app/settings", icon: Settings },
 ];

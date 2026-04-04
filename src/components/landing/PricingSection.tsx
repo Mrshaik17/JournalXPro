@@ -23,9 +23,9 @@ export const PricingSection = () => {
   const pricing = getSetting("pricing");
   const inrRate = getSetting("inr_rate")?.rate || 83.5;
 
-  const proPriceUsd = pricing.pro || 5;
-  const proPlusPriceUsd = pricing.pro_plus || 10;
-  const elitePriceUsd = pricing.elite || 14;
+  const proPriceUsd = pricing.pro || 4;
+  const proPlusPriceUsd = pricing.pro_plus || 7;
+  const elitePriceUsd = pricing.elite || 10;
 
   const plans = [
     {
@@ -40,25 +40,25 @@ export const PricingSection = () => {
       highlight: false,
     },
     {
-      name: "Pro",
+      name: "Basic",
       priceInr: Math.round(proPriceUsd * inrRate),
       priceUsd: proPriceUsd,
       period: "/month",
-      yearlyInr: Math.round(proPriceUsd * inrRate * 12 * 0.85),
+      yearlyInr: Math.round(proPriceUsd * inrRate * 12 * 0.80),
       trades: "70 trades/month",
       features: ["3 Accounts", "JournalX Score", "Tag Insights", "Export to Excel", "Download enabled", "1-year data retention"],
-      cta: "Upgrade to Pro",
+      cta: "Get Started",
       highlight: false,
     },
     {
-      name: "Pro+",
+      name: "Standard",
       priceInr: Math.round(proPlusPriceUsd * inrRate),
       priceUsd: proPlusPriceUsd,
       period: "/month",
-      yearlyInr: Math.round(proPlusPriceUsd * inrRate * 12 * 0.85),
+      yearlyInr: Math.round(proPlusPriceUsd * inrRate * 12 * 0.80),
       trades: "150 trades + MT5 Sync",
-      features: ["7 Accounts", "Everything in Pro", "MT5 Auto Sync (50 limit)", "AI Insights", "Performance Breakdown", "Priority Support"],
-      cta: "Go Pro+",
+      features: ["7 Accounts", "Everything in Basic", "MT5 Auto Sync (50)", "AI Insights", "Payout Tracker", "Priority Support"],
+      cta: "Upgrade Now",
       highlight: true,
     },
     {
@@ -66,9 +66,9 @@ export const PricingSection = () => {
       priceInr: Math.round(elitePriceUsd * inrRate),
       priceUsd: elitePriceUsd,
       period: "/month",
-      yearlyInr: Math.round(elitePriceUsd * inrRate * 12 * 0.85),
+      yearlyInr: Math.round(elitePriceUsd * inrRate * 12 * 0.80),
       trades: "Unlimited + AI",
-      features: ["10 Accounts", "Everything in Pro+", "Unlimited MT5 Sync", "AI Trade Analysis", "Prop Firm Tracker", "Monthly Reports"],
+      features: ["10 Accounts", "Everything in Standard", "Unlimited MT5 Sync", "AI Trade Analysis", "Prop Firm Tracker", "Monthly Reports"],
       cta: "Go Elite",
       highlight: false,
     },
