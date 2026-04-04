@@ -30,7 +30,9 @@ const Analytics = () => {
   });
 
   const plan = profile?.plan || "free";
+  const isFree = plan === "free";
   const isPro = plan === "pro" || plan === "pro_plus" || plan === "elite";
+  const isProPlus = plan === "pro_plus" || plan === "elite";
   const isElite = plan === "elite";
 
   const wins = trades.filter((t) => t.result === "win").length;

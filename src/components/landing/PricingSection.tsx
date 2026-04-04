@@ -23,9 +23,9 @@ export const PricingSection = () => {
   const pricing = getSetting("pricing");
   const inrRate = getSetting("inr_rate")?.rate || 83.5;
 
-  const proPriceUsd = pricing.pro || 5;
-  const proPlusPriceUsd = pricing.pro_plus || 10;
-  const elitePriceUsd = pricing.elite || 14;
+  const proPriceUsd = pricing.pro || 4;
+  const proPlusPriceUsd = pricing.pro_plus || 7;
+  const elitePriceUsd = pricing.elite || 10;
 
   const plans = [
     {
