@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, BookOpen, Wallet, BarChart3,
-  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays, Newspaper
+  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays, Newspaper, DollarSign
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
