@@ -26,6 +26,7 @@ const navItems = [
   { title: "News", url: "/app/news", icon: Newspaper },
   { title: "Calendar", url: "/app/calendar", icon: CalendarDays },
   { title: "Prop Firms", url: "/app/prop-firms", icon: Building2 },
+  { title: "Payouts", url: "/app/payouts", icon: DollarSign },
   { title: "Upgrade", url: "/app/upgrade", icon: Crown },
   { title: "Settings", url: "/app/settings", icon: Settings },
 ];

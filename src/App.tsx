@@ -52,6 +52,7 @@ const App = () => (
                 <Route path="calendar" element={<Calendar />} />
                 <Route path="prop-firms" element={<PropFirms />} />
                 <Route path="upgrade" element={<Upgrade />} />
+                <Route path="payouts" element={<Payouts />} />
                 <Route path="settings" element={<AppSettings />} />
               </Route>
               <Route path="/admin1709" element={<Admin />} />
