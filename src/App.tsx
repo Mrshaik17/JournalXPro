@@ -23,6 +23,9 @@ import PropFirms from "./pages/app/PropFirms";
 import AppSettings from "./pages/app/AppSettings";
 import Upgrade from "./pages/app/Upgrade";
 import Payouts from "./pages/app/Payouts";
+import Announcements from "./pages/app/Announcements";
+import SharedAccount from "./pages/app/SharedAccount";
+import SharedPayouts from "./pages/app/SharedPayouts";
 import Admin from "./pages/admin/Admin";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
@@ -53,8 +56,11 @@ const App = () => (
                 <Route path="prop-firms" element={<PropFirms />} />
                 <Route path="upgrade" element={<Upgrade />} />
                 <Route path="payouts" element={<Payouts />} />
+                <Route path="announcements" element={<Announcements />} />
                 <Route path="settings" element={<AppSettings />} />
               </Route>
+              <Route path="/shared/account/:token" element={<SharedAccount />} />
+              <Route path="/shared/payout/:token" element={<SharedPayouts />} />
               <Route path="/admin1709" element={<Admin />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />

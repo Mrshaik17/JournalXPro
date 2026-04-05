@@ -33,17 +33,54 @@ const sidebarItems: { key: AdminSection; label: string; icon: any }[] = [
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
+const ADMIN_EMAIL = "shaiktouheed17@gmail.com";
+const ADMIN_PASSWORD = "$Haik098@";
+
 const Admin = () => {
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<AdminSection>("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [pendingNotif, setPendingNotif] = useState(0);
   const [chatNotif, setChatNotif] = useState(0);
+  const [isAuthed, setIsAuthed] = useState(() => sessionStorage.getItem("admin_authed") === "true");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
+  const handleAdminLogin = () => {
+    if (loginEmail === ADMIN_EMAIL && loginPassword === ADMIN_PASSWORD) {
+      sessionStorage.setItem("admin_authed", "true");
+      setIsAuthed(true);
+      setLoginError("");
+    } else {
+      setLoginError("Invalid credentials.");
+    }
+  };
 
   const handleAdminLogout = () => {
     sessionStorage.removeItem("admin_authed");
-    window.location.reload();
+    setIsAuthed(false);
   };
+
+  if (!isAuthed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm p-6 rounded-lg border border-border bg-card space-y-4">
+          <div className="text-center">
+            <Shield className="h-8 w-8 text-primary mx-auto mb-2" />
+            <h1 className="text-lg font-bold">Admin Login</h1>
+            <p className="text-xs text-muted-foreground">JournalXPro Admin Panel</p>
+          </div>
+          <div className="space-y-3">
+            <Input value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="Email" className="bg-background border-border" type="email" />
+            <Input value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Password" className="bg-background border-border" type="password" onKeyDown={(e) => e.key === "Enter" && handleAdminLogin()} />
+            {loginError && <p className="text-xs text-destructive">{loginError}</p>}
+            <Button onClick={handleAdminLogin} className="w-full">Login</Button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return <AdminDashboard queryClient={queryClient} activeSection={activeSection} setActiveSection={setActiveSection} collapsed={collapsed} setCollapsed={setCollapsed} pendingNotif={pendingNotif} setPendingNotif={setPendingNotif} chatNotif={chatNotif} setChatNotif={setChatNotif} handleAdminLogout={handleAdminLogout} />;
 };

@@ -1,10 +1,12 @@
 import {
   LayoutDashboard, BookOpen, Wallet, BarChart3,
-  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays, Newspaper, DollarSign
+  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays, Newspaper, DollarSign, Megaphone, Lock
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +29,7 @@ const navItems = [
   { title: "Calendar", url: "/app/calendar", icon: CalendarDays },
   { title: "Prop Firms", url: "/app/prop-firms", icon: Building2 },
   { title: "Payouts", url: "/app/payouts", icon: DollarSign },
+  { title: "Announcements", url: "/app/announcements", icon: Megaphone },
   { title: "Upgrade", url: "/app/upgrade", icon: Crown },
   { title: "Settings", url: "/app/settings", icon: Settings },
 ];
@@ -36,6 +39,14 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { signOut } = useAuth();
   const navigate = useNavigate();
+
+  const { data: announcements = [] } = useQuery({
+    queryKey: ["announcements-count"],
+    queryFn: async () => {
+      const { data } = await supabase.from("announcements").select("id").order("created_at", { ascending: false }).limit(5);
+      return data || [];
+    },
+  });
 
   const handleLogout = async () => {
     await signOut();
@@ -62,11 +73,25 @@ export function AppSidebar() {
                       activeClassName="bg-sidebar-accent text-primary font-medium"
                     >
                       <item.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
+                      {!collapsed && (
+                        <span className="flex items-center gap-2">
+                          {item.title}
+                          {item.title === "Announcements" && announcements.length > 0 && (
+                            <span className="h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">{announcements.length}</span>
+                          )}
+                        </span>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {/* Backtesting - Coming Soon */}
+              <SidebarMenuItem>
+                <SidebarMenuButton className="opacity-50 cursor-not-allowed">
+                  <Lock className="mr-2 h-4 w-4" />
+                  {!collapsed && <span className="flex items-center gap-2">Backtesting <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">Soon</span></span>}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
