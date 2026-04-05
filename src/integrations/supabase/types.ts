@@ -22,6 +22,7 @@ export type Database = {
           id: string
           initial_balance: number
           name: string
+          share_token: string | null
           updated_at: string
           user_id: string
         }
@@ -32,6 +33,7 @@ export type Database = {
           id?: string
           initial_balance?: number
           name: string
+          share_token?: string | null
           updated_at?: string
           user_id: string
         }
@@ -42,6 +44,7 @@ export type Database = {
           id?: string
           initial_balance?: number
           name?: string
+          share_token?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -172,6 +175,39 @@ export type Database = {
           screenshot_url?: string | null
           status?: string
           transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payouts: {
+        Row: {
+          company_name: string
+          created_at: string
+          id: string
+          payout_amount: number
+          received_date: string
+          screenshot_url: string | null
+          share_token: string | null
+          user_id: string
+        }
+        Insert: {
+          company_name: string
+          created_at?: string
+          id?: string
+          payout_amount?: number
+          received_date?: string
+          screenshot_url?: string | null
+          share_token?: string | null
+          user_id: string
+        }
+        Update: {
+          company_name?: string
+          created_at?: string
+          id?: string
+          payout_amount?: number
+          received_date?: string
+          screenshot_url?: string | null
+          share_token?: string | null
           user_id?: string
         }
         Relationships: []
