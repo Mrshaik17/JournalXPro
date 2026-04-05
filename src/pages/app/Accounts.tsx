@@ -128,6 +128,14 @@ const Accounts = () => {
     const accMaxDD = maxDDMatch ? parseFloat(maxDDMatch[1]) : null;
     const accSyncMode = syncMatch?.[1] || "manual";
 
+    const handleShareAccount = () => {
+      if (selectedAccount.share_token) {
+        const url = `${window.location.origin}/shared/account/${selectedAccount.share_token}`;
+        navigator.clipboard.writeText(url);
+        toast.success("Share link copied! Anyone with this link can view this account (read-only).");
+      }
+    };
+
     return (
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
         <div className="flex items-center gap-3 flex-wrap">
@@ -139,6 +147,7 @@ const Accounts = () => {
               {accSyncMode !== "manual" && <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1"><RefreshCw className="h-3 w-3" /> MT5 {accSyncMode === "both" ? "+ Manual" : "Auto"}</span>}
             </div>
           </div>
+          <Button variant="outline" size="sm" onClick={handleShareAccount}><Share2 className="h-4 w-4 mr-1" /> Share</Button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
