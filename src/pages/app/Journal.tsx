@@ -246,14 +246,14 @@ const Journal = () => {
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div><label className="text-xs text-muted-foreground mb-1 block">Pair</label><Input value={form.pair} onChange={(e) => setField("pair", e.target.value)} placeholder="EURUSD" className="bg-background border-border font-mono" /></div>
-        <div><label className="text-xs text-muted-foreground mb-1 block">Buy / Sell</label>
-          <Select value={form.direction} onValueChange={(v) => setField("direction", v)}>
-            <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Direction" /></SelectTrigger>
-            <SelectContent className="bg-card border-border"><SelectItem value="buy">Buy</SelectItem><SelectItem value="sell">Sell</SelectItem></SelectContent>
-          </Select>
-        </div>
+      <PairSelector value={form.pair} onChange={(v) => setField("pair", v)} />
+
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Buy / Sell</label>
+        <Select value={form.direction} onValueChange={(v) => setField("direction", v)}>
+          <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Direction" /></SelectTrigger>
+          <SelectContent className="bg-card border-border"><SelectItem value="buy">Buy</SelectItem><SelectItem value="sell">Sell</SelectItem></SelectContent>
+        </Select>
       </div>
 
       <div className="grid grid-cols-3 gap-2">

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Image, X, Download, Share2, Lock, Filter, TrendingUp, DollarSign, Calendar, Award } from "lucide-react";
+import { Plus, Image, X, Share2, Lock, Filter, TrendingUp, DollarSign, Calendar, Award, Link2 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -51,18 +51,13 @@ const Payouts = () => {
 
   const filtered = useMemo(() => {
     let result = [...payouts];
-    if (filterMonth !== "all") {
-      result = result.filter((p: any) => format(new Date(p.received_date), "yyyy-MM") === filterMonth);
-    }
-    if (filterCompany !== "all") {
-      result = result.filter((p: any) => p.company_name === filterCompany);
-    }
+    if (filterMonth !== "all") result = result.filter((p: any) => format(new Date(p.received_date), "yyyy-MM") === filterMonth);
+    if (filterCompany !== "all") result = result.filter((p: any) => p.company_name === filterCompany);
     if (sortBy === "amount") result.sort((a: any, b: any) => Number(b.payout_amount) - Number(a.payout_amount));
     else result.sort((a: any, b: any) => new Date(b.received_date).getTime() - new Date(a.received_date).getTime());
     return result;
   }, [payouts, filterMonth, filterCompany, sortBy]);
 
-  // Stats
   const totalPayouts = payouts.length;
   const totalProfit = payouts.reduce((s: number, p: any) => s + Number(p.payout_amount), 0);
   const avgMonthly = useMemo(() => {
@@ -74,7 +69,6 @@ const Payouts = () => {
     const year = new Date().getFullYear();
     return payouts.filter((p: any) => new Date(p.received_date).getFullYear() === year).reduce((s: number, p: any) => s + Number(p.payout_amount), 0);
   }, [payouts]);
-
   const months = useMemo(() => [...new Set(payouts.map((p: any) => format(new Date(p.received_date), "yyyy-MM")))].sort().reverse(), [payouts]);
 
   const handleScreenshot = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,10 +123,22 @@ const Payouts = () => {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["payouts"] }); toast.success("Deleted."); },
   });
 
-  const handleShare = () => {
-    const text = `💰 My JournalXPro Payouts\n\nTotal Payouts: ${totalPayouts}\nTotal Profit: $${totalProfit.toFixed(2)}\nYearly: $${yearlyProfit.toFixed(2)}\nAvg Monthly: $${avgMonthly.toFixed(2)}\n\n${filtered.slice(0, 5).map((p: any) => `${p.company_name}: $${Number(p.payout_amount).toFixed(2)} (${format(new Date(p.received_date), "MMM dd, yyyy")})`).join("\n")}`;
+  const handleShareAll = () => {
+    const text = `💰 My JournalXPro Payouts\n\nTotal Payouts: ${totalPayouts}\nTotal Profit: $${totalProfit.toFixed(2)}\nYearly: $${yearlyProfit.toFixed(2)}\nAvg Monthly: $${avgMonthly.toFixed(2)}\n\n${filtered.slice(0, 5).map((p: any) => `${p.company_name}: $${Number(p.payout_amount).toFixed(2)} (${format(new Date(p.received_date), "MMM dd, yyyy")})`).join("\n")}\n\n— JournalXPro`;
     navigator.clipboard.writeText(text);
     toast.success("Payout summary copied to clipboard!");
+  };
+
+  const handleShareSingle = (p: any) => {
+    if (p.share_token) {
+      const url = `${window.location.origin}/shared/payout/${p.share_token}`;
+      navigator.clipboard.writeText(url);
+      toast.success("Share link copied! Anyone can view this payout.");
+    } else {
+      const text = `💰 ${p.company_name}: +$${Number(p.payout_amount).toFixed(2)} (${format(new Date(p.received_date), "MMM dd, yyyy")})\n— JournalXPro`;
+      navigator.clipboard.writeText(text);
+      toast.success("Payout info copied!");
+    }
   };
 
   if (!canAccess) {
@@ -147,9 +153,7 @@ const Payouts = () => {
             <a href="/app/upgrade" className="text-primary text-sm mt-3 underline">View Plans →</a>
           </div>
           <div className="blur-md pointer-events-none">
-            <div className="grid grid-cols-4 gap-4 mb-8">
-              {[1,2,3,4].map(i => <div key={i} className="h-20 rounded-lg bg-muted" />)}
-            </div>
+            <div className="grid grid-cols-4 gap-4 mb-8">{[1,2,3,4].map(i => <div key={i} className="h-20 rounded-lg bg-muted" />)}</div>
             <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-24 rounded-lg bg-muted" />)}</div>
           </div>
         </div>
@@ -162,7 +166,7 @@ const Payouts = () => {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h1 className="text-2xl font-bold">Payout Tracker</h1><p className="text-sm text-muted-foreground mt-1">Track and share your trading payouts</p></div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleShare}><Share2 className="h-4 w-4 mr-1" /> Share</Button>
+          <Button variant="outline" size="sm" onClick={handleShareAll}><Share2 className="h-4 w-4 mr-1" /> Share All</Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button className="bg-primary text-primary-foreground hover:bg-primary/90"><Plus className="mr-2 h-4 w-4" /> Add Payout</Button></DialogTrigger>
             <DialogContent className="bg-card border-border max-w-sm">
@@ -242,13 +246,16 @@ const Payouts = () => {
       {filtered.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((p: any, i: number) => (
-            <motion.div key={p.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className="rounded-lg border border-border bg-card p-4 card-glow group hover:divine-border transition-all duration-300">
+            <motion.div key={p.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className="rounded-lg border border-border bg-card p-4 card-glow group hover:divine-border transition-all duration-300 relative">
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="font-semibold text-sm group-hover:text-primary transition-colors">{p.company_name}</h3>
                   <span className="text-xs text-muted-foreground font-mono">{format(new Date(p.received_date), "MMM dd, yyyy")}</span>
                 </div>
-                <button onClick={() => deletePayout.mutate(p.id)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => handleShareSingle(p)} className="text-muted-foreground hover:text-primary"><Link2 className="h-3.5 w-3.5" /></button>
+                  <button onClick={() => deletePayout.mutate(p.id)} className="text-muted-foreground hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
+                </div>
               </div>
               <div className="font-mono text-2xl font-bold text-success mb-3">+${Number(p.payout_amount).toFixed(2)}</div>
               {p.screenshot_url && (
@@ -256,6 +263,8 @@ const Payouts = () => {
                   <img src={p.screenshot_url} alt="Certificate" className="rounded-md border border-border w-full h-32 object-cover hover:opacity-80 transition-opacity" />
                 </a>
               )}
+              {/* Watermark */}
+              <div className="absolute bottom-2 right-3 text-[9px] text-muted-foreground/30 font-semibold">JournalXPro</div>
             </motion.div>
           ))}
         </div>
