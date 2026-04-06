@@ -111,6 +111,7 @@ const emptyForm = {
   pnlAmount: "",
   startBalance: "",
   endBalance: "",
+  tradeDate: "",
   entryTime: "",
   exitTime: "",
   followPlan: true,
@@ -380,6 +381,9 @@ if (hasNewScreenshots) {
   screenshotUrl = existingTrade?.screenshot_url || null;
   screenshotPublicIds = existingTrade?.screenshot_public_ids || null;
 }
+const tradeDateTime = form.tradeDate
+  ? `${form.tradeDate}T${form.entryTime || "00:00"}:00`
+  : null;
 
     const tradePayload: any = {
       firebase_uid: user.uid,
@@ -390,6 +394,7 @@ if (hasNewScreenshots) {
       result: form.result,
       pnl_amount: pnl,
       follow_plan: form.followPlan,
+      trade_date: tradeDateTime,
       custom_fields: cfObj,
       screenshot_url: screenshotUrl,
       screenshot_public_ids: screenshotPublicIds,
@@ -483,6 +488,7 @@ if (hasNewScreenshots) {
       pnlAmount: Math.abs(Number(trade.pnl_amount)).toString(),
       startBalance: trade.start_balance?.toString() || "",
       endBalance: trade.end_balance?.toString() || "",
+      tradeDate: trade.trade_date ? trade.trade_date.split("T")[0] : "",
       entryTime: trade.entry_time
         ? format(new Date(trade.entry_time), "yyyy-MM-dd'T'HH:mm")
         : "",
@@ -709,6 +715,17 @@ if (hasNewScreenshots) {
           />
         </div>
       </div>
+      <div>
+  <label className="text-xs text-muted-foreground mb-1 block">
+    Trade Date *
+  </label>
+  <Input
+    type="date"
+    value={form.tradeDate}
+    onChange={(e) => setField("tradeDate", e.target.value)}
+    className="bg-background border-border"
+  />
+</div>
 
       <div className="grid grid-cols-2 gap-2">
         <div>
@@ -716,7 +733,7 @@ if (hasNewScreenshots) {
             Entry Time
           </label>
           <Input
-            type="datetime-local"
+            type="time"
             value={form.entryTime}
             onChange={(e) => setField("entryTime", e.target.value)}
             className="bg-background border-border text-xs"
@@ -727,7 +744,7 @@ if (hasNewScreenshots) {
             Exit Time
           </label>
           <Input
-            type="datetime-local"
+            type="time"
             value={form.exitTime}
             onChange={(e) => setField("exitTime", e.target.value)}
             className="bg-background border-border text-xs"
