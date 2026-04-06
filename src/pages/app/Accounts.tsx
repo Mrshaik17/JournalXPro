@@ -27,7 +27,7 @@ import {
   BarChart3,
   Activity,
   AlertTriangle,
-  RefreshCw,
+  
   Share2,
 } from "lucide-react";
 import { useState } from "react";
@@ -88,10 +88,10 @@ const Accounts = () => {
   const [accountCategory, setAccountCategory] = useState<"broker" | "propfirm">(
     "broker"
   );
-  const [syncMode, setSyncMode] = useState<"manual" | "mt5" | "both">("manual");
-  const [mt5Server, setMt5Server] = useState("");
-  const [mt5Login, setMt5Login] = useState("");
-  const [mt5Password, setMt5Password] = useState("");
+
+
+
+
   const [dailyDrawdown, setDailyDrawdown] = useState("");
   const [maxDrawdown, setMaxDrawdown] = useState("");
   const [hasConsistency, setHasConsistency] = useState(false);
@@ -114,25 +114,19 @@ const Accounts = () => {
     enabled: !!user?.uid,
   });
 
-  const { data: trades = [] } = useQuery<TradeRow[]>({
+  const { data: trades = [] } = useQuery({
     queryKey: ["trades", user?.uid],
     queryFn: async () => {
-      if (!user?.uid) return [];
-
+      if (!user) return [];
       const { data, error } = await supabase
         .from("trades")
         .select("*")
         .eq("firebase_uid", user.uid)
         .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Trades fetch error:", error);
-        return [];
-      }
-
-      return (data || []) as TradeRow[];
+      if (error) throw error;
+      return data || [];
     },
-    enabled: !!user?.uid,
+    enabled: !!user,
   });
 
   const createAccount = useMutation({
@@ -153,11 +147,7 @@ const Accounts = () => {
             }`
           : "Broker";
 
-      typeStr += ` | Sync:${syncMode}`;
-
-      if ((syncMode === "mt5" || syncMode === "both") && mt5Server) {
-        typeStr += ` | MT5:${mt5Server}/${mt5Login}`;
-      }
+     
 
       const brokerValue =
         accountCategory === "propfirm" ? "Prop Firm" : "Broker";
@@ -183,10 +173,7 @@ const Accounts = () => {
       setName("");
       setInitialBalance("");
       setAccountCategory("broker");
-      setSyncMode("manual");
-      setMt5Server("");
-      setMt5Login("");
-      setMt5Password("");
+      
       setDailyDrawdown("");
       setMaxDrawdown("");
       setHasConsistency(false);
@@ -288,11 +275,11 @@ const Accounts = () => {
     const isPropFirm = selectedAccount.account_type?.startsWith("Prop Firm");
     const ddMatch = selectedAccount.account_type?.match(/DD:([\d.]+)%/);
     const maxDDMatch = selectedAccount.account_type?.match(/MaxDD:([\d.]+)%/);
-    const syncMatch = selectedAccount.account_type?.match(/Sync:(\w+)/);
+   
 
     const accDailyDD = ddMatch ? parseFloat(ddMatch[1]) : null;
     const accMaxDD = maxDDMatch ? parseFloat(maxDDMatch[1]) : null;
-    const accSyncMode = syncMatch?.[1] || "manual";
+  
 
     const handleShareAccount = () => {
       if (selectedAccount.share_token) {
@@ -330,12 +317,7 @@ const Accounts = () => {
                 </span>
               )}
 
-              {accSyncMode !== "manual" && (
-                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <RefreshCw className="h-3 w-3" />
-                  MT5 {accSyncMode === "both" ? "+ Manual" : "Auto"}
-                </span>
-              )}
+              
             </div>
           </div>
 
@@ -689,62 +671,10 @@ const Accounts = () => {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Trade Sync Mode *
                 </label>
-                <Select
-                  value={syncMode}
-                  onValueChange={(v: "manual" | "mt5" | "both") =>
-                    setSyncMode(v)
-                  }
-                >
-                  <SelectTrigger className="bg-background border-border">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    <SelectItem value="manual">Manual Only</SelectItem>
-                    <SelectItem value="mt5">MT5 Auto Sync</SelectItem>
-                    <SelectItem value="both">Both (MT5 + Manual)</SelectItem>
-                  </SelectContent>
-                </Select>
+                
               </div>
 
-              <AnimatePresence>
-                {(syncMode === "mt5" || syncMode === "both") && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="space-y-3 overflow-hidden"
-                  >
-                    <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
-                      <p className="text-xs text-muted-foreground mb-2">
-                        Enter your MT5 credentials to auto-sync trades
-                      </p>
-
-                      <div className="space-y-2">
-                        <Input
-                          value={mt5Server}
-                          onChange={(e) => setMt5Server(e.target.value)}
-                          placeholder="Server (e.g. ICMarkets-Demo)"
-                          className="bg-background border-border font-mono text-xs"
-                        />
-                        <Input
-                          value={mt5Login}
-                          onChange={(e) => setMt5Login(e.target.value)}
-                          placeholder="Login ID"
-                          className="bg-background border-border font-mono text-xs"
-                        />
-                        <Input
-                          value={mt5Password}
-                          onChange={(e) => setMt5Password(e.target.value)}
-                          placeholder="Investor Password (read-only)"
-                          type="password"
-                          className="bg-background border-border font-mono text-xs"
-                        />
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
+              
               <AnimatePresence>
                 {accountCategory === "propfirm" && (
                   <motion.div
@@ -854,8 +784,7 @@ const Accounts = () => {
               (sum, t) => sum + (Number(t.lot_size) || 0),
               0
             );
-            const syncMatch = acc.account_type?.match(/Sync:(\w+)/);
-            const hasMt5 = syncMatch && syncMatch[1] !== "manual";
+           
 
             return (
               <motion.div
@@ -879,12 +808,7 @@ const Accounts = () => {
                         </span>
                       )}
 
-                      {hasMt5 && (
-                        <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                          <RefreshCw className="h-2.5 w-2.5" />
-                          MT5
-                        </span>
-                      )}
+                     
                     </div>
                   </div>
 

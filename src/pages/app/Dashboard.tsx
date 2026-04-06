@@ -31,7 +31,7 @@ const Dashboard = () => {
       const { data, error } = await supabase
         .from("trades")
         .select("*")
-        .eq("user_id", user.uid)
+        .eq("firebase_uid", user.uid)
         .order("created_at", { ascending: false });
 
       if (error) throw error;

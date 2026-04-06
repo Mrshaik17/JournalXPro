@@ -157,7 +157,7 @@ const Journal = () => {
       const { data, error } = await supabase
         .from("trades")
         .select("*")
-        .eq("user_id", user.uid)
+        .eq("firebase_uid", user.uid)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
@@ -254,31 +254,120 @@ const Journal = () => {
     publicIds: uploadedPublicIds,
   };
 };
+const recalculateAccountBalance = async (accountId: string) => {
+  if (!user?.uid) return;
+
+  // 1. get account
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("starting_balance")
+    .eq("id", accountId)
+    .eq("firebase_uid", user.uid)
+    .single();
+
+  // 2. get all trades of this account
+  const { data: trades } = await supabase
+    .from("trades")
+    .select("pnl_amount")
+    .eq("account_id", accountId)
+    .eq("firebase_uid", user.uid);
+
+  // 3. calculate total pnl
+  const totalPnl = (trades || []).reduce(
+    (sum, t) => sum + Number(t.pnl_amount || 0),
+    0
+  );
+
+  // 4. update account balance
+  await supabase
+    .from("accounts")
+    .update({
+      current_balance: Number(account?.starting_balance || 0) + totalPnl,
+    })
+    .eq("id", accountId)
+    .eq("firebase_uid", user.uid);
+};
+const deleteTrade = useMutation({
+  mutationFn: async (trade: any) => {
+    if (!user?.uid) throw new Error("Not authenticated");
+
+    // 1. delete image(s) from Cloudinary first
+    if (trade.screenshot_public_ids?.length > 0) {
+     const { data, error } = await supabase.functions.invoke(
+  "delete-cloudinary-images",
+  {
+    body: {
+      publicIds: trade.screenshot_public_ids,
+    },
+    headers: {
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+  }
+);
+
+console.log("Cloudinary delete result:", data);
+console.log("Cloudinary delete error:", error);
+
+if (error) {
+  throw new Error(error.message || "Cloudinary image delete failed");
+}
+
+      console.log("Cloudinary delete result:", data);
+      console.log("Cloudinary delete error:", error);
+
+      if (error) {
+        throw new Error(
+          error.message || "Cloudinary image delete failed"
+        );
+      }
+    }
+
+    // 2. delete trade from database
+    const { error } = await supabase
+      .from("trades")
+      .delete()
+      .eq("id", trade.id)
+      .eq("firebase_uid", user.uid);
+
+    if (error) throw error;
+
+    // 3. recalculate account balance
+    await recalculateAccountBalance(trade.account_id);
+  },
+
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["trades"] });
+    queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-trades"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics-trades"] });
+    toast.success("Trade deleted.");
+  },
+
+  onError: (err: any) => {
+    console.error(err);
+    toast.error(err.message || "Delete failed");
+  },
+});
+
 
   const saveTrade = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("Not authenticated");
-      if (!form.accountId) throw new Error("Select an account");
-      if (!form.pair) throw new Error("Enter pair");
-      if (!form.direction) throw new Error("Select Buy / Sell");
-      if (!form.lotSize) throw new Error("Enter Lot Size");
-      if (!form.result) throw new Error("Select a result");
-      if (!form.pnlAmount) throw new Error("Enter PnL amount");
+  mutationFn: async () => {
+    if (!user) throw new Error("Not authenticated");
 
-      const pnl =
-        form.result === "loss"
-          ? -Math.abs(parseFloat(form.pnlAmount))
-          : form.result === "breakeven"
-          ? 0
-          : Math.abs(parseFloat(form.pnlAmount));
+    const pnl =
+      form.result === "loss"
+        ? -Math.abs(parseFloat(form.pnlAmount))
+        : form.result === "breakeven"
+        ? 0
+        : Math.abs(parseFloat(form.pnlAmount));
 
-      const cfObj: Record<string, string> = {};
-      form.customFields.forEach((cf) => {
-        cfObj[cf.label] = cf.value;
-      });
-
-      let screenshotUrl: string | null = null;
-      let screenshotPublicIds: string[] | null = null;
+    const cfObj: Record<string, string> = {};
+    form.customFields.forEach((cf) => {
+      cfObj[cf.label] = cf.value;
+    });
+    let screenshotUrl: string | null = null;
+let screenshotPublicIds: string[] | null = null;
 
 const hasNewScreenshots = screenshotFiles.some(Boolean);
 
@@ -292,111 +381,82 @@ if (hasNewScreenshots) {
   screenshotPublicIds = existingTrade?.screenshot_public_ids || null;
 }
 
-      const tradePayload: any = {
-        user_id: user.uid,
-        account_id: form.accountId,
-        pair: form.pair || null,
-        direction: form.direction || null,
-        went: form.went || null,
-        lot_size: form.lotSize ? parseFloat(form.lotSize) : null,
-        bias_1d: form.bias1d || null,
-        pips: form.pips ? parseFloat(form.pips) : null,
-        entry_price: form.entryPrice ? parseFloat(form.entryPrice) : null,
-        stop_loss: form.stopLoss ? parseFloat(form.stopLoss) : null,
-        take_profit: form.takeProfit ? parseFloat(form.takeProfit) : null,
-        result: form.result,
-        pnl_amount: pnl,
-        start_balance: form.startBalance ? parseFloat(form.startBalance) : null,
-        end_balance: form.endBalance ? parseFloat(form.endBalance) : null,
-        entry_time: form.entryTime || null,
-        exit_time: form.exitTime || null,
-        follow_plan: form.followPlan,
-        notes: form.notes || null,
-        tags: form.tags
-          ? form.tags
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : null,
-        custom_fields: cfObj,
-        screenshot_url: screenshotUrl,
-        screenshot_public_ids: screenshotPublicIds,
-      };
+    const tradePayload: any = {
+      firebase_uid: user.uid,
+      account_id: form.accountId,
+      pair: form.pair || null,
+      direction: form.direction || null,
+      lot_size: form.lotSize ? parseFloat(form.lotSize) : null,
+      result: form.result,
+      pnl_amount: pnl,
+      follow_plan: form.followPlan,
+      custom_fields: cfObj,
+      screenshot_url: screenshotUrl,
+      screenshot_public_ids: screenshotPublicIds,
+    };
 
-      if (editingId) {
-        const { error } = await supabase
-          .from("trades")
-          .update(tradePayload)
-          .eq("id", editingId)
-          .eq("user_id", user.uid);
+    if (editingId) {
+      // 🧠 GET OLD TRADE
+      const oldTrade = trades.find((t: any) => t.id === editingId);
+      const oldPnl = Number(oldTrade?.pnl_amount || 0);
 
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("trades").insert([tradePayload]);
+      const { error } = await supabase
+        .from("trades")
+        .update(tradePayload)
+        .eq("id", editingId);
 
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["trades"] });
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success(editingId ? "Trade updated." : "Trade logged.");
-      resetForm();
-      setOpen(false);
-    },
-    onError: (err: any) => {
-      console.error(err);
-      toast.error(err.message || "Failed to save trade");
-    },
-  });
+      if (error) throw error;
 
-  const deleteTrade = useMutation({
-  mutationFn: async (trade: any) => {
-    if (!user) throw new Error("Not authenticated");
+      // 🔥 UPDATE ACCOUNT BALANCE (DIFFERENCE)
+      const diff = pnl - oldPnl;
 
-    const accessToken = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    // ✅ DELETE FROM CLOUDINARY FIRST
-    if (trade.screenshot_public_ids?.length > 0) {
-      const res = await fetch(
-        "https://abahpzkgajuofbduhrus.supabase.co/functions/v1/delete-cloudinary-images",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            publicIds: trade.screenshot_public_ids,
-          }),
-        }
-      );
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error("Cloudinary delete failed: " + text);
-      }
+      const { error: balError } = await supabase
+        .from("accounts")
+        .update({
+          current_balance:
+            (accounts.find((a: any) => a.id === form.accountId)
+              ?.current_balance || 0) + diff,
+        })
+        .eq("id", form.accountId);
+
+      if (balError) throw balError;
+    } else {
+      const { error } = await supabase
+        .from("trades")
+        .insert([tradePayload]);
+
+      if (error) throw error;
+
+      // 🔥 UPDATE ACCOUNT BALANCE (NEW TRADE)
+      const account = accounts.find((a: any) => a.id === form.accountId);
+
+      const { error: balError } = await supabase
+        .from("accounts")
+        .update({
+          current_balance:
+            (account?.current_balance || 0) + pnl,
+        })
+        .eq("id", form.accountId);
+
+      if (balError) throw balError;
     }
-
-    // ✅ DELETE FROM DATABASE
-    const { error } = await supabase
-      .from("trades")
-      .delete()
-      .eq("id", trade.id)
-      .eq("user_id", user.uid);
-
-    if (error) throw error;
   },
 
   onSuccess: () => {
     queryClient.invalidateQueries({ queryKey: ["trades"] });
     queryClient.invalidateQueries({ queryKey: ["accounts"] });
-    toast.success("Trade deleted.");
+    toast.success(editingId ? "Trade updated." : "Trade saved.");
+    resetForm();
+    setOpen(false);
   },
 
   onError: (err: any) => {
     console.error(err);
-    toast.error(err.message || "Delete failed");
+    toast.error(err.message || "Error saving trade");
   },
 });
+
+  
 
   const resetForm = () => {
     setForm(emptyForm);

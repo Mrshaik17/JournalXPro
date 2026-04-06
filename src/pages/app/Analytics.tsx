@@ -10,24 +10,38 @@ const Analytics = () => {
   const { user } = useAuth();
 
   const { data: trades = [] } = useQuery({
-    queryKey: ["trades", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("trades").select("*").order("created_at", { ascending: true });
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
+  queryKey: ["trades", user?.uid],
+  queryFn: async () => {
+    if (!user?.uid) return [];
 
-  const { data: profile } = useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", user!.id).single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
+    const { data, error } = await supabase
+      .from("trades")
+      .select("*")
+      .eq("firebase_uid", user.uid)
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  },
+  enabled: !!user?.uid,
+});
+
+const { data: profile = null } = useQuery({
+  queryKey: ["profile", user?.uid],
+  queryFn: async () => {
+    if (!user?.uid) return null;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("firebase_uid", user.uid)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+  enabled: !!user?.uid,
+});
 
   const plan = profile?.plan || "free";
   const isFree = plan === "free";
