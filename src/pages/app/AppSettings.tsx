@@ -68,13 +68,18 @@ const AppSettings = () => {
   });
 
   const { data: siteSettings = [] } = useQuery({
-    queryKey: ["site-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("site_settings").select("*");
-      if (error) throw error;
-      return data;
-    },
-  });
+  queryKey: ["site-settings", user?.id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("*")
+      .ilike("key", `%${user!.id}%`);
+
+    if (error) throw error;
+    return data;
+  },
+  enabled: !!user,
+});
 
   const getSetting = (key: string): any => {
     const s = siteSettings.find((s: any) => s.key === key);
@@ -110,7 +115,7 @@ const AppSettings = () => {
   // Load user billing from site_settings
   useEffect(() => {
     if (siteSettings.length > 0 && user) {
-      const billing = getSetting(`billing_${user.id}`);
+      const billing = getSetting(`billing_${user.uid}`);
       if (billing.name) {
         setBillingName(billing.name || "");
         setBillingEmail(billing.email || "");
@@ -122,7 +127,7 @@ const AppSettings = () => {
         setBillingCountry(billing.country || "");
         setBillingPincode(billing.pincode || "");
       }
-      const tz = getSetting(`timezone_${user.id}`);
+      const tz = getSetting(`timezone_${user.uid}`);
       if (tz.timezone) setTimezone(tz.timezone);
     }
   }, [siteSettings, user]);
@@ -182,7 +187,7 @@ const AppSettings = () => {
       return;
     }
     upsertUserSetting.mutate({
-      key: `billing_${user!.id}`,
+      key: `billing_${user!.uid}`,
       value: { name: billingName, email: billingEmail, phone: billingPhone, street: billingStreet, city: billingCity, district: billingDistrict, state: billingState, country: billingCountry, pincode: billingPincode },
     });
   };
