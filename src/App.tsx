@@ -7,10 +7,17 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ChatWidget } from "@/components/ChatWidget";
 import { ThemeProvider } from "@/components/ThemeProvider";
+
+// Public Pages
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import Rules from "./pages/Rules";
+
+// App Pages
 import { AppLayout } from "./components/app/AppLayout";
 import Dashboard from "./pages/app/Dashboard";
 import Journal from "./pages/app/Journal";
@@ -24,12 +31,13 @@ import AppSettings from "./pages/app/AppSettings";
 import Upgrade from "./pages/app/Upgrade";
 import Payouts from "./pages/app/Payouts";
 import Announcements from "./pages/app/Announcements";
+
+// Shared (PUBLIC)
 import SharedAccount from "./pages/app/SharedAccount";
 import SharedPayouts from "./pages/app/SharedPayouts";
+
+// Admin
 import Admin from "./pages/admin/Admin";
-import Privacy from "./pages/Privacy";
-import Terms from "./pages/Terms";
-import Rules from "./pages/Rules";
 
 const queryClient = new QueryClient();
 
@@ -40,12 +48,32 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+
           <BrowserRouter>
             <Routes>
+
+              {/* 🌐 PUBLIC ROUTES */}
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/app" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/rules" element={<Rules />} />
+
+              {/* 🔥 SHARED ROUTES (IMPORTANT - OUTSIDE /app) */}
+              <Route path="/shared/account/:token" element={<SharedAccount />} />
+              <Route path="/shared/payout/:token" element={<SharedPayouts />} />
+              <Route path="/shared/payouts/:token" element={<SharedPayouts />} />
+
+              {/* 🔐 APP ROUTES */}
+              <Route
+                path="/app"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout />
+                  </ProtectedRoute>
+                }
+              >
                 <Route index element={<Dashboard />} />
                 <Route path="journal" element={<Journal />} />
                 <Route path="accounts" element={<Accounts />} />
@@ -59,16 +87,18 @@ const App = () => (
                 <Route path="announcements" element={<Announcements />} />
                 <Route path="settings" element={<AppSettings />} />
               </Route>
-              <Route path="/shared/account/:token" element={<SharedAccount />} />
-              <Route path="/shared/payout/:token" element={<SharedPayouts />} />
+
+              {/* 🛠 ADMIN */}
               <Route path="/admin1709" element={<Admin />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/rules" element={<Rules />} />
+
+              {/* ❌ FALLBACK */}
               <Route path="*" element={<NotFound />} />
+
             </Routes>
+
             <ChatWidget />
           </BrowserRouter>
+
         </TooltipProvider>
       </ThemeProvider>
     </AuthProvider>

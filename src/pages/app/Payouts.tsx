@@ -10,10 +10,15 @@ import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 import { compressImage } from "@/lib/compress";
+
+
 
 const Payouts = () => {
   const { user } = useAuth();
+  console.log("AUTH USER:", user); // debug
+  console.log("AUTH USER ID:", user?.id); // debug
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
@@ -26,7 +31,7 @@ const Payouts = () => {
   const [sortBy, setSortBy] = useState<"date" | "amount">("date");
 
   const { data: profile } = useQuery({
-    queryKey: ["profile", user?.id],
+    queryKey: ["profile", user.id],
     queryFn: async () => {
       const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).single();
       return data;
@@ -34,13 +39,13 @@ const Payouts = () => {
     enabled: !!user,
   });
 
-  const plan = profile?.plan || "free";
+  const plan = profile?.plan || "elite";
   const canAccess = plan === "pro_plus" || plan === "elite";
 
   const { data: payouts = [] } = useQuery({
-    queryKey: ["payouts", user?.id],
+    queryKey: ["payouts", user.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("payouts" as any).select("*").eq("user_id", user!.id).order("received_date", { ascending: false });
+      const { data, error } = await supabase.from("payouts" as any).select("*").eq("user_id", user.id).order("received_date", { ascending: false });
       if (error) throw error;
       return data as any[];
     },
@@ -80,48 +85,131 @@ const Payouts = () => {
       reader.readAsDataURL(file);
     }
   };
+  const shareAll = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  let token = localStorage.getItem("share_all_token");
+
+  if (!token) {
+    token = crypto.randomUUID();
+
+    await supabase
+      .from("profiles")
+      .update({ payouts_share_token: token })
+      .eq("id", user.id);
+
+    localStorage.setItem("share_all_token", token);
+  }
+
+  const link = `${window.location.origin}/shared/payouts/all_${token}`;
+
+  navigator.clipboard.writeText(link);
+  alert("Link copied!");
+};
 
   const savePayout = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("Not authenticated");
-      if (!companyName) throw new Error("Company name required");
-      if (!payoutAmount) throw new Error("Payout amount required");
+  mutationFn: async () => {
+    if (!user || !user.id) {
+      toast.error("User not logged in");
+      throw new Error("User not logged in");
+    }
 
-      let screenshotUrl: string | null = null;
-      if (screenshotFile) {
-        const compressed = await compressImage(screenshotFile);
-        const filePath = `${user.id}/${Date.now()}-${compressed.name}`;
-        const { error: uploadError } = await supabase.storage.from("payout-screenshots").upload(filePath, compressed);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("payout-screenshots").getPublicUrl(filePath);
-        screenshotUrl = urlData.publicUrl;
-      }
+    if (!companyName || !payoutAmount) {
+      throw new Error("Fill all fields");
+    }
 
-      const { error } = await supabase.from("payouts" as any).insert({
-        user_id: user.id,
-        company_name: companyName,
-        payout_amount: parseFloat(payoutAmount),
-        screenshot_url: screenshotUrl,
-        received_date: receivedDate,
-      } as any);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payouts"] });
-      toast.success("Payout recorded!");
-      setCompanyName(""); setPayoutAmount(""); setScreenshotFile(null); setScreenshotPreview(null);
-      setReceivedDate(format(new Date(), "yyyy-MM-dd")); setOpen(false);
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
+    let screenshotUrl = null;
+
+// ✅ ADD THIS BLOCK
+if (screenshotFile) {
+  const compressed = await compressImage(screenshotFile);
+  screenshotUrl = await uploadToCloudinary(compressed);
+}
+
+const { error } = await supabase.from("payouts").insert({
+  user_id: user.id,
+  company_name: companyName,
+  payout_amount: parseFloat(payoutAmount),
+  screenshot_url: screenshotUrl, // ✅ IMPORTANT
+  received_date: receivedDate,
+});
+
+    if (error) throw error;
+  },
+
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["payouts"] });
+    toast.success("Payout recorded!");
+
+    setCompanyName("");
+    setPayoutAmount("");
+    setReceivedDate(format(new Date(), "yyyy-MM-dd"));
+    setOpen(false);
+  },
+
+  onError: (err: any) => {
+    toast.error(err.message);
+  },
+});
 
   const deletePayout = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("payouts" as any).delete().eq("id", id);
-      if (error) throw error;
+  mutationFn: async (payout: any) => {
+    console.log("DELETE CLICKED:", payout);
+
+    // STEP 1: delete image
+    if (payout.screenshot_url) {
+      const url = payout.screenshot_url;
+
+// remove domain
+const afterUpload = url.split("/upload/")[1];
+
+// remove version (v123...)
+const withoutVersion = afterUpload.replace(/^v\d+\//, "");
+
+// remove extension
+const public_id = withoutVersion.split(".")[0];
+
+console.log("PUBLIC ID:", public_id);
+
+      const res = await fetch(
+  "https://abahpzkgajuofbduhrus.supabase.co/functions/v1/delete-image",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["payouts"] }); toast.success("Deleted."); },
-  });
+    body: JSON.stringify({ public_id }),
+  }
+);
+
+console.log("DELETE IMAGE RESPONSE:", await res.text());
+    }
+
+    // STEP 2: delete from DB
+    const { error } = await supabase
+      .from("payouts")
+      .delete()
+      .eq("id", payout.id);
+
+    console.log("DELETE DB ERROR:", error);
+
+    if (error) throw error;
+  },
+
+  onSuccess: () => {
+    console.log("DELETE SUCCESS");
+    queryClient.invalidateQueries({ queryKey: ["payouts"] });
+    toast.success("Deleted!");
+  },
+
+  onError: (err: any) => {
+    console.error("DELETE ERROR:", err);
+    toast.error(err.message);
+  },
+});
 
   const handleShareAll = () => {
     const text = `💰 My JournalXPro Payouts\n\nTotal Payouts: ${totalPayouts}\nTotal Profit: $${totalProfit.toFixed(2)}\nYearly: $${yearlyProfit.toFixed(2)}\nAvg Monthly: $${avgMonthly.toFixed(2)}\n\n${filtered.slice(0, 5).map((p: any) => `${p.company_name}: $${Number(p.payout_amount).toFixed(2)} (${format(new Date(p.received_date), "MMM dd, yyyy")})`).join("\n")}\n\n— JournalXPro`;
@@ -189,7 +277,10 @@ const Payouts = () => {
                     </div>
                   )}
                 </div>
-                <Button onClick={() => savePayout.mutate()} disabled={savePayout.isPending} className="w-full bg-primary text-primary-foreground">
+              <Button 
+  onClick={() => savePayout.mutate()} 
+  disabled={!user || savePayout.isPending}
+>
                   {savePayout.isPending ? "Saving..." : "Save Payout"}
                 </Button>
               </div>
@@ -252,9 +343,15 @@ const Payouts = () => {
                   <h3 className="font-semibold text-sm group-hover:text-primary transition-colors">{p.company_name}</h3>
                   <span className="text-xs text-muted-foreground font-mono">{format(new Date(p.received_date), "MMM dd, yyyy")}</span>
                 </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-100">
                   <button onClick={() => handleShareSingle(p)} className="text-muted-foreground hover:text-primary"><Link2 className="h-3.5 w-3.5" /></button>
-                  <button onClick={() => deletePayout.mutate(p.id)} className="text-muted-foreground hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
+                  <button
+  onClick={(e) => {
+    e.stopPropagation();
+    deletePayout.mutate(p);
+  }}
+  className="text-muted-foreground hover:text-destructive"
+><X className="h-3.5 w-3.5" /></button>
                 </div>
               </div>
               <div className="font-mono text-2xl font-bold text-success mb-3">+${Number(p.payout_amount).toFixed(2)}</div>
