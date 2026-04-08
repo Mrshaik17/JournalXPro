@@ -43,7 +43,7 @@ const { data: profile = null } = useQuery({
   enabled: !!user?.uid,
 });
 
-  const plan = profile?.plan || "free";
+  const plan = profile?.plan_name || "free";
   const isFree = plan === "free";
   const isPro = plan === "pro" || plan === "pro_plus" || plan === "elite";
   const isProPlus = plan === "pro_plus" || plan === "elite";

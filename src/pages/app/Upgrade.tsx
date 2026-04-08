@@ -119,10 +119,16 @@ const Upgrade = () => {
       }
       const finalAmount = getDiscountedPrice(selectedPlan);
       const { error } = await supabase.from("payments").insert({
-        user_id: user!.id, amount: finalAmount, amount_inr: Math.round(finalAmount * inrRate),
-        method: usePoints ? "points" : paymentMethod, transaction_id: transactionId || (usePoints ? `POINTS-${referralPoints}` : ""),
-        screenshot_url: screenshotUrl, status: finalAmount === 0 ? "approved" : "pending", requested_plan: selectedPlan,
-      });
+  user_id: user!.id,
+  amount: finalAmount,
+  amount_inr: Math.round(finalAmount * inrRate),
+  method: usePoints ? "points" : paymentMethod,
+  transaction_id: transactionId || (usePoints ? `POINTS-${referralPoints}` : ""),
+  screenshot_url: screenshotUrl,
+  status: finalAmount === 0 ? "approved" : "pending",
+  requested_plan: selectedPlan,
+  billing_cycle: billingCycle,
+});
       if (error) throw error;
       if (finalAmount === 0) await supabase.from("profiles").update({ plan: selectedPlan }).eq("id", user!.id);
     },

@@ -39,7 +39,7 @@ const Payouts = () => {
     enabled: !!user,
   });
 
-  const plan = profile?.plan || "elite";
+  const plan = profile?.plan_name || "free";
   const canAccess = plan === "pro_plus" || plan === "elite";
 
   const { data: payouts = [] } = useQuery({
@@ -211,12 +211,13 @@ console.log("DELETE IMAGE RESPONSE:", await res.text());
   },
 });
 
+/*
   const handleShareAll = () => {
     const text = `💰 My JournalXPro Payouts\n\nTotal Payouts: ${totalPayouts}\nTotal Profit: $${totalProfit.toFixed(2)}\nYearly: $${yearlyProfit.toFixed(2)}\nAvg Monthly: $${avgMonthly.toFixed(2)}\n\n${filtered.slice(0, 5).map((p: any) => `${p.company_name}: $${Number(p.payout_amount).toFixed(2)} (${format(new Date(p.received_date), "MMM dd, yyyy")})`).join("\n")}\n\n— JournalXPro`;
     navigator.clipboard.writeText(text);
     toast.success("Payout summary copied to clipboard!");
   };
-
+*/
   const handleShareSingle = (p: any) => {
     if (p.share_token) {
       const url = `${window.location.origin}/shared/payout/${p.share_token}`;
@@ -254,7 +255,7 @@ console.log("DELETE IMAGE RESPONSE:", await res.text());
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h1 className="text-2xl font-bold">Payout Tracker</h1><p className="text-sm text-muted-foreground mt-1">Track and share your trading payouts</p></div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleShareAll}><Share2 className="h-4 w-4 mr-1" /> Share All</Button>
+         {/* <Button variant="outline" size="sm" onClick={handleShareAll}><Share2 className="h-4 w-4 mr-1" /> Share All</Button>*/}
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button className="bg-primary text-primary-foreground hover:bg-primary/90"><Plus className="mr-2 h-4 w-4" /> Add Payout</Button></DialogTrigger>
             <DialogContent className="bg-card border-border max-w-sm">

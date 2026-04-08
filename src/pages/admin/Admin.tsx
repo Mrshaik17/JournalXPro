@@ -121,14 +121,61 @@ const AdminDashboard = ({ queryClient, activeSection, setActiveSection, collapse
   });
 
   const updatePaymentStatus = useMutation({
-    mutationFn: async ({ id, status, userId, plan }: { id: string; status: string; userId: string; plan?: string }) => {
-      const { error } = await supabase.from("payments").update({ status }).eq("id", id);
-      if (error) throw error;
-      if (status === "approved" && plan) await supabase.from("profiles").update({ plan }).eq("id", userId);
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-payments"] }); queryClient.invalidateQueries({ queryKey: ["admin-profiles"] }); toast.success("Payment updated."); },
-    onError: (err: any) => toast.error(err.message),
-  });
+  mutationFn: async ({ id, status, userId, plan }: { id: string; status: string; userId: string; plan?: string }) => {
+    // 1. Update payment status
+    const { error } = await supabase
+      .from("payments")
+      .update({ status })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    // 2. If approved → activate plan with expiry
+    if (status === "approved" && plan) {
+      // Get payment details
+      const { data: payment } = await supabase
+        .from("payments")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      const now = new Date();
+      const expiry = new Date();
+
+      // Calculate expiry based on billing cycle
+      if (payment?.billing_cycle === "monthly") {
+        expiry.setMonth(now.getMonth() + 1);
+      } else if (payment?.billing_cycle === "3months") {
+        expiry.setMonth(now.getMonth() + 3);
+      } else if (payment?.billing_cycle === "6months") {
+        expiry.setMonth(now.getMonth() + 6);
+      } else if (payment?.billing_cycle === "yearly") {
+        expiry.setFullYear(now.getFullYear() + 1);
+      } else {
+        expiry.setMonth(now.getMonth() + 1); // fallback
+      }
+
+      // Update user plan + expiry
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          plan: plan,
+          plan_expiry: expiry.toISOString(),
+        })
+        .eq("id", userId);
+
+      if (profileError) throw profileError;
+    }
+  },
+
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
+    toast.success("Payment updated.");
+  },
+
+  onError: (err: any) => toast.error(err.message),
+});
 
   const updateUserPlan = useMutation({
     mutationFn: async ({ userId, plan }: { userId: string; plan: string }) => { const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId); if (error) throw error; },

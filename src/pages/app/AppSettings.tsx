@@ -15,6 +15,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
+
 const timezones = [
   "UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
   "Europe/London", "Europe/Paris", "Europe/Berlin", "Asia/Kolkata", "Asia/Tokyo",
@@ -36,6 +37,29 @@ const AppSettings = () => {
     },
     enabled: !!user,
   });
+  useEffect(() => {
+  if (!user?.id) return;
+
+  const channel = supabase
+    .channel("profile-update")
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "profiles",
+        filter: `id=eq.${user.id}`,
+      },
+      () => {
+        queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [user?.id]);
 
   const { data: myPayments = [] } = useQuery({
     queryKey: ["my-payments", user?.id],
