@@ -12,12 +12,12 @@ const Analytics = () => {
   const { data: trades = [] } = useQuery({
   queryKey: ["trades", user?.uid],
   queryFn: async () => {
-    if (!user?.uid) return [];
+    if (!user?.id) return [];
 
     const { data, error } = await supabase
       .from("trades")
       .select("*")
-      .eq("firebase_uid", user.uid)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: true });
 
     if (error) throw error;
@@ -29,12 +29,12 @@ const Analytics = () => {
 const { data: profile = null } = useQuery({
   queryKey: ["profile", user?.uid],
   queryFn: async () => {
-    if (!user?.uid) return null;
+    if (!user?.id) return null;
 
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("firebase_uid", user.uid)
+      .eq("user_id", user.id)
       .maybeSingle();
 
     if (error) throw error;

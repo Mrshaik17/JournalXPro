@@ -139,7 +139,7 @@ const AppSettings = () => {
   // Load user billing from site_settings
   useEffect(() => {
     if (siteSettings.length > 0 && user) {
-      const billing = getSetting(`billing_${user.uid}`);
+      const billing = getSetting(`billing_${user.id}`);
       if (billing.name) {
         setBillingName(billing.name || "");
         setBillingEmail(billing.email || "");
@@ -151,7 +151,7 @@ const AppSettings = () => {
         setBillingCountry(billing.country || "");
         setBillingPincode(billing.pincode || "");
       }
-      const tz = getSetting(`timezone_${user.uid}`);
+      const tz = getSetting(`timezone_${user.id}`);
       if (tz.timezone) setTimezone(tz.timezone);
     }
   }, [siteSettings, user]);

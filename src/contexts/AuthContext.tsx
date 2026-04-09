@@ -31,11 +31,11 @@ const syncUserProfile = async (firebaseUser: FirebaseUser) => {
     const { data: existingProfile } = await supabase
       .from("profiles")
       .select("*")
-      .eq("firebase_uid", firebaseUser.uid)
+      .eq("user_id", firebaseUser.uid)
       .maybeSingle();
 
     const profilePayload = {
-      firebase_uid: firebaseUser.uid,
+      user_id: firebaseUser.uid,  
       email: firebaseUser.email ?? "",
       full_name: firebaseUser.displayName ?? "",
       avatar_url: firebaseUser.photoURL ?? "",
@@ -54,7 +54,7 @@ const syncUserProfile = async (firebaseUser: FirebaseUser) => {
       await supabase
         .from("profiles")
         .update(profilePayload)
-        .eq("firebase_uid", firebaseUser.uid);
+        .eq("user_id", firebaseUser.uid);
 
       console.log("Profile updated");
     }

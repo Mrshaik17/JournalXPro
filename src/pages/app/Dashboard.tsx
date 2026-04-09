@@ -24,31 +24,31 @@ const Dashboard = () => {
   const [hideAccounts, setHideAccounts] = useState(false);
 
   const { data: trades = [] } = useQuery({
-    queryKey: ["dashboard-trades", user?.uid],
+    queryKey: ["dashboard-trades", user?.id],
     queryFn: async () => {
-      if (!user?.uid) return [];
+      if (!user?.id) return [];
 
       const { data, error } = await supabase
         .from("trades")
         .select("*")
-        .eq("firebase_uid", user.uid)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.uid,
+    enabled: !!user?.id,
   });
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["dashboard-accounts", user?.uid],
     queryFn: async () => {
-      if (!user?.uid) return [];
+      if (!user?.id) return [];
 
       const { data, error } = await supabase
         .from("accounts")
         .select("*")
-        .eq("firebase_uid", user.uid)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;

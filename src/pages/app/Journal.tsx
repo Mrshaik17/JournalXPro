@@ -122,6 +122,7 @@ const emptyForm = {
 
 const Journal = () => {
   const { user } = useAuth();
+ 
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
@@ -137,20 +138,21 @@ const Journal = () => {
   >([null, null]);
 
   const { data: accounts = [] } = useQuery({
-    queryKey: ["accounts", user?.uid],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("accounts")
-        .select("*")
-        .eq("firebase_uid", user.uid)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
+  queryKey: ["accounts", user?.id],
+  queryFn: async () => {
+    if (!user?.id) return [];
 
+    const { data, error } = await supabase
+      .from("accounts")
+      .select("*")
+      .eq("firebase_uid", user.id);
+
+    if (error) throw error;
+
+    return data || [];
+  },
+  enabled: !!user?.id,
+});
   const { data: trades = [] } = useQuery({
     queryKey: ["trades", user?.uid],
     queryFn: async () => {
@@ -158,7 +160,7 @@ const Journal = () => {
       const { data, error } = await supabase
         .from("trades")
         .select("*")
-        .eq("firebase_uid", user.uid)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
@@ -256,14 +258,14 @@ const Journal = () => {
   };
 };
 const recalculateAccountBalance = async (accountId: string) => {
-  if (!user?.uid) return;
+  if (!user?.id) return;
 
   // 1. get account
   const { data: account } = await supabase
     .from("accounts")
     .select("starting_balance")
     .eq("id", accountId)
-    .eq("firebase_uid", user.uid)
+    .eq("user_id", user.id)
     .single();
 
   // 2. get all trades of this account
@@ -271,7 +273,7 @@ const recalculateAccountBalance = async (accountId: string) => {
     .from("trades")
     .select("pnl_amount")
     .eq("account_id", accountId)
-    .eq("firebase_uid", user.uid);
+    .eq("user_id", user.id);
 
   // 3. calculate total pnl
   const totalPnl = (trades || []).reduce(
@@ -286,11 +288,11 @@ const recalculateAccountBalance = async (accountId: string) => {
       current_balance: Number(account?.starting_balance || 0) + totalPnl,
     })
     .eq("id", accountId)
-    .eq("firebase_uid", user.uid);
+    .eq("user_id", user.id);
 };
 const deleteTrade = useMutation({
   mutationFn: async (trade: any) => {
-    if (!user?.uid) throw new Error("Not authenticated");
+    if (!user?.id) throw new Error("Not authenticated");
 
     // 1. delete image(s) from Cloudinary first
     if (trade.screenshot_public_ids?.length > 0) {
@@ -328,7 +330,7 @@ if (error) {
       .from("trades")
       .delete()
       .eq("id", trade.id)
-      .eq("firebase_uid", user.uid);
+      .eq("user_id", user.id);
 
     if (error) throw error;
 
@@ -386,7 +388,7 @@ const tradeDateTime = form.tradeDate
   : null;
 
     const tradePayload: any = {
-      firebase_uid: user.uid,
+      user_id: user.id,
       account_id: form.accountId,
       pair: form.pair || null,
       direction: form.direction || null,

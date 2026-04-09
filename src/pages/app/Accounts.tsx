@@ -27,7 +27,6 @@ import {
   BarChart3,
   Activity,
   AlertTriangle,
-  
   Share2,
 } from "lucide-react";
 import { useState } from "react";
@@ -47,7 +46,8 @@ import {
 
 type AccountRow = {
   id: string;
-  firebase_uid: string;
+  firebase_uid: string | null;
+  user_id?: string | null;
   name: string;
   broker: string | null;
   account_type: string | null;
@@ -63,6 +63,8 @@ type AccountRow = {
 
 type TradeRow = {
   id: string;
+  firebase_uid: string | null;
+  user_id?: string | null;
   account_id: string | null;
   pair?: string | null;
   result?: string | null;
@@ -73,11 +75,10 @@ type TradeRow = {
   take_profit?: number | string | null;
   follow_plan?: boolean | null;
   created_at: string;
-  firebase_uid?: string | null;
 };
 
 const Accounts = () => {
-  const { user } = useAuth();
+   
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const viewId = searchParams.get("view");
@@ -89,54 +90,65 @@ const Accounts = () => {
     "broker"
   );
 
-
-
-
   const [dailyDrawdown, setDailyDrawdown] = useState("");
   const [maxDrawdown, setMaxDrawdown] = useState("");
   const [hasConsistency, setHasConsistency] = useState(false);
   const [consistencyValue, setConsistencyValue] = useState("");
 
+  const { user, loading } = useAuth();
+
+if (loading) {
+  return <div className="p-10 text-center">Loading...</div>;
+}
+
+if (!user) {
+  return <div className="p-10 text-center">Please login</div>;
+}
+
   const { data: accounts = [], isLoading: accountsLoading } = useQuery<AccountRow[]>({
-    queryKey: ["accounts", user?.uid],
-    queryFn: async () => {
-      if (!user?.uid) return [];
+  queryKey: ["accounts", user?.id],
+  queryFn: async () => {
+    if (!user?.id) return [];
 
-      const { data, error } = await supabase
-        .from("accounts")
-        .select("*")
-        .eq("firebase_uid", user.uid)
-        .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("accounts")
+      .select("*")
+      .eq("firebase_uid", user.id)
+      .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return (data || []) as AccountRow[];
-    },
-    enabled: !!user?.uid,
-  });
+    if (error) throw error;
 
-  const { data: trades = [] } = useQuery({
-    queryKey: ["trades", user?.uid],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("trades")
-        .select("*")
-        .eq("firebase_uid", user.uid)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
+    return data || [];
+  },
+  enabled: !!user?.id,
+});
+
+  const { data: trades = [] } = useQuery<TradeRow[]>({
+  queryKey: ["trades", user?.id],
+  queryFn: async () => {
+    if (!user?.id) return [];
+
+    const { data, error } = await supabase
+      .from("trades")
+      .select("*")
+      .eq("firebase_uid", user.id)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+  enabled: !!user?.id,
+});
 
   const createAccount = useMutation({
     mutationFn: async () => {
-      if (!user?.uid) throw new Error("Not authenticated");
+      console.log("USER:", user);
+      if (!user?.id) throw new Error("Not authenticated");
       if (!name.trim()) throw new Error("Account name is required");
 
       const bal = parseFloat(initialBalance) || 0;
 
-      let typeStr =
+      const typeStr =
         accountCategory === "propfirm"
           ? `Prop Firm${dailyDrawdown ? ` | DD:${dailyDrawdown}%` : ""}${
               maxDrawdown ? ` | MaxDD:${maxDrawdown}%` : ""
@@ -147,13 +159,11 @@ const Accounts = () => {
             }`
           : "Broker";
 
-     
-
       const brokerValue =
         accountCategory === "propfirm" ? "Prop Firm" : "Broker";
 
       const { error } = await supabase.from("accounts").insert({
-        firebase_uid: user.uid,
+        firebase_uid: user.id,
         name: name.trim(),
         broker: brokerValue,
         account_type: typeStr,
@@ -173,7 +183,6 @@ const Accounts = () => {
       setName("");
       setInitialBalance("");
       setAccountCategory("broker");
-      
       setDailyDrawdown("");
       setMaxDrawdown("");
       setHasConsistency(false);
@@ -275,11 +284,9 @@ const Accounts = () => {
     const isPropFirm = selectedAccount.account_type?.startsWith("Prop Firm");
     const ddMatch = selectedAccount.account_type?.match(/DD:([\d.]+)%/);
     const maxDDMatch = selectedAccount.account_type?.match(/MaxDD:([\d.]+)%/);
-   
 
     const accDailyDD = ddMatch ? parseFloat(ddMatch[1]) : null;
     const accMaxDD = maxDDMatch ? parseFloat(maxDDMatch[1]) : null;
-  
 
     const handleShareAccount = () => {
       if (selectedAccount.share_token) {
@@ -316,8 +323,6 @@ const Accounts = () => {
                   {selectedAccount.account_type.split("|")[0]?.trim()}
                 </span>
               )}
-
-              
             </div>
           </div>
 
@@ -671,10 +676,8 @@ const Accounts = () => {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Trade Sync Mode *
                 </label>
-                
               </div>
 
-              
               <AnimatePresence>
                 {accountCategory === "propfirm" && (
                   <motion.div
@@ -750,7 +753,7 @@ const Accounts = () => {
 
               <Button
                 onClick={() => createAccount.mutate()}
-                disabled={createAccount.isPending}
+                disabled={!user || createAccount.isPending}
                 className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {createAccount.isPending ? "Creating..." : "Create Account"}
@@ -784,7 +787,6 @@ const Accounts = () => {
               (sum, t) => sum + (Number(t.lot_size) || 0),
               0
             );
-           
 
             return (
               <motion.div
@@ -807,8 +809,6 @@ const Accounts = () => {
                           {acc.account_type.split("|")[0]?.trim()}
                         </span>
                       )}
-
-                     
                     </div>
                   </div>
 

@@ -35,20 +35,20 @@ const Calendar = () => {
   });
 
   const { data: trades = [] } = useQuery({
-    queryKey: ["trades-calendar", user?.uid],
+    queryKey: ["trades", user?.id],
     queryFn: async () => {
-      if (!user?.uid) return [];
+      if (!user?.id) return [];
 
       const { data, error } = await supabase
         .from("trades")
         .select("*")
-        .eq("firebase_uid", user.uid)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.uid,
+    enabled: !!user?.id,
   });
 
   const monthStart = startOfMonth(currentMonth);
