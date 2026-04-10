@@ -39,7 +39,7 @@ const Payouts = () => {
     enabled: !!user,
   });
 
-  const plan = profile?.plan_name || "elite";
+  const plan = profile?.plan || "elite"; // default to elite for testing
   const canAccess = plan === "pro_plus" || plan === "elite";
 
   const { data: payouts = [] } = useQuery({

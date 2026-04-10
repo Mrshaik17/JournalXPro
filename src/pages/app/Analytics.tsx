@@ -10,7 +10,7 @@ const Analytics = () => {
   const { user } = useAuth();
 
   const { data: trades = [] } = useQuery({
-  queryKey: ["trades", user?.uid],
+  queryKey: ["trades", user?.id],
   queryFn: async () => {
     if (!user?.id) return [];
 
@@ -23,18 +23,18 @@ const Analytics = () => {
     if (error) throw error;
     return data || [];
   },
-  enabled: !!user?.uid,
+  enabled: !!user?.id,
 });
 
 const { data: profile = null } = useQuery({
   queryKey: ["profile", user?.uid],
   queryFn: async () => {
-    if (!user?.id) return null;
+    if (!user?.uid) return null;
 
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("firebase_uid", user.uid)
       .maybeSingle();
 
     if (error) throw error;
@@ -43,7 +43,7 @@ const { data: profile = null } = useQuery({
   enabled: !!user?.uid,
 });
 
-  const plan = profile?.plan_name || "free";
+  const plan = profile?.plan_name || "elite";
   const isFree = plan === "free";
   const isPro = plan === "pro" || plan === "pro_plus" || plan === "elite";
   const isProPlus = plan === "pro_plus" || plan === "elite";

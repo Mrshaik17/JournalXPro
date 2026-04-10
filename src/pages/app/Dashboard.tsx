@@ -41,20 +41,20 @@ const Dashboard = () => {
   });
 
   const { data: accounts = [] } = useQuery({
-    queryKey: ["dashboard-accounts", user?.uid],
+    queryKey: ["dashboard-accounts", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
 
       const { data, error } = await supabase
         .from("accounts")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("firebase_uid", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.uid,
+    enabled: !!user?.id,
   });
 
   const totalTrades = trades.length;

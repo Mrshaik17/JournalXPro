@@ -131,7 +131,7 @@ if (!user) {
     const { data, error } = await supabase
       .from("trades")
       .select("*")
-      .eq("firebase_uid", user.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
