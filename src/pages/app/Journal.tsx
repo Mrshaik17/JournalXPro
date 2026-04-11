@@ -20,7 +20,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit2, Trash2, X, Image } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { compressImage } from "@/lib/compress";
@@ -122,7 +122,7 @@ const emptyForm = {
 
 const Journal = () => {
   const { user } = useAuth();
- 
+  
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
@@ -137,22 +137,24 @@ const Journal = () => {
     (string | null)[]
   >([null, null]);
 
+  const [resultFilter, setResultFilter] = useState("all");
+
   const { data: accounts = [] } = useQuery({
-  queryKey: ["accounts", user?.id],
-  queryFn: async () => {
-    if (!user?.id) return [];
+    queryKey: ["accounts", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
 
-    const { data, error } = await supabase
-      .from("accounts")
-      .select("*")
-      .eq("firebase_uid", user.id);
+      const { data, error } = await supabase
+        .from("accounts")
+        .select("*")
+        .eq("firebase_uid", user.id);
 
-    if (error) throw error;
+      if (error) throw error;
 
-    return data || [];
-  },
-  enabled: !!user?.id,
-});
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
   const { data: trades = [] } = useQuery({
     queryKey: ["trades", user?.uid],
     queryFn: async () => {
@@ -167,6 +169,11 @@ const Journal = () => {
     },
     enabled: !!user,
   });
+
+  const filteredTrades = useMemo(() => {
+    if (resultFilter === "all") return trades;
+    return trades.filter((trade: any) => trade.result === resultFilter);
+  }, [trades, resultFilter]);
 
   const setField = (key: string, value: any) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -353,7 +360,6 @@ if (error) {
   },
 });
 
-
   const saveTrade = useMutation({
   mutationFn: async () => {
     if (!user) throw new Error("Not authenticated");
@@ -462,8 +468,6 @@ const tradeDateTime = form.tradeDate
     toast.error(err.message || "Error saving trade");
   },
 });
-
-  
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -913,13 +917,65 @@ const tradeDateTime = form.tradeDate
         </Dialog>
       </div>
 
+      {accounts.length > 0 && trades.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={resultFilter === "all" ? "default" : "outline"}
+            onClick={() => setResultFilter("all")}
+            className={
+              resultFilter === "all"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : ""
+            }
+          >
+            All Trades
+          </Button>
+
+          <Button
+            variant={resultFilter === "win" ? "default" : "outline"}
+            onClick={() => setResultFilter("win")}
+            className={
+              resultFilter === "win"
+                ? "bg-success text-white hover:bg-success/90"
+                : ""
+            }
+          >
+            Win
+          </Button>
+
+          <Button
+            variant={resultFilter === "loss" ? "default" : "outline"}
+            onClick={() => setResultFilter("loss")}
+            className={
+              resultFilter === "loss"
+                ? "bg-destructive text-white hover:bg-destructive/90"
+                : ""
+            }
+          >
+            Loss
+          </Button>
+
+          <Button
+            variant={resultFilter === "breakeven" ? "default" : "outline"}
+            onClick={() => setResultFilter("breakeven")}
+            className={
+              resultFilter === "breakeven"
+                ? "bg-muted text-foreground hover:bg-muted/90"
+                : ""
+            }
+          >
+            Breakeven
+          </Button>
+        </div>
+      )}
+
       {accounts.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-8 card-glow text-center">
           <p className="text-muted-foreground text-sm">
             Create an account first before logging trades.
           </p>
         </div>
-      ) : trades.length > 0 ? (
+      ) : filteredTrades.length > 0 ? (
         <div className="rounded-lg border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead>
@@ -938,7 +994,7 @@ const tradeDateTime = form.tradeDate
               </tr>
             </thead>
             <tbody>
-              {trades.map((trade: any) => {
+              {filteredTrades.map((trade: any) => {
                 const account = accounts.find((a: any) => a.id === trade.account_id);
                 return (
                   <tr
@@ -1021,7 +1077,9 @@ const tradeDateTime = form.tradeDate
       ) : (
         <div className="rounded-lg border border-border bg-card p-8 card-glow text-center">
           <p className="text-muted-foreground text-sm">
-            No trades found. The best trade is sometimes no trade.
+            {resultFilter === "all"
+              ? "No trades found. The best trade is sometimes no trade."
+              : `No ${resultFilter} trades found.`}
           </p>
         </div>
       )}

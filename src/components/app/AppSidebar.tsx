@@ -1,6 +1,19 @@
 import {
-  LayoutDashboard, BookOpen, Wallet, BarChart3,
-  Calculator, Building2, Settings, LogOut, Zap, Crown, CalendarDays, Newspaper, DollarSign, Megaphone, Lock
+  LayoutDashboard,
+  BookOpen,
+  Wallet,
+  BarChart3,
+  Calculator,
+  Building2,
+  Settings,
+  LogOut,
+  Zap,
+  Crown,
+  CalendarDays,
+  Newspaper,
+  DollarSign,
+  Megaphone,
+  Lock,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
@@ -43,7 +56,12 @@ export function AppSidebar() {
   const { data: announcements = [] } = useQuery({
     queryKey: ["announcements-count"],
     queryFn: async () => {
-      const { data } = await supabase.from("announcements").select("id").order("created_at", { ascending: false }).limit(5);
+      const { data } = await supabase
+        .from("announcements")
+        .select("id")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
       return data || [];
     },
   });
@@ -54,54 +72,105 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-border">
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
-        <Zap className="h-5 w-5 text-primary flex-shrink-0" />
-        {!collapsed && <span className="text-sm font-semibold text-foreground">JournalXPro</span>}
+    <Sidebar
+      collapsible="icon"
+      className="border-r border-white/5 bg-[#06080c] text-white"
+    >
+      <div className="flex h-14 items-center border-b border-white/5 px-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.12)]">
+            <Zap className="h-4.5 w-4.5" />
+          </div>
+
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold tracking-tight text-white">
+                JournalXPro
+              </p>
+              <p className="truncate text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+                Trading Hub
+              </p>
+            </div>
+          )}
+        </div>
       </div>
-      <SidebarContent>
-        <SidebarGroup>
+
+      <SidebarContent className="overflow-hidden">
+        <SidebarGroup className="px-2 py-2">
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="space-y-1">
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
+                  <SidebarMenuButton asChild className="h-auto p-0">
                     <NavLink
                       to={item.url}
                       end={item.url === "/app"}
-                      className="hover:bg-sidebar-accent/50"
-                      activeClassName="bg-sidebar-accent text-primary font-medium"
+                      title={collapsed ? item.title : undefined}
+                      className="group flex h-10 items-center gap-2.5 rounded-xl px-2.5 text-[13px] font-medium text-zinc-400 transition-all hover:bg-white/[0.04] hover:text-white"
+                      activeClassName="bg-cyan-500/10 text-cyan-400 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.10)]"
                     >
-                      <item.icon className="mr-2 h-4 w-4" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.03] text-zinc-500 transition-all group-hover:bg-white/[0.05] group-hover:text-zinc-200">
+                        <item.icon className="h-4 w-4" />
+                      </div>
+
                       {!collapsed && (
-                        <span className="flex items-center gap-2">
-                          {item.title}
-                          {item.title === "Announcements" && announcements.length > 0 && (
-                            <span className="h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">{announcements.length}</span>
-                          )}
-                        </span>
+                        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                          <span className="truncate">{item.title}</span>
+
+                          {item.title === "Announcements" &&
+                            announcements.length > 0 && (
+                              <span className="inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-cyan-500 px-1 text-[9px] font-bold text-black">
+                                {announcements.length}
+                              </span>
+                            )}
+                        </div>
                       )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              {/* Backtesting - Coming Soon */}
+
               <SidebarMenuItem>
-                <SidebarMenuButton className="opacity-50 cursor-not-allowed">
-                  <Lock className="mr-2 h-4 w-4" />
-                  {!collapsed && <span className="flex items-center gap-2">Backtesting <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">Soon</span></span>}
+                <SidebarMenuButton
+                  className={`h-10 rounded-xl px-2.5 text-[13px] text-zinc-600 opacity-70 cursor-not-allowed hover:bg-transparent hover:text-zinc-500 ${
+                    collapsed ? "justify-center" : ""
+                  }`}
+                  title={collapsed ? "Backtesting (Soon)" : undefined}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.02] text-zinc-600">
+                    <Lock className="h-4 w-4" />
+                  </div>
+
+                  {!collapsed && (
+                    <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                      <span className="truncate">Backtesting</span>
+                      <span className="rounded-full border border-white/6 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                        Soon
+                      </span>
+                    </div>
+                  )}
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-border p-2">
+
+      <SidebarFooter className="border-t border-white/5 p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
-              <LogOut className="mr-2 h-4 w-4" />
-              {!collapsed && <span>Logout</span>}
+            <SidebarMenuButton
+              onClick={handleLogout}
+              className={`h-10 rounded-xl px-2.5 text-[13px] text-zinc-400 transition-all hover:bg-red-500/10 hover:text-red-400 ${
+                collapsed ? "justify-center" : ""
+              }`}
+              title={collapsed ? "Logout" : undefined}
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.03] text-zinc-500 transition-all">
+                <LogOut className="h-4 w-4" />
+              </div>
+
+              {!collapsed && <span className="font-medium">Logout</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
