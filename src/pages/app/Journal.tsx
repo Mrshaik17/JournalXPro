@@ -338,6 +338,10 @@ if (error) {
       .delete()
       .eq("id", trade.id)
       .eq("user_id", user.id);
+      queryClient.invalidateQueries({ queryKey: ["trades"] });
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
 
     if (error) throw error;
 

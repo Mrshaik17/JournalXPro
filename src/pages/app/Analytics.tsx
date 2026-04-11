@@ -1,540 +1,1359 @@
+import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from "recharts";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
-import { TrendingUp, Target, BarChart3, Activity, Lock, AlertTriangle, Brain, Shield } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Target,
+  BarChart3,
+  Activity,
+  Lock,
+  AlertTriangle,
+  Brain,
+  Shield,
+  Sparkles,
+  CalendarDays,
+  Clock3,
+  Swords,
+  Trophy,
+} from "lucide-react";
+
+type TradeRow = {
+  id: string;
+  user_id?: string | null;
+  firebase_uid?: string | null;
+  account_id?: string | null;
+  pair?: string | null;
+  result?: string | null;
+  pnl_amount?: number | string | null;
+  lot_size?: number | string | null;
+  entry_price?: number | string | null;
+  stop_loss?: number | string | null;
+  take_profit?: number | string | null;
+  follow_plan?: boolean | null;
+  entry_time?: string | null;
+  created_at: string;
+  tags?: string[] | null;
+};
+
+type ProfileRow = {
+  id?: string;
+  firebase_uid?: string | null;
+  plan_name?: string | null;
+};
+
+const CHART_COLORS = {
+  primary: "hsl(var(--primary))",
+  primarySoft: "hsl(var(--primary) / 0.12)",
+  success: "hsl(var(--chart-2))",
+  destructive: "hsl(var(--destructive))",
+  muted: "hsl(var(--muted-foreground))",
+  border: "hsl(var(--border))",
+  card: "hsl(var(--card))",
+};
+
+const tooltipStyle = {
+  background: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: "10px",
+  fontSize: "12px",
+};
+
+const toNumber = (value: number | string | null | undefined) =>
+  Number(value || 0);
+
+const formatCurrency = (value: number, signed = false) => {
+  const amount = `$${Math.abs(value).toFixed(2)}`;
+  if (!signed) return `${value < 0 ? "-" : ""}${amount}`;
+  return `${value >= 0 ? "+" : "-"}${amount}`;
+};
+
+const formatPercent = (value: number, digits = 1, signed = false) => {
+  const formatted = `${Math.abs(value).toFixed(digits)}%`;
+  if (!signed) return `${value < 0 ? "-" : ""}${formatted}`;
+  return `${value >= 0 ? "+" : "-"}${formatted}`;
+};
+
+const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
+
+const getResultTone = (result?: string | null) => {
+  if (result === "win") return "text-success";
+  if (result === "loss") return "text-destructive";
+  return "text-muted-foreground";
+};
+
+const getResultBadge = (result?: string | null) => {
+  if (result === "win") return "bg-green-500/10 text-green-500";
+  if (result === "loss") return "bg-red-500/10 text-red-500";
+  return "bg-muted text-muted-foreground";
+};
+
+const LockedOverlay = ({ tier }: { tier: string }) => (
+  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl bg-background/80 backdrop-blur-sm">
+    <div className="mb-3 rounded-full border border-border bg-card p-3">
+      <Lock className="h-5 w-5 text-muted-foreground" />
+    </div>
+    <p className="text-sm font-semibold text-foreground">Upgrade to {tier}</p>
+    <p className="mt-1 text-xs text-muted-foreground">
+      Unlock this advanced insight panel
+    </p>
+    <a href="/app/upgrade" className="mt-3 text-xs text-primary underline">
+      View Plans →
+    </a>
+  </div>
+);
+
+const SectionCard = ({
+  title,
+  subtitle,
+  children,
+  className = "",
+  action,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  className?: string;
+  action?: React.ReactNode;
+}) => (
+  <div
+    className={`rounded-xl border border-border bg-card p-5 card-glow ${className}`}
+  >
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {subtitle ? (
+          <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+        ) : null}
+      </div>
+      {action}
+    </div>
+    {children}
+  </div>
+);
+
+const StatCard = ({
+  label,
+  value,
+  icon: Icon,
+  tone = "default",
+  hint,
+}: {
+  label: string;
+  value: string;
+  icon: any;
+  tone?: "default" | "success" | "danger";
+  hint?: string;
+}) => {
+  const toneClass =
+    tone === "success"
+      ? "text-success"
+      : tone === "danger"
+      ? "text-destructive"
+      : "text-primary";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl border border-border bg-card p-4 card-glow"
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          {label}
+        </span>
+        <Icon className={`h-4 w-4 ${toneClass}`} />
+      </div>
+      <div className="font-mono text-lg font-bold">{value}</div>
+      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+    </motion.div>
+  );
+};
+
+const MiniInsight = ({
+  icon: Icon,
+  label,
+  value,
+  toneClass = "text-foreground",
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  toneClass?: string;
+}) => (
+  <div className="rounded-lg border border-border bg-background/40 p-3">
+    <div className="mb-2 flex items-center gap-2">
+      <Icon className="h-3.5 w-3.5 text-primary" />
+      <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </span>
+    </div>
+    <p className={`text-sm font-medium ${toneClass}`}>{value}</p>
+  </div>
+);
+
+const EmptyState = ({ text }: { text: string }) => (
+  <div className="flex h-full min-h-[180px] items-center justify-center rounded-lg border border-dashed border-border text-center">
+    <p className="max-w-xs text-sm text-muted-foreground">{text}</p>
+  </div>
+);
 
 const Analytics = () => {
   const { user } = useAuth();
 
-  const { data: trades = [] } = useQuery({
-  queryKey: ["trades", user?.id],
-  queryFn: async () => {
-    if (!user?.id) return [];
+  const { data: trades = [] } = useQuery<TradeRow[]>({
+    queryKey: ["trades", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
 
-    const { data, error } = await supabase
-      .from("trades")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true });
+      const { data, error } = await supabase
+        .from("trades")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
 
-    if (error) throw error;
-    return data || [];
-  },
-  enabled: !!user?.id,
-});
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
 
-const { data: profile = null } = useQuery({
-  queryKey: ["profile", user?.uid],
-  queryFn: async () => {
-    if (!user?.uid) return null;
+  const { data: profile = null } = useQuery<ProfileRow | null>({
+    queryKey: ["profile", user?.uid],
+    queryFn: async () => {
+      if (!user?.uid) return null;
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("firebase_uid", user.uid)
-      .maybeSingle();
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("firebase_uid", user.uid)
+        .maybeSingle();
 
-    if (error) throw error;
-    return data;
-  },
-  enabled: !!user?.uid,
-});
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.uid,
+  });
 
   const plan = profile?.plan_name || "elite";
   const isFree = plan === "free";
   const isPro = plan === "pro" || plan === "pro_plus" || plan === "elite";
-  const isProPlus = plan === "pro_plus" || plan === "elite";
   const isElite = plan === "elite";
 
-  const wins = trades.filter((t) => t.result === "win").length;
-  const losses = trades.filter((t) => t.result === "loss").length;
-  const breakeven = trades.filter((t) => t.result === "breakeven").length;
-  const totalTrades = trades.length;
-  const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0";
-  const totalPnl = trades.reduce((sum, t) => sum + Number(t.pnl_amount), 0);
+  const analytics = useMemo(() => {
+    const totalTrades = trades.length;
+    const wins = trades.filter((t) => t.result === "win").length;
+    const losses = trades.filter((t) => t.result === "loss").length;
+    const breakeven = trades.filter((t) => t.result === "breakeven").length;
 
-  // Basic metrics
-  const profitTrades = trades.filter((t) => Number(t.pnl_amount) > 0);
-  const lossTrades = trades.filter((t) => Number(t.pnl_amount) < 0);
-  const bestTrade = profitTrades.length > 0 ? Math.max(...profitTrades.map((t) => Number(t.pnl_amount))) : 0;
-  const worstTrade = lossTrades.length > 0 ? Math.min(...lossTrades.map((t) => Number(t.pnl_amount))) : 0;
+    const totalPnl = trades.reduce((sum, t) => sum + toNumber(t.pnl_amount), 0);
+    const winRate = safeDivide(wins, totalTrades) * 100;
 
-  // Avg RR
-  const tradesWithRR = trades.filter((t) => t.entry_price && t.stop_loss && t.take_profit);
-  const avgRR = tradesWithRR.length > 0
-    ? (tradesWithRR.reduce((s, t) => {
-        const risk = Math.abs(Number(t.entry_price) - Number(t.stop_loss));
-        const reward = Math.abs(Number(t.take_profit) - Number(t.entry_price));
-        return s + (risk > 0 ? reward / risk : 0);
-      }, 0) / tradesWithRR.length).toFixed(2)
-    : "—";
+    const profitTrades = trades.filter((t) => toNumber(t.pnl_amount) > 0);
+    const lossTrades = trades.filter((t) => toNumber(t.pnl_amount) < 0);
 
-  // Win/Loss streak
-  let currentStreak = 0;
-  let streakType = "";
-  for (let i = trades.length - 1; i >= 0; i--) {
-    const r = trades[i].result;
-    if (i === trades.length - 1) { streakType = r || ""; currentStreak = 1; }
-    else if (r === streakType) currentStreak++;
-    else break;
-  }
+    const bestTrade =
+      profitTrades.length > 0
+        ? Math.max(...profitTrades.map((t) => toNumber(t.pnl_amount)))
+        : 0;
 
-  // Drawdown
-  let peak = 0, maxDrawdown = 0, drawdowns: number[] = [];
-  let cumPnl = 0;
-  trades.forEach((t) => {
-    cumPnl += Number(t.pnl_amount);
-    if (cumPnl > peak) peak = cumPnl;
-    const dd = peak - cumPnl;
-    if (dd > 0) drawdowns.push(dd);
-    if (dd > maxDrawdown) maxDrawdown = dd;
-  });
-  const avgDrawdown = drawdowns.length > 0 ? (drawdowns.reduce((a, b) => a + b, 0) / drawdowns.length).toFixed(2) : "0";
+    const worstTrade =
+      lossTrades.length > 0
+        ? Math.min(...lossTrades.map((t) => toNumber(t.pnl_amount)))
+        : 0;
 
-  // Pie data
-  const pieData = [
-    { name: "Wins", value: wins, color: "hsl(var(--chart-2))" },
-    { name: "Losses", value: losses, color: "hsl(var(--destructive))" },
-    { name: "BE", value: breakeven, color: "hsl(var(--muted-foreground))" },
-  ].filter((d) => d.value > 0);
+    const avgWin =
+      profitTrades.length > 0
+        ? profitTrades.reduce((s, t) => s + toNumber(t.pnl_amount), 0) /
+          profitTrades.length
+        : 0;
 
-  // PnL by day
-  const pnlByDay: Record<string, number> = {};
-  trades.forEach((t) => {
-    const day = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    pnlByDay[day] = (pnlByDay[day] || 0) + Number(t.pnl_amount);
-  });
-  const barData = Object.entries(pnlByDay).map(([day, pnl]) => ({ day, pnl }));
+    const avgLoss =
+      lossTrades.length > 0
+        ? Math.abs(
+            lossTrades.reduce((s, t) => s + toNumber(t.pnl_amount), 0) /
+              lossTrades.length
+          )
+        : 0;
 
-  // Equity curve
-  let equity = 0;
-  const equityData = trades.map((t) => {
-    equity += Number(t.pnl_amount);
-    return { date: new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }), equity };
-  });
+    const tradesWithRR = trades.filter(
+      (t) => t.entry_price && t.stop_loss && t.take_profit
+    );
 
-  // PRO: Pair performance
-  const pairPerf: Record<string, { wins: number; total: number; pnl: number }> = {};
-  trades.forEach((t) => {
-    const pair = t.pair || "Unknown";
-    if (!pairPerf[pair]) pairPerf[pair] = { wins: 0, total: 0, pnl: 0 };
-    pairPerf[pair].total++;
-    if (t.result === "win") pairPerf[pair].wins++;
-    pairPerf[pair].pnl += Number(t.pnl_amount);
-  });
+    const avgRR =
+      tradesWithRR.length > 0
+        ? tradesWithRR.reduce((s, t) => {
+            const risk = Math.abs(
+              toNumber(t.entry_price) - toNumber(t.stop_loss)
+            );
+            const reward = Math.abs(
+              toNumber(t.take_profit) - toNumber(t.entry_price)
+            );
+            return s + (risk > 0 ? reward / risk : 0);
+          }, 0) / tradesWithRR.length
+        : null;
 
-  // PRO: Day performance
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const dayPerf: Record<string, { wins: number; total: number; pnl: number }> = {};
-  trades.forEach((t) => {
-    const d = dayNames[new Date(t.created_at).getDay()];
-    if (!dayPerf[d]) dayPerf[d] = { wins: 0, total: 0, pnl: 0 };
-    dayPerf[d].total++;
-    if (t.result === "win") dayPerf[d].wins++;
-    dayPerf[d].pnl += Number(t.pnl_amount);
-  });
-  const dayData = ["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => ({
-    day: d,
-    pnl: dayPerf[d]?.pnl || 0,
-    winRate: dayPerf[d] ? ((dayPerf[d].wins / dayPerf[d].total) * 100).toFixed(0) : "0",
-    trades: dayPerf[d]?.total || 0,
-  }));
+    let currentStreak = 0;
+    let streakType = "";
+    for (let i = trades.length - 1; i >= 0; i--) {
+      const r = trades[i].result || "";
+      if (i === trades.length - 1) {
+        streakType = r;
+        currentStreak = 1;
+      } else if (r === streakType) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
 
-  // PRO: Session analysis
-  const sessionPerf: Record<string, { wins: number; total: number; pnl: number }> = { London: { wins: 0, total: 0, pnl: 0 }, "New York": { wins: 0, total: 0, pnl: 0 }, Asia: { wins: 0, total: 0, pnl: 0 } };
-  trades.forEach((t) => {
-    if (!t.entry_time) return;
-    const hour = new Date(t.entry_time).getUTCHours();
-    let session = "Asia";
-    if (hour >= 7 && hour < 12) session = "London";
-    else if (hour >= 12 && hour < 21) session = "New York";
-    sessionPerf[session].total++;
-    if (t.result === "win") sessionPerf[session].wins++;
-    sessionPerf[session].pnl += Number(t.pnl_amount);
-  });
+    let peak = 0;
+    let maxDrawdown = 0;
+    let cumPnl = 0;
+    const drawdowns: number[] = [];
 
-  // PRO: Best/worst hour
-  const hourPerf: Record<number, { pnl: number; total: number }> = {};
-  trades.forEach((t) => {
-    if (!t.entry_time) return;
-    const h = new Date(t.entry_time).getHours();
-    if (!hourPerf[h]) hourPerf[h] = { pnl: 0, total: 0 };
-    hourPerf[h].pnl += Number(t.pnl_amount);
-    hourPerf[h].total++;
-  });
-  const bestHour = Object.entries(hourPerf).sort((a, b) => b[1].pnl - a[1].pnl)[0];
-  const worstHour = Object.entries(hourPerf).sort((a, b) => a[1].pnl - b[1].pnl)[0];
-
-  // PRO: Tag/Strategy performance
-  const tagPerf: Record<string, { wins: number; total: number; pnl: number }> = {};
-  trades.forEach((t) => {
-    (t.tags || []).forEach((tag: string) => {
-      if (!tagPerf[tag]) tagPerf[tag] = { wins: 0, total: 0, pnl: 0 };
-      tagPerf[tag].total++;
-      if (t.result === "win") tagPerf[tag].wins++;
-      tagPerf[tag].pnl += Number(t.pnl_amount);
+    trades.forEach((t) => {
+      cumPnl += toNumber(t.pnl_amount);
+      if (cumPnl > peak) peak = cumPnl;
+      const dd = peak - cumPnl;
+      if (dd > 0) drawdowns.push(dd);
+      if (dd > maxDrawdown) maxDrawdown = dd;
     });
-  });
 
-  // ELITE: Discipline score
-  const followPlanRate = totalTrades > 0 ? (trades.filter((t) => t.follow_plan).length / totalTrades) * 100 : 0;
-  const rrScore = avgRR !== "—" ? Math.min(Number(avgRR) * 25, 30) : 0;
-  const consistencyScore = Math.min(followPlanRate * 0.4 + rrScore + (Number(winRate) > 40 ? 20 : Number(winRate) * 0.5), 100);
+    const avgDrawdown =
+      drawdowns.length > 0
+        ? drawdowns.reduce((a, b) => a + b, 0) / drawdowns.length
+        : 0;
 
-  // ELITE: Expectancy
-  const avgWin = profitTrades.length > 0 ? profitTrades.reduce((s, t) => s + Number(t.pnl_amount), 0) / profitTrades.length : 0;
-  const avgLoss = lossTrades.length > 0 ? Math.abs(lossTrades.reduce((s, t) => s + Number(t.pnl_amount), 0) / lossTrades.length) : 0;
-  const expectancy = totalTrades > 0 ? ((wins / totalTrades) * avgWin - (losses / totalTrades) * avgLoss).toFixed(2) : "0";
+    const pieData = [
+      { name: "Wins", value: wins, color: "hsl(var(--chart-2))" },
+      { name: "Losses", value: losses, color: "hsl(var(--destructive))" },
+      { name: "BE", value: breakeven, color: "hsl(var(--muted-foreground))" },
+    ].filter((d) => d.value > 0);
 
-  const LockedOverlay = ({ tier }: { tier: string }) => (
-    <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg">
-      <Lock className="h-8 w-8 text-muted-foreground mb-2" />
-      <p className="text-sm font-semibold text-muted-foreground">Upgrade to {tier} to unlock</p>
-      <a href="/app/upgrade" className="text-xs text-primary mt-1 underline">View Plans →</a>
-    </div>
-  );
+    const pnlByDay: Record<string, number> = {};
+    trades.forEach((t) => {
+      const day = new Date(t.created_at).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+      pnlByDay[day] = (pnlByDay[day] || 0) + toNumber(t.pnl_amount);
+    });
 
-  if (trades.length === 0) {
+    const barData = Object.entries(pnlByDay).map(([day, pnl]) => ({
+      day,
+      pnl,
+    }));
+
+    let equity = 0;
+    const equityData = trades.map((t) => {
+      equity += toNumber(t.pnl_amount);
+      return {
+        date: new Date(t.created_at).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }),
+        equity,
+      };
+    });
+
+    const pairPerf: Record<
+      string,
+      { wins: number; total: number; pnl: number }
+    > = {};
+    trades.forEach((t) => {
+      const pair = t.pair || "Unknown";
+      if (!pairPerf[pair]) pairPerf[pair] = { wins: 0, total: 0, pnl: 0 };
+      pairPerf[pair].total++;
+      if (t.result === "win") pairPerf[pair].wins++;
+      pairPerf[pair].pnl += toNumber(t.pnl_amount);
+    });
+
+    const sortedPairPerf = Object.entries(pairPerf).sort(
+      (a, b) => b[1].pnl - a[1].pnl
+    );
+
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const dayPerf: Record<string, { wins: number; total: number; pnl: number }> =
+      {};
+    trades.forEach((t) => {
+      const d = dayNames[new Date(t.created_at).getDay()];
+      if (!dayPerf[d]) dayPerf[d] = { wins: 0, total: 0, pnl: 0 };
+      dayPerf[d].total++;
+      if (t.result === "win") dayPerf[d].wins++;
+      dayPerf[d].pnl += toNumber(t.pnl_amount);
+    });
+
+    const dayData = ["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => ({
+      day: d,
+      pnl: dayPerf[d]?.pnl || 0,
+      winRate: dayPerf[d]
+        ? ((dayPerf[d].wins / dayPerf[d].total) * 100).toFixed(0)
+        : "0",
+      trades: dayPerf[d]?.total || 0,
+    }));
+
+    const sessionPerf: Record<
+      string,
+      { wins: number; total: number; pnl: number }
+    > = {
+      London: { wins: 0, total: 0, pnl: 0 },
+      "New York": { wins: 0, total: 0, pnl: 0 },
+      Asia: { wins: 0, total: 0, pnl: 0 },
+    };
+
+    trades.forEach((t) => {
+      if (!t.entry_time) return;
+      const hour = new Date(t.entry_time).getUTCHours();
+      let session = "Asia";
+      if (hour >= 7 && hour < 12) session = "London";
+      else if (hour >= 12 && hour < 21) session = "New York";
+
+      sessionPerf[session].total++;
+      if (t.result === "win") sessionPerf[session].wins++;
+      sessionPerf[session].pnl += toNumber(t.pnl_amount);
+    });
+
+    const hourPerf: Record<number, { pnl: number; total: number }> = {};
+    trades.forEach((t) => {
+      if (!t.entry_time) return;
+      const hour = new Date(t.entry_time).getHours();
+      if (!hourPerf[hour]) hourPerf[hour] = { pnl: 0, total: 0 };
+      hourPerf[hour].pnl += toNumber(t.pnl_amount);
+      hourPerf[hour].total++;
+    });
+
+    const hourEntries = Object.entries(hourPerf);
+    const bestHour =
+      hourEntries.sort((a, b) => b[1].pnl - a[1].pnl)[0] || null;
+    const worstHour =
+      hourEntries.sort((a, b) => a[1].pnl - b[1].pnl)[0] || null;
+
+    const tagPerf: Record<string, { wins: number; total: number; pnl: number }> =
+      {};
+    trades.forEach((t) => {
+      (t.tags || []).forEach((tag: string) => {
+        if (!tagPerf[tag]) tagPerf[tag] = { wins: 0, total: 0, pnl: 0 };
+        tagPerf[tag].total++;
+        if (t.result === "win") tagPerf[tag].wins++;
+        tagPerf[tag].pnl += toNumber(t.pnl_amount);
+      });
+    });
+
+    const sortedTagPerf = Object.entries(tagPerf).sort(
+      (a, b) => b[1].pnl - a[1].pnl
+    );
+
+    const followPlanCount = trades.filter((t) => t.follow_plan).length;
+    const followPlanRate = safeDivide(followPlanCount, totalTrades) * 100;
+    const rrScore = avgRR !== null ? Math.min(avgRR * 25, 30) : 0;
+    const consistencyScore = Math.min(
+      followPlanRate * 0.4 + rrScore + (winRate > 40 ? 20 : winRate * 0.5),
+      100
+    );
+
+    const expectancy =
+      totalTrades > 0
+        ? (wins / totalTrades) * avgWin - (losses / totalTrades) * avgLoss
+        : 0;
+
+    const monthly: Record<string, { wins: number; total: number; pnl: number }> =
+      {};
+    trades.forEach((t) => {
+      const m = new Date(t.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+      });
+      if (!monthly[m]) monthly[m] = { wins: 0, total: 0, pnl: 0 };
+      monthly[m].total++;
+      if (t.result === "win") monthly[m].wins++;
+      monthly[m].pnl += toNumber(t.pnl_amount);
+    });
+
+    const monthlyRows = Object.entries(monthly).reverse();
+
+    return {
+      totalTrades,
+      wins,
+      losses,
+      breakeven,
+      totalPnl,
+      winRate,
+      bestTrade,
+      worstTrade,
+      avgWin,
+      avgLoss,
+      avgRR,
+      currentStreak,
+      streakType,
+      maxDrawdown,
+      avgDrawdown,
+      pieData,
+      barData,
+      equityData,
+      pairPerf,
+      sortedPairPerf,
+      dayData,
+      sessionPerf,
+      bestHour,
+      worstHour,
+      tagPerf,
+      sortedTagPerf,
+      followPlanCount,
+      followPlanRate,
+      consistencyScore,
+      expectancy,
+      monthlyRows,
+    };
+  }, [trades]);
+
+  const aiInsights = useMemo(() => {
+    const insights: string[] = [];
+
+    if (analytics.bestHour) {
+      insights.push(
+        `You perform best around ${analytics.bestHour[0]}:00 — consider prioritizing your A+ setups there.`
+      );
+    }
+
+    if (analytics.worstHour) {
+      insights.push(
+        `Your weakest hour is ${analytics.worstHour[0]}:00 — reduce size or avoid lower-quality entries in that window.`
+      );
+    }
+
+    if (analytics.currentStreak > 2 && analytics.streakType === "loss") {
+      insights.push(
+        `You are on a ${analytics.currentStreak}-trade losing streak. A short reset may protect discipline.`
+      );
+    }
+
+    if (analytics.currentStreak > 3 && analytics.streakType === "win") {
+      insights.push(
+        `You are on a ${analytics.currentStreak}-trade win streak. Stay selective and avoid overconfidence.`
+      );
+    }
+
+    if (analytics.followPlanRate < 60) {
+      insights.push(
+        `Your plan-following rate is ${analytics.followPlanRate.toFixed(
+          0
+        )}%. Better execution discipline may improve consistency faster than new strategies.`
+      );
+    }
+
+    const bestPair = analytics.sortedPairPerf[0];
+    const worstPair = [...analytics.sortedPairPerf].sort(
+      (a, b) => a[1].pnl - b[1].pnl
+    )[0];
+
+    if (bestPair) {
+      insights.push(
+        `Best-performing pair: ${bestPair[0]} with ${formatCurrency(
+          bestPair[1].pnl,
+          true
+        )}.`
+      );
+    }
+
+    if (worstPair && worstPair[1].pnl < 0) {
+      insights.push(
+        `Weakest pair: ${worstPair[0]} at ${formatCurrency(
+          worstPair[1].pnl
+        )}. Review whether it fits your edge.`
+      );
+    }
+
+    if (analytics.avgRR !== null && analytics.avgRR < 1.5) {
+      insights.push(
+        `Average RR is ${analytics.avgRR.toFixed(
+          2
+        )}. Improving reward-to-risk selection could lift expectancy.`
+      );
+    }
+
+    if (
+      analytics.maxDrawdown > analytics.totalPnl * 0.5 &&
+      analytics.totalPnl > 0
+    ) {
+      insights.push(
+        `Max drawdown is high relative to total profits. Tighter risk control may smooth your equity curve.`
+      );
+    }
+
+    if (insights.length === 0) {
+      insights.push(
+        "Keep logging trades consistently. More data will unlock better behavioral patterns and stronger insights."
+      );
+    }
+
+    return insights;
+  }, [analytics]);
+
+  if (analytics.totalTrades === 0) {
     return (
       <div className="space-y-6">
-        <div><h1 className="text-2xl font-bold">Analytics</h1><p className="text-sm text-muted-foreground mt-1">Performance insights</p></div>
-        <div className="rounded-lg border border-border bg-card p-8 card-glow text-center">
-          <p className="text-muted-foreground text-sm">Add trades to see your analytics.</p>
+        <div>
+          <h1 className="text-2xl font-bold">Analytics</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Performance insights
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-10 text-center card-glow">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-background">
+            <BarChart3 className="h-6 w-6 text-primary" />
+          </div>
+          <h3 className="text-base font-semibold">No analytics yet</h3>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            Add a few trades first. Once your journal has data, this page will
+            show win rate, drawdown, equity curve, discipline stats, and AI
+            insights.
+          </p>
         </div>
       </div>
     );
   }
 
+  const topStats = [
+    {
+      label: "Win Rate",
+      value: `${analytics.winRate.toFixed(1)}%`,
+      icon: Target,
+      tone: "default" as const,
+      hint: `${analytics.wins} wins out of ${analytics.totalTrades} trades`,
+    },
+    {
+      label: "Total P&L",
+      value: formatCurrency(analytics.totalPnl, true),
+      icon: analytics.totalPnl >= 0 ? TrendingUp : TrendingDown,
+      tone: analytics.totalPnl >= 0 ? ("success" as const) : ("danger" as const),
+      hint: "Net performance across all logged trades",
+    },
+    {
+      label: "Avg RR",
+      value: analytics.avgRR !== null ? analytics.avgRR.toFixed(2) : "—",
+      icon: BarChart3,
+      tone: "default" as const,
+      hint: "Average reward-to-risk from valid setups",
+    },
+    {
+      label: "Max Drawdown",
+      value: formatCurrency(analytics.maxDrawdown),
+      icon: AlertTriangle,
+      tone: "danger" as const,
+      hint: "Deepest fall from an equity peak",
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold">Analytics</h1><p className="text-sm text-muted-foreground mt-1">Performance insights</p></div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Win Rate", value: `${winRate}%`, icon: Target, color: "text-primary" },
-          { label: "Total P&L", value: `$${totalPnl.toFixed(2)}`, icon: TrendingUp, color: totalPnl >= 0 ? "text-success" : "text-destructive" },
-          { label: "Avg RR", value: avgRR, icon: BarChart3, color: "text-primary" },
-          { label: "Max Drawdown", value: `$${maxDrawdown.toFixed(2)}`, icon: AlertTriangle, color: "text-destructive" },
-        ].map((s, i) => (
-          <motion.div key={s.label} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="rounded-lg border border-border bg-card p-4 card-glow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
-              <s.icon className={`h-3.5 w-3.5 ${s.color}`} />
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 card-glow">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-primary">
+                Trading Intelligence
+              </span>
+              <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Plan: {plan}
+              </span>
             </div>
-            <div className="font-mono text-lg font-bold">{s.value}</div>
-          </motion.div>
+
+            <h1 className="text-2xl font-bold">Analytics</h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Deep performance breakdown across results, behavior, timing,
+              strategy tags, and discipline.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <MiniInsight
+              icon={Swords}
+              label="Trades"
+              value={String(analytics.totalTrades)}
+            />
+            <MiniInsight
+              icon={Trophy}
+              label="Best Trade"
+              value={formatCurrency(analytics.bestTrade, true)}
+              toneClass="text-success"
+            />
+            <MiniInsight
+              icon={CalendarDays}
+              label="Streak"
+              value={`${analytics.currentStreak} ${
+                analytics.streakType || "trade"
+              }`}
+            />
+            <MiniInsight
+              icon={Shield}
+              label="Plan Follow"
+              value={`${analytics.followPlanRate.toFixed(0)}%`}
+              toneClass="text-primary"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {topStats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
         ))}
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="bg-card border border-border">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-2 border border-border bg-card p-2">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="discipline">Discipline</TabsTrigger>
           <TabsTrigger value="ai">AI Insights</TabsTrigger>
         </TabsList>
 
-        {/* ========= OVERVIEW (BASIC) ========= */}
-        <TabsContent value="overview" className="space-y-6 mt-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <TabsContent value="overview" className="mt-5 space-y-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { label: "Total Trades", value: String(totalTrades) },
-              { label: "Best Trade", value: `$${bestTrade.toFixed(2)}`, locked: isFree },
-              { label: "Worst Trade", value: `$${worstTrade.toFixed(2)}`, locked: isFree },
-              { label: `${streakType === "win" ? "Win" : "Loss"} Streak`, value: String(currentStreak), locked: isFree },
-            ].map((s: any) => (
-              <div key={s.label} className={`rounded-lg border border-border bg-card p-3 card-glow relative ${s.locked ? "overflow-hidden" : ""}`}>
-                {s.locked && <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg"><Lock className="h-4 w-4 text-muted-foreground" /><span className="text-[9px] text-muted-foreground mt-1">Upgrade</span></div>}
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{s.label}</span>
-                <div className="font-mono text-sm font-bold">{s.value}</div>
+              { label: "Total Trades", value: String(analytics.totalTrades), locked: false },
+              {
+                label: "Best Trade",
+                value: formatCurrency(analytics.bestTrade, true),
+                locked: isFree,
+              },
+              {
+                label: "Worst Trade",
+                value: formatCurrency(analytics.worstTrade),
+                locked: isFree,
+              },
+              {
+                label:
+                  analytics.streakType === "win"
+                    ? "Win Streak"
+                    : analytics.streakType === "loss"
+                    ? "Loss Streak"
+                    : "Current Streak",
+                value: String(analytics.currentStreak),
+                locked: isFree,
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className={`relative overflow-hidden rounded-xl border border-border bg-card p-4 card-glow`}
+              >
+                {item.locked ? (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                    <span className="mt-1 text-[10px] text-muted-foreground">
+                      Upgrade
+                    </span>
+                  </div>
+                ) : null}
+
+                <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  {item.label}
+                </span>
+                <div className="font-mono text-sm font-bold">{item.value}</div>
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="rounded-lg border border-border bg-card p-5 card-glow">
-              <h3 className="text-sm font-semibold mb-4">Win Rate Distribution</h3>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value">
-                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                  </PieChart>
-                </ResponsiveContainer>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <SectionCard
+              title="Win Distribution"
+              subtitle="Breakdown of wins, losses, and breakeven trades"
+            >
+              <div className="h-56">
+                {analytics.pieData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={analytics.pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={78}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {analytics.pieData.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyState text="No distribution data available yet." />
+                )}
               </div>
-              <div className="flex justify-center gap-4 text-xs">
-                {pieData.map((d) => (
-                  <div key={d.name} className="flex items-center gap-1"><div className="w-2 h-2 rounded-full" style={{ background: d.color }} />{d.name}: {d.value}</div>
+
+              <div className="mt-3 flex flex-wrap justify-center gap-4 text-xs">
+                {analytics.pieData.map((d) => (
+                  <div key={d.name} className="flex items-center gap-2">
+                    <div
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: d.color }}
+                    />
+                    <span className="text-muted-foreground">{d.name}</span>
+                    <span className="font-mono">{d.value}</span>
+                  </div>
                 ))}
               </div>
-            </div>
+            </SectionCard>
 
-            <div className="rounded-lg border border-border bg-card p-5 card-glow">
-              <h3 className="text-sm font-semibold mb-4">Daily P&L</h3>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="day" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                    <Bar dataKey="pnl" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+            <SectionCard
+              title="Daily P&L"
+              subtitle="Profit and loss grouped by trading day"
+            >
+              <div className="h-56">
+                {analytics.barData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.barData}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke={CHART_COLORS.border}
+                      />
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
+                      />
+                      <Tooltip contentStyle={tooltipStyle} />
+                      <Bar
+                        dataKey="pnl"
+                        fill={CHART_COLORS.primary}
+                        radius={[6, 6, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyState text="Daily P&L will appear after you log more trades." />
+                )}
               </div>
-            </div>
+            </SectionCard>
           </div>
 
-          {/* Equity Curve - locked for free */}
-          <div className="rounded-lg border border-border bg-card p-5 card-glow relative overflow-hidden">
-            {isFree && <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-lg"><Lock className="h-6 w-6 text-muted-foreground mb-1" /><span className="text-xs text-muted-foreground">Upgrade to unlock Equity Curve</span><a href="/app/upgrade" className="text-[10px] text-primary underline mt-1">View Plans →</a></div>}
-            <h3 className="text-sm font-semibold mb-4">Equity Curve {isFree && "🔒"}</h3>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={equityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                  <Area type="monotone" dataKey="equity" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.1)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
+          <div className="relative overflow-hidden rounded-xl border border-border bg-card p-5 card-glow">
+            {isFree ? <LockedOverlay tier="Pro" /> : null}
+
+            <div className={isFree ? "pointer-events-none blur-sm" : ""}>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Equity Curve</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Running cumulative P&L over time
+                  </p>
+                </div>
+                <div className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-primary">
+                  Premium
+                </div>
+              </div>
+
+              <div className="h-60">
+                {analytics.equityData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={analytics.equityData}>
+                      <defs>
+                        <linearGradient
+                          id="equityFillMain"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="0%"
+                            stopColor={CHART_COLORS.primary}
+                            stopOpacity={0.3}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor={CHART_COLORS.primary}
+                            stopOpacity={0.03}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke={CHART_COLORS.border}
+                      />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
+                      />
+                      <Tooltip contentStyle={tooltipStyle} />
+                      <Area
+                        type="monotone"
+                        dataKey="equity"
+                        stroke={CHART_COLORS.primary}
+                        fill="url(#equityFillMain)"
+                        strokeWidth={2.5}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <EmptyState text="Equity curve will appear once cumulative trade history exists." />
+                )}
+              </div>
             </div>
           </div>
         </TabsContent>
 
-        {/* ========= PERFORMANCE (PRO) ========= */}
-        <TabsContent value="performance" className="space-y-6 mt-4">
+        <TabsContent value="performance" className="mt-5 space-y-6">
           <div className="relative">
-            {!isPro && <LockedOverlay tier="Pro" />}
-            <div className={!isPro ? "blur-sm pointer-events-none" : ""}>
-              {/* Pair Performance */}
-              <div className="rounded-lg border border-border bg-card p-5 card-glow mb-6">
-                <h3 className="text-sm font-semibold mb-4">Pair Performance</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase tracking-wider">
-                      <th className="text-left p-2">Pair</th><th className="text-right p-2">Trades</th><th className="text-right p-2">Win Rate</th><th className="text-right p-2">P&L</th>
-                    </tr></thead>
-                    <tbody>
-                      {Object.entries(pairPerf).sort((a, b) => b[1].pnl - a[1].pnl).map(([pair, data]) => (
-                        <tr key={pair} className="border-b border-border last:border-0">
-                          <td className="p-2 font-mono text-xs">{pair}</td>
-                          <td className="p-2 text-right font-mono text-xs">{data.total}</td>
-                          <td className="p-2 text-right font-mono text-xs">{((data.wins / data.total) * 100).toFixed(0)}%</td>
-                          <td className={`p-2 text-right font-mono text-xs ${data.pnl >= 0 ? "text-success" : "text-destructive"}`}>{data.pnl >= 0 ? "+" : ""}${data.pnl.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            {!isPro ? <LockedOverlay tier="Pro" /> : null}
 
-              {/* Day Performance */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div className="rounded-lg border border-border bg-card p-5 card-glow">
-                  <h3 className="text-sm font-semibold mb-4">Day Performance</h3>
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={dayData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="day" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                        <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                        <Bar dataKey="pnl" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-border bg-card p-5 card-glow">
-                  <h3 className="text-sm font-semibold mb-4">Session Analysis</h3>
-                  <div className="space-y-3">
-                    {Object.entries(sessionPerf).map(([session, data]) => (
-                      <div key={session} className="flex items-center justify-between p-3 rounded border border-border bg-background">
-                        <span className="text-sm font-medium">{session}</span>
-                        <div className="flex gap-4 text-xs font-mono">
-                          <span>{data.total} trades</span>
-                          <span>{data.total > 0 ? ((data.wins / data.total) * 100).toFixed(0) : 0}% WR</span>
-                          <span className={data.pnl >= 0 ? "text-success" : "text-destructive"}>${data.pnl.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Time insights + Drawdown */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div className="rounded-lg border border-border bg-card p-5 card-glow">
-                  <h3 className="text-sm font-semibold mb-4">Time Insights</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 rounded border border-border bg-background">
-                      <span className="text-sm">Best Hour</span>
-                      <span className="font-mono text-xs text-success">{bestHour ? `${bestHour[0]}:00 ($${bestHour[1].pnl.toFixed(2)})` : "—"}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded border border-border bg-background">
-                      <span className="text-sm">Worst Hour</span>
-                      <span className="font-mono text-xs text-destructive">{worstHour ? `${worstHour[0]}:00 ($${worstHour[1].pnl.toFixed(2)})` : "—"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-border bg-card p-5 card-glow">
-                  <h3 className="text-sm font-semibold mb-4">Drawdown Metrics</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 rounded border border-border bg-background">
-                      <span className="text-sm">Max Drawdown</span>
-                      <span className="font-mono text-xs text-destructive">${maxDrawdown.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded border border-border bg-background">
-                      <span className="text-sm">Avg Drawdown</span>
-                      <span className="font-mono text-xs text-muted-foreground">${avgDrawdown}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tag/Strategy Performance */}
-              {Object.keys(tagPerf).length > 0 && (
-                <div className="rounded-lg border border-border bg-card p-5 card-glow">
-                  <h3 className="text-sm font-semibold mb-4">Strategy / Tag Performance</h3>
+            <div className={!isPro ? "pointer-events-none blur-sm" : ""}>
+              <SectionCard
+                title="Pair Performance"
+                subtitle="Which markets are helping or hurting your edge"
+              >
+                {analytics.sortedPairPerf.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase tracking-wider">
-                        <th className="text-left p-2">Tag</th><th className="text-right p-2">Trades</th><th className="text-right p-2">Win Rate</th><th className="text-right p-2">P&L</th>
-                      </tr></thead>
+                      <thead>
+                        <tr className="border-b border-border text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          <th className="p-2 text-left">Pair</th>
+                          <th className="p-2 text-right">Trades</th>
+                          <th className="p-2 text-right">Win Rate</th>
+                          <th className="p-2 text-right">P&L</th>
+                        </tr>
+                      </thead>
                       <tbody>
-                        {Object.entries(tagPerf).sort((a, b) => b[1].pnl - a[1].pnl).map(([tag, data]) => (
-                          <tr key={tag} className="border-b border-border last:border-0">
-                            <td className="p-2 text-xs">{tag}</td>
-                            <td className="p-2 text-right font-mono text-xs">{data.total}</td>
-                            <td className="p-2 text-right font-mono text-xs">{((data.wins / data.total) * 100).toFixed(0)}%</td>
-                            <td className={`p-2 text-right font-mono text-xs ${data.pnl >= 0 ? "text-success" : "text-destructive"}`}>{data.pnl >= 0 ? "+" : ""}${data.pnl.toFixed(2)}</td>
+                        {analytics.sortedPairPerf.map(([pair, data]) => (
+                          <tr
+                            key={pair}
+                            className="border-b border-border last:border-0"
+                          >
+                            <td className="p-2 font-mono text-xs">{pair}</td>
+                            <td className="p-2 text-right font-mono text-xs">
+                              {data.total}
+                            </td>
+                            <td className="p-2 text-right font-mono text-xs">
+                              {((data.wins / data.total) * 100).toFixed(0)}%
+                            </td>
+                            <td
+                              className={`p-2 text-right font-mono text-xs ${
+                                data.pnl >= 0 ? "text-success" : "text-destructive"
+                              }`}
+                            >
+                              {formatCurrency(data.pnl, true)}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </TabsContent>
+                ) : (
+                  <EmptyState text="No pair-level performance yet." />
+                )}
+              </SectionCard>
 
-        {/* ========= DISCIPLINE (PRO) ========= */}
-        <TabsContent value="discipline" className="space-y-6 mt-4">
-          <div className="relative">
-            {!isPro && <LockedOverlay tier="Pro" />}
-            <div className={!isPro ? "blur-sm pointer-events-none" : ""}>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="rounded-lg border border-border bg-card p-5 card-glow">
-                  <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><Shield className="h-4 w-4 text-primary" /> Follow Plan Rate</h3>
-                  <div className="text-4xl font-bold font-mono text-primary">{followPlanRate.toFixed(0)}%</div>
-                  <p className="text-xs text-muted-foreground mt-1">{trades.filter((t) => t.follow_plan).length} / {totalTrades} trades followed the plan</p>
-                  <div className="mt-4 h-3 bg-secondary rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${followPlanRate}%` }} />
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <SectionCard
+                  title="Day Performance"
+                  subtitle="See which weekdays produce your best outcomes"
+                >
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analytics.dayData}>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke={CHART_COLORS.border}
+                        />
+                        <XAxis
+                          dataKey="day"
+                          tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
+                        />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Bar
+                          dataKey="pnl"
+                          fill={CHART_COLORS.primary}
+                          radius={[6, 6, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
-                </div>
+                </SectionCard>
 
-                <div className="rounded-lg border border-border bg-card p-5 card-glow relative">
-                  {!isElite && <LockedOverlay tier="Elite" />}
-                  <div className={!isElite ? "blur-sm" : ""}>
-                    <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><Activity className="h-4 w-4 text-primary" /> JournalX Score</h3>
-                    <div className={`text-4xl font-bold font-mono ${consistencyScore >= 80 ? "text-success" : consistencyScore >= 50 ? "text-primary" : "text-destructive"}`}>{consistencyScore.toFixed(0)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">Based on consistency, RR, and rule-following</p>
-                    <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                      <div><span className="text-muted-foreground block">Plan</span><span className="font-mono">{followPlanRate.toFixed(0)}%</span></div>
-                      <div><span className="text-muted-foreground block">RR</span><span className="font-mono">{avgRR}</span></div>
-                      <div><span className="text-muted-foreground block">Win Rate</span><span className="font-mono">{winRate}%</span></div>
+                <SectionCard
+                  title="Session Analysis"
+                  subtitle="Performance split by Asia, London, and New York"
+                >
+                  <div className="space-y-3">
+                    {Object.entries(analytics.sessionPerf).map(([session, data]) => (
+                      <div
+                        key={session}
+                        className="flex items-center justify-between rounded-lg border border-border bg-background p-3"
+                      >
+                        <span className="text-sm font-medium">{session}</span>
+                        <div className="flex gap-4 text-xs font-mono">
+                          <span>{data.total} trades</span>
+                          <span>
+                            {data.total > 0
+                              ? ((data.wins / data.total) * 100).toFixed(0)
+                              : 0}
+                            % WR
+                          </span>
+                          <span
+                            className={
+                              data.pnl >= 0 ? "text-success" : "text-destructive"
+                            }
+                          >
+                            {formatCurrency(data.pnl, true)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <SectionCard
+                  title="Time Insights"
+                  subtitle="Best and worst trading hours based on outcome"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-background p-3">
+                      <span className="text-sm">Best Hour</span>
+                      <span className="font-mono text-xs text-success">
+                        {analytics.bestHour
+                          ? `${analytics.bestHour[0]}:00 (${formatCurrency(
+                              analytics.bestHour[1].pnl,
+                              true
+                            )})`
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-background p-3">
+                      <span className="text-sm">Worst Hour</span>
+                      <span className="font-mono text-xs text-destructive">
+                        {analytics.worstHour
+                          ? `${analytics.worstHour[0]}:00 (${formatCurrency(
+                              analytics.worstHour[1].pnl
+                            )})`
+                          : "—"}
+                      </span>
                     </div>
                   </div>
+                </SectionCard>
+
+                <SectionCard
+                  title="Drawdown Metrics"
+                  subtitle="How deep losses run during rough patches"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-background p-3">
+                      <span className="text-sm">Max Drawdown</span>
+                      <span className="font-mono text-xs text-destructive">
+                        {formatCurrency(analytics.maxDrawdown)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-background p-3">
+                      <span className="text-sm">Avg Drawdown</span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {formatCurrency(analytics.avgDrawdown)}
+                      </span>
+                    </div>
+                  </div>
+                </SectionCard>
+              </div>
+
+              <SectionCard
+                title="Strategy / Tag Performance"
+                subtitle="Review which setups and labels drive results"
+              >
+                {analytics.sortedTagPerf.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          <th className="p-2 text-left">Tag</th>
+                          <th className="p-2 text-right">Trades</th>
+                          <th className="p-2 text-right">Win Rate</th>
+                          <th className="p-2 text-right">P&L</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.sortedTagPerf.map(([tag, data]) => (
+                          <tr
+                            key={tag}
+                            className="border-b border-border last:border-0"
+                          >
+                            <td className="p-2 text-xs">{tag}</td>
+                            <td className="p-2 text-right font-mono text-xs">
+                              {data.total}
+                            </td>
+                            <td className="p-2 text-right font-mono text-xs">
+                              {((data.wins / data.total) * 100).toFixed(0)}%
+                            </td>
+                            <td
+                              className={`p-2 text-right font-mono text-xs ${
+                                data.pnl >= 0 ? "text-success" : "text-destructive"
+                              }`}
+                            >
+                              {formatCurrency(data.pnl, true)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState text="No tag performance data found. Add tags to your trades to unlock this section." />
+                )}
+              </SectionCard>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="discipline" className="mt-5 space-y-6">
+          <div className="relative">
+            {!isPro ? <LockedOverlay tier="Pro" /> : null}
+
+            <div className={!isPro ? "pointer-events-none blur-sm" : ""}>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <SectionCard
+                  title="Follow Plan Rate"
+                  subtitle="How often your execution matched your intended setup"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="font-mono text-4xl font-bold text-primary">
+                        {analytics.followPlanRate.toFixed(0)}%
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {analytics.followPlanCount} / {analytics.totalTrades} trades
+                        followed the plan
+                      </p>
+                    </div>
+                    <Shield className="h-5 w-5 text-primary" />
+                  </div>
+
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${analytics.followPlanRate}%` }}
+                    />
+                  </div>
+                </SectionCard>
+
+                <div className="relative">
+                  {!isElite ? <LockedOverlay tier="Elite" /> : null}
+
+                  <div className={!isElite ? "blur-sm" : ""}>
+                    <SectionCard
+                      title="JournalX Score"
+                      subtitle="Consistency score based on rule-following, RR, and results"
+                    >
+                      <div
+                        className={`font-mono text-4xl font-bold ${
+                          analytics.consistencyScore >= 80
+                            ? "text-success"
+                            : analytics.consistencyScore >= 50
+                            ? "text-primary"
+                            : "text-destructive"
+                        }`}
+                      >
+                        {analytics.consistencyScore.toFixed(0)}
+                      </div>
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Built from discipline + setup quality + execution outcome
+                      </p>
+
+                      <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <span className="block text-muted-foreground">Plan</span>
+                          <span className="font-mono">
+                            {analytics.followPlanRate.toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <span className="block text-muted-foreground">RR</span>
+                          <span className="font-mono">
+                            {analytics.avgRR !== null
+                              ? analytics.avgRR.toFixed(2)
+                              : "—"}
+                          </span>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <span className="block text-muted-foreground">Win Rate</span>
+                          <span className="font-mono">
+                            {analytics.winRate.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </SectionCard>
+                  </div>
                 </div>
               </div>
 
-              {/* Expectancy */}
-              <div className="rounded-lg border border-border bg-card p-5 card-glow relative mt-6">
-                {!isElite && <LockedOverlay tier="Elite" />}
+              <div className="relative mt-6">
+                {!isElite ? <LockedOverlay tier="Elite" /> : null}
+
                 <div className={!isElite ? "blur-sm" : ""}>
-                  <h3 className="text-sm font-semibold mb-4">Expectancy & Stats</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div><span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Expectancy</span><span className={`font-mono text-lg font-bold ${Number(expectancy) >= 0 ? "text-success" : "text-destructive"}`}>${expectancy}</span></div>
-                    <div><span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Avg Win</span><span className="font-mono text-lg font-bold text-success">${avgWin.toFixed(2)}</span></div>
-                    <div><span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Avg Loss</span><span className="font-mono text-lg font-bold text-destructive">${avgLoss.toFixed(2)}</span></div>
-                    <div><span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Profit Factor</span><span className="font-mono text-lg font-bold">{avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : "∞"}</span></div>
-                  </div>
+                  <SectionCard
+                    title="Expectancy & Core Stats"
+                    subtitle="Your edge per trade based on win probability and payoff"
+                  >
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Expectancy
+                        </span>
+                        <span
+                          className={`font-mono text-lg font-bold ${
+                            analytics.expectancy >= 0
+                              ? "text-success"
+                              : "text-destructive"
+                          }`}
+                        >
+                          {formatCurrency(analytics.expectancy, true)}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Avg Win
+                        </span>
+                        <span className="font-mono text-lg font-bold text-success">
+                          {formatCurrency(analytics.avgWin)}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Avg Loss
+                        </span>
+                        <span className="font-mono text-lg font-bold text-destructive">
+                          {formatCurrency(analytics.avgLoss)}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Profit Factor
+                        </span>
+                        <span className="font-mono text-lg font-bold">
+                          {analytics.avgLoss > 0
+                            ? (analytics.avgWin / analytics.avgLoss).toFixed(2)
+                            : "∞"}
+                        </span>
+                      </div>
+                    </div>
+                  </SectionCard>
                 </div>
               </div>
             </div>
           </div>
         </TabsContent>
 
-        {/* ========= AI INSIGHTS (ELITE) ========= */}
-        <TabsContent value="ai" className="space-y-6 mt-4">
+        <TabsContent value="ai" className="mt-5 space-y-6">
           <div className="relative">
-            {!isElite && <LockedOverlay tier="Elite" />}
-            <div className={!isElite ? "blur-sm pointer-events-none" : ""}>
-              <div className="rounded-lg border border-border bg-card p-5 card-glow">
-                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><Brain className="h-4 w-4 text-primary" /> AI Trading Insights</h3>
-                <div className="space-y-3">
-                  {(() => {
-                    const insights: string[] = [];
-                    if (bestHour) insights.push(`📈 You perform best around ${bestHour[0]}:00 — consider focusing trades here.`);
-                    if (worstHour) insights.push(`📉 Avoid trading around ${worstHour[0]}:00 — your worst performance is at this time.`);
-                    if (currentStreak > 2 && streakType === "loss") insights.push(`⚠️ You're on a ${currentStreak}-trade losing streak. Consider taking a break.`);
-                    if (currentStreak > 3 && streakType === "win") insights.push(`🔥 ${currentStreak}-trade win streak! Stay disciplined, don't overtrade.`);
-                    if (followPlanRate < 60) insights.push(`🎯 Your plan-following rate is ${followPlanRate.toFixed(0)}%. Focus on discipline — it's your edge.`);
-                    const bestPair = Object.entries(pairPerf).sort((a, b) => b[1].pnl - a[1].pnl)[0];
-                    const worstPair = Object.entries(pairPerf).sort((a, b) => a[1].pnl - b[1].pnl)[0];
-                    if (bestPair) insights.push(`💎 Best performing pair: ${bestPair[0]} (+$${bestPair[1].pnl.toFixed(2)})`);
-                    if (worstPair && worstPair[1].pnl < 0) insights.push(`💀 Worst pair: ${worstPair[0]} ($${worstPair[1].pnl.toFixed(2)}) — consider reducing size.`);
-                    if (Number(avgRR) < 1.5 && avgRR !== "—") insights.push(`📊 Your avg RR is ${avgRR}. Aim for 1.5+ for long-term profitability.`);
-                    if (maxDrawdown > totalPnl * 0.5 && totalPnl > 0) insights.push(`⚡ Your max drawdown ($${maxDrawdown.toFixed(2)}) is high relative to total profit. Tighten risk.`);
-                    if (insights.length === 0) insights.push("✅ Keep trading consistently — more data = better insights!");
-                    return insights.map((insight, i) => (
-                      <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} className="p-3 rounded-lg border border-border bg-background text-sm">{insight}</motion.div>
-                    ));
-                  })()}
-                </div>
-              </div>
+            {!isElite ? <LockedOverlay tier="Elite" /> : null}
 
-              {/* Monthly summary */}
-              <div className="rounded-lg border border-border bg-card p-5 card-glow mt-6">
-                <h3 className="text-sm font-semibold mb-4">Monthly Summary</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b border-border text-muted-foreground text-xs uppercase tracking-wider">
-                      <th className="text-left p-2">Month</th><th className="text-right p-2">Trades</th><th className="text-right p-2">Win Rate</th><th className="text-right p-2">P&L</th>
-                    </tr></thead>
-                    <tbody>
-                      {(() => {
-                        const monthly: Record<string, { wins: number; total: number; pnl: number }> = {};
-                        trades.forEach((t) => {
-                          const m = new Date(t.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short" });
-                          if (!monthly[m]) monthly[m] = { wins: 0, total: 0, pnl: 0 };
-                          monthly[m].total++;
-                          if (t.result === "win") monthly[m].wins++;
-                          monthly[m].pnl += Number(t.pnl_amount);
-                        });
-                        return Object.entries(monthly).reverse().map(([month, data]) => (
-                          <tr key={month} className="border-b border-border last:border-0">
-                            <td className="p-2 text-xs">{month}</td>
-                            <td className="p-2 text-right font-mono text-xs">{data.total}</td>
-                            <td className="p-2 text-right font-mono text-xs">{((data.wins / data.total) * 100).toFixed(0)}%</td>
-                            <td className={`p-2 text-right font-mono text-xs ${data.pnl >= 0 ? "text-success" : "text-destructive"}`}>{data.pnl >= 0 ? "+" : ""}${data.pnl.toFixed(2)}</td>
-                          </tr>
-                        ));
-                      })()}
-                    </tbody>
-                  </table>
+            <div className={!isElite ? "pointer-events-none blur-sm" : ""}>
+              <SectionCard
+                title="AI Trading Insights"
+                subtitle="Pattern-based guidance from your trade behavior"
+                action={
+                  <div className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-primary">
+                    Elite
+                  </div>
+                }
+              >
+                <div className="space-y-3">
+                  {aiInsights.map((insight, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.08 }}
+                      className="rounded-lg border border-border bg-background p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 rounded-full border border-primary/20 bg-primary/10 p-2">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                        </div>
+                        <p className="text-sm leading-6">{insight}</p>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
-              </div>
+              </SectionCard>
+
+              <SectionCard
+                title="Monthly Summary"
+                subtitle="Month-by-month trading output and hit rate"
+                className="mt-6"
+              >
+                {analytics.monthlyRows.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          <th className="p-2 text-left">Month</th>
+                          <th className="p-2 text-right">Trades</th>
+                          <th className="p-2 text-right">Win Rate</th>
+                          <th className="p-2 text-right">P&L</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.monthlyRows.map(([month, data]) => (
+                          <tr
+                            key={month}
+                            className="border-b border-border last:border-0"
+                          >
+                            <td className="p-2 text-xs">{month}</td>
+                            <td className="p-2 text-right font-mono text-xs">
+                              {data.total}
+                            </td>
+                            <td className="p-2 text-right font-mono text-xs">
+                              {((data.wins / data.total) * 100).toFixed(0)}%
+                            </td>
+                            <td
+                              className={`p-2 text-right font-mono text-xs ${
+                                data.pnl >= 0 ? "text-success" : "text-destructive"
+                              }`}
+                            >
+                              {formatCurrency(data.pnl, true)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState text="Monthly summary will appear after enough dated trade history is available." />
+                )}
+              </SectionCard>
             </div>
           </div>
         </TabsContent>
