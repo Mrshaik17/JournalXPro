@@ -178,16 +178,28 @@ const Dashboard = () => {
     const losses = accountTrades.filter((t: any) => t.result === "loss").length;
     const pnl = accountTrades.reduce((sum: number, t: any) => sum + Number(t.pnl_amount || 0), 0);
     const avg = total > 0 ? pnl / total : 0;
+    
 
-    const bestTrade =
-      total > 0
-        ? Math.max(...accountTrades.map((t: any) => Number(t.pnl_amount || 0)))
-        : 0;
+    // ✅ separate wins & losses
+const winTrades = accountTrades.filter(
+  (t: any) => Number(t.pnl_amount) > 0
+);
 
-    const worstTrade =
-      total > 0
-        ? Math.min(...accountTrades.map((t: any) => Number(t.pnl_amount || 0)))
-        : 0;
+const lossTrades = accountTrades.filter(
+  (t: any) => Number(t.pnl_amount) < 0
+);
+
+// ✅ BEST TRADE = biggest profit
+const bestTrade =
+  winTrades.length > 0
+    ? Math.max(...winTrades.map((t: any) => Number(t.pnl_amount)))
+    : 0;
+
+// ✅ WORST TRADE = biggest loss ONLY
+const worstTrade =
+  lossTrades.length > 0
+    ? Math.min(...lossTrades.map((t: any) => Number(t.pnl_amount)))
+    : 0;
 
     const followPlan = accountTrades.filter((t: any) => t.follow_plan).length;
     const followPlanRate = total > 0 ? ((followPlan / total) * 100).toFixed(0) : "0";
@@ -275,60 +287,89 @@ const Dashboard = () => {
             className="space-y-4"
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Accounts</h2>
-            </div>
+  <h2 className="text-lg font-semibold">Accounts</h2>
+</div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {accounts.map((acc, i) => {
-                const initialBalance = Number(acc.initial_balance || 0);
-                const currentBalance = Number(acc.current_balance || 0);
-                const pnl = currentBalance - initialBalance;
-                const pnlPercent =
-                  initialBalance > 0 ? ((pnl / initialBalance) * 100).toFixed(1) : "0";
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  {accounts.map((acc, i) => {
+    console.log("ACCOUNT DATA:", acc);
+    // get trades of this account
+const accountTrades = trades.filter(
+  (t) => t.account_id === acc.id
+);
 
-                const isSelected = selectedAccountId === acc.id;
+// total pnl from trades
+const pnl = accountTrades.reduce(
+  (sum, t) => sum + Number(t.pnl_amount || 0),
+  0
+);
 
-                return (
-                  <motion.div
-                    key={acc.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.05 }}
-                    onClick={() => setSelectedAccountId(acc.id)}
-                    className={`rounded-lg bg-card p-5 cursor-pointer transition-all duration-300 group ${
-                      isSelected
-                        ? "ring-1 ring-primary bg-card/90"
-                        : "hover:bg-card/80"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="text-sm text-muted-foreground group-hover:text-primary transition-colors">
-                        {acc.name}
-                      </div>
-                      {isSelected && (
-                        <span className="text-[10px] uppercase tracking-wider text-primary">
-                          Selected
-                        </span>
-                      )}
-                    </div>
+// current balance from DB
+const current = Number(acc.current_balance ?? 0);
 
-                    <div className="font-mono text-xl font-bold">
-                      {hideProfit ? "•••••" : `$${currentBalance.toFixed(2)}`}
-                    </div>
+// 🔥 FIX: derive initial from current
+const initial = current - pnl;
 
-                    <div
-                      className={`font-mono text-sm mt-1 ${
-                        pnl >= 0 ? "text-success" : "text-destructive"
-                      }`}
-                    >
-                      {hideProfit
-                        ? "•••"
-                        : `${pnl >= 0 ? "+" : ""}${pnlPercent}% ($${pnl.toFixed(2)})`}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+// % calculation (correct)
+const pnlPercent =
+  initial > 0 ? (pnl / initial) * 100 : 0;
+
+const isSelected = selectedAccountId === acc.id;
+
+    return (
+      <motion.div
+        key={acc.id}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: i * 0.05 }}
+        onClick={() => setSelectedAccountId(acc.id)}
+        className={`rounded-lg bg-card p-5 cursor-pointer transition-all duration-300 ${
+          isSelected
+            ? "ring-1 ring-primary bg-card/90"
+            : "hover:bg-card/80"
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">
+            {acc.name || "Account"}
+          </span>
+
+          {isSelected && (
+            <span className="text-[10px] uppercase tracking-wider text-primary">
+              Selected
+            </span>
+          )}
+        </div>
+
+        {/* BALANCE */}
+        <div className="text-xl font-mono font-bold mt-2">
+          ${current.toFixed(2)}
+        </div>
+
+        {/* ✅ PROFIT ONLY (FIXED) */}
+        <div
+  className={`font-mono text-sm mt-1 ${
+    pnl >= 0 ? "text-success" : "text-destructive"
+  }`}
+>
+  {isNaN(pnl) || isNaN(pnlPercent)
+    ? "$0.00"
+    : (
+      <>
+        {pnl >= 0 ? "+" : ""}
+        {pnlPercent.toFixed(1)}%
+        {" ("}
+        {pnl >= 0 ? "+" : ""}
+        ${pnl.toFixed(2)}
+        {")"}
+      </>
+    )
+  }
+</div>
+      </motion.div>
+    );
+  })}
+</div>
 
             {selectedAccount && (
               <div className="rounded-lg bg-card p-5 space-y-5">

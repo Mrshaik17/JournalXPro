@@ -270,9 +270,9 @@ const recalculateAccountBalance = async (accountId: string) => {
   // 1. get account
   const { data: account } = await supabase
     .from("accounts")
-    .select("starting_balance")
+    .select("startingbalance")
     .eq("id", accountId)
-    .eq("user_id", user.id)
+    .eq("firebase_uid", user.id)
     .single();
 
   // 2. get all trades of this account
@@ -292,61 +292,53 @@ const recalculateAccountBalance = async (accountId: string) => {
   await supabase
     .from("accounts")
     .update({
-      current_balance: Number(account?.starting_balance || 0) + totalPnl,
+      current_balance: Number(account?.startingbalance || 0) + totalPnl,
     })
     .eq("id", accountId)
-    .eq("user_id", user.id);
+    .eq("firebase_uid", user.id);
 };
 const deleteTrade = useMutation({
   mutationFn: async (trade: any) => {
     if (!user?.id) throw new Error("Not authenticated");
 
-    // 1. delete image(s) from Cloudinary first
+    const account = accounts.find((a: any) => a.id === trade.account_id);
+    if (!account) throw new Error("Account not found");
+
+    const deletedPnl = Number(trade.pnl_amount || 0);
+    const currentBalance = Number(account.current_balance || 0);
+
     if (trade.screenshot_public_ids?.length > 0) {
-     const { data, error } = await supabase.functions.invoke(
-  "delete-cloudinary-images",
-  {
-    body: {
-      publicIds: trade.screenshot_public_ids,
-    },
-    headers: {
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    },
-  }
-);
-
-console.log("Cloudinary delete result:", data);
-console.log("Cloudinary delete error:", error);
-
-if (error) {
-  throw new Error(error.message || "Cloudinary image delete failed");
-}
-
-      console.log("Cloudinary delete result:", data);
-      console.log("Cloudinary delete error:", error);
+      const { error } = await supabase.functions.invoke(
+        "delete-cloudinary-images",
+        {
+          body: { publicIds: trade.screenshot_public_ids },
+          headers: {
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+        }
+      );
 
       if (error) {
-        throw new Error(
-          error.message || "Cloudinary image delete failed"
-        );
+        throw new Error(error.message || "Cloudinary image delete failed");
       }
     }
 
-    // 2. delete trade from database
-    const { error } = await supabase
+    const { error: tradeDeleteError } = await supabase
       .from("trades")
       .delete()
       .eq("id", trade.id)
       .eq("user_id", user.id);
-      queryClient.invalidateQueries({ queryKey: ["trades"] });
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      
-      queryClient.invalidateQueries({ queryKey: ["analytics"] });
 
-    if (error) throw error;
+    if (tradeDeleteError) throw tradeDeleteError;
 
-    // 3. recalculate account balance
-    await recalculateAccountBalance(trade.account_id);
+    const { error: balanceError } = await supabase
+      .from("accounts")
+      .update({
+        current_balance: currentBalance - deletedPnl,
+      })
+      .eq("id", trade.account_id);
+
+    if (balanceError) throw balanceError;
   },
 
   onSuccess: () => {
@@ -355,6 +347,7 @@ if (error) {
     queryClient.invalidateQueries({ queryKey: ["dashboard-trades"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard-accounts"] });
     queryClient.invalidateQueries({ queryKey: ["analytics-trades"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
     toast.success("Trade deleted.");
   },
 

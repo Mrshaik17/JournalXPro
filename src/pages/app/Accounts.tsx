@@ -1,3 +1,4 @@
+
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -336,30 +337,43 @@ const Accounts = () => {
   });
 
   const deleteAccount = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("accounts").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["trades"] });
-      toast.success("Account deleted permanently");
-      setSearchParams({});
-      setDeleteDialogOpen(false);
-      setAccountToDelete(null);
-    },
-    onError: (err: any) => toast.error(err.message || "Failed to delete account"),
-  });
+  mutationFn: async (id: string) => {
+    const { error } = await supabase.from("accounts").delete().eq("id", id);
+    if (error) throw error;
+    return id;
+  },
 
-  const handleDeleteAccount = (id: string, name: string) => {
-    setAccountToDelete({ id, name });
-    setDeleteDialogOpen(true);
-  };
+  onSuccess: async (deletedId) => {
+    if (selectedAccount?.id === deletedId) {
+      setSelectedAccount(null);
+    }
 
-  const confirmDeleteAccount = () => {
-    if (!accountToDelete) return;
-    deleteAccount.mutate(accountToDelete.id);
-  };
+    setSearchParams({});
+    setDeleteDialogOpen(false);
+    setAccountToDelete(null);
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+      queryClient.invalidateQueries({ queryKey: ["trades"] }),
+    ]);
+
+    toast.success("Account deleted permanently");
+  },
+
+  onError: (err: any) => {
+    toast.error(err.message || "Failed to delete account");
+  },
+});
+
+const handleDeleteAccount = (id: string, name: string) => {
+  setAccountToDelete({ id, name });
+  setDeleteDialogOpen(true);
+};
+
+const confirmDeleteAccount = () => {
+  if (!accountToDelete) return;
+  deleteAccount.mutate(accountToDelete.id);
+};
 
   const enhancedAccounts = useMemo(() => {
     return accounts.map((acc) => {
