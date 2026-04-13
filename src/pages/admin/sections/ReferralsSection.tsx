@@ -1,3 +1,4 @@
+import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useMemo, useState } from "react";
 import {
   Trash2,
@@ -371,20 +372,33 @@ Prop Firm Team
     }
   };
 
-  const handleCreate = () => {
-    if (
-      !refEmail ||
-      !refCode ||
-      refCommission === "" ||
-      refEmail.trim() === "" ||
-      refCode.trim() === ""
-    ) {
-      alert("Fill all fields");
-      return;
-    }
+  const handleCreate = async () => {
+  if (
+    !refEmail ||
+    !refCode ||
+    refCommission === "" ||
+    refEmail.trim() === "" ||
+    refCode.trim() === ""
+  ) {
+    alert("Fill all fields");
+    return;
+  }
 
-    createReferral.mutate();
-  };
+  const { error } = await supabase.from("referrals").insert({
+  email: refEmail,
+  code: refCode,
+  commission: Number(refCommission),
+  
+});
+
+  if (error) {
+    console.error(error);
+    alert("Error creating referral ❌");
+  } else {
+    alert("Referral created ✅");
+    window.location.reload();
+  }
+};
 
   const createDisabled =
     !!createReferral?.isPending ||
