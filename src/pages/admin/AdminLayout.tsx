@@ -29,6 +29,12 @@ export default function AdminLayout({ handleAdminLogout }: Props) {
   const [pendingNotif, setPendingNotif] = useState(0);
   const [chatNotif, setChatNotif] = useState(0);
 
+  // ✅ ADD THIS (VERY IMPORTANT)
+  const [refName, setRefName] = useState("");
+  const [refEmail, setRefEmail] = useState("");
+  const [refCode, setRefCode] = useState("");
+  const [refCommission, setRefCommission] = useState("");
+
   const admin = useAdminHooks({
     queryClient,
     setPendingNotif,
@@ -84,7 +90,22 @@ export default function AdminLayout({ handleAdminLogout }: Props) {
               {activeSection === "dashboard" && <DashboardSection {...admin} />}
               {activeSection === "users" && <UsersSection {...admin} />}
               {activeSection === "payments" && <PaymentsSection {...admin} />}
-              {activeSection === "referrals" && <ReferralsSection {...admin} />}
+
+              {/* ✅ FIXED REFERRALS */}
+              {activeSection === "referrals" && (
+                <ReferralsSection
+                  {...admin}
+                  refName={refName}
+                  setRefName={setRefName}
+                  refEmail={refEmail}
+                  setRefEmail={setRefEmail}
+                  refCode={refCode}
+                  setRefCode={setRefCode}
+                  refCommission={refCommission}
+                  setRefCommission={setRefCommission}
+                />
+              )}
+
               {activeSection === "announcements" && <AnnouncementsSection {...admin} />}
               {activeSection === "propfirms" && <PropFirmsSection {...admin} />}
               {activeSection === "chat" && <ChatSection {...admin} />}

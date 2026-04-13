@@ -1,4 +1,5 @@
-import { Zap, Eye, EyeOff, Check, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Zap, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
@@ -15,6 +16,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 
+
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,10 +27,16 @@ const Login = () => {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // ✅ AUTO GET REFERRAL FROM URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) setReferralCode(ref);
+  }, []);
 
   useEffect(() => {
     if (user) navigate("/app", { replace: true });
@@ -41,26 +49,80 @@ const Login = () => {
     hasNumber: /[0-9]/.test(password),
   }), [password]);
 
-  const allPwValid = pwRules.minLength && pwRules.hasUpper && pwRules.hasLower && pwRules.hasNumber;
+  const allPwValid =
+    pwRules.minLength && pwRules.hasUpper && pwRules.hasLower && pwRules.hasNumber;
+
   const passwordsMatch = password === confirmPassword && confirmPassword.length > 0;
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (isSignUp) {
-      if (!allPwValid) { toast.error("Password doesn't meet requirements"); return; }
-      if (!passwordsMatch) { toast.error("Passwords do not match"); return; }
+      if (!allPwValid) {
+        toast.error("Password doesn't meet requirements");
+        return;
+      }
+      if (!passwordsMatch) {
+        toast.error("Passwords do not match");
+        return;
+      }
     }
+
     setLoading(true);
 
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
-        toast.success("Account created successfully!");
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-        navigate("/app");
-      }
+  // 🔥 CREATE USER (FIREBASE ONLY)
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+  // 🔥 CLEAN REFERRAL CODE
+  const cleanReferralCode = referralCode.trim().toUpperCase();
+
+// 🔥 STORE REFERRAL TEMPORARILY
+if (cleanReferralCode) {
+  localStorage.setItem("referral_code", cleanReferralCode);
+}
+
+// 🔥 FIND referral ID
+let referredBy: string | null = null;
+
+if (cleanReferralCode) {
+  const { data: referral } = await supabase
+    .from("referrals")
+    .select("id")
+    .ilike("code", cleanReferralCode)
+    .maybeSingle();
+
+  if (referral) {
+    referredBy = referral.id;
+  }
+}
+
+// 🔥 SAVE PROFILE IMMEDIATELY
+await supabase.from("profiles").upsert(
+  {
+    id: userCredential.user.uid,
+    firebase_uid: userCredential.user.uid,
+    email: userCredential.user.email,
+
+    referral_code: cleanReferralCode || null,
+    referred_by: referredBy,
+    referral_id: referredBy, // 🔥 legacy field for easier querying
+
+    updated_at: new Date().toISOString(),
+  },
+  { onConflict: "firebase_uid" }
+);
+
+toast.success("Account created successfully!");
+navigate("/app");
+}
+else {
+  await signInWithEmailAndPassword(auth, email, password);
+  navigate("/app");
+}
     } catch (err: any) {
+      console.error(err);
       toast.error(err.message || "Authentication failed");
     } finally {
       setLoading(false);
@@ -68,16 +130,52 @@ const Login = () => {
   };
 
   const handleGoogleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-      navigate("/app");
-    } catch (err) {
-      toast.error("Google sign-in failed");
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+
+    const cleanReferralCode = referralCode.trim().toUpperCase();
+
+    let referredBy: string | null = null;
+
+    if (cleanReferralCode) {
+      const { data: referral } = await supabase
+        .from("referrals")
+        .select("id")
+        .ilike("code", cleanReferralCode)
+        .maybeSingle();
+
+      if (referral) {
+        referredBy = referral.id;
+      }
     }
-  };
+
+    await supabase.from("profiles").upsert(
+      {
+        id: user.uid,
+        firebase_uid: user.uid,
+        email: user.email,
+
+        referral_code: cleanReferralCode || null,
+        referred_by: referredBy,
+        referral_id: referredBy, // 🔥 legacy field for easier querying
+
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "firebase_uid" }
+    );
+
+    navigate("/app");
+  } catch (err) {
+    toast.error("Google sign-in failed");
+  }
+};
 
   const handleForgotPassword = async () => {
-    if (!resetEmail) { toast.error("Enter your email"); return; }
+    if (!resetEmail) {
+      toast.error("Enter your email");
+      return;
+    }
     setResetLoading(true);
     try {
       await sendPasswordResetEmail(auth, resetEmail);
@@ -91,73 +189,65 @@ const Login = () => {
   };
 
   const PwRule = ({ ok, text }: { ok: boolean; text: string }) => (
-    <div className={`flex items-center gap-1.5 text-xs ${ok ? "text-success" : "text-muted-foreground"}`}>
-      {ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-      {text}
+    <div className={`text-xs ${ok ? "text-green-500" : "text-gray-400"}`}>
+      {ok ? "✔" : "✖"} {text}
     </div>
   );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm space-y-6">
+        
         <div className="text-center">
           <Link to="/" className="inline-flex items-center gap-2 mb-6">
             <Zap className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold text-foreground">Trader's Divine</span>
+            <span className="text-xl font-bold">JournalXPro</span>
           </Link>
-          <h1 className="text-xl font-semibold mb-1">{isSignUp ? "Create an account" : "Welcome back"}</h1>
-          <p className="text-sm text-muted-foreground">{isSignUp ? "Sign up to start journaling" : "Sign in to your account"}</p>
+          <h1 className="text-xl font-semibold">
+            {isSignUp ? "Create account" : "Welcome back"}
+          </h1>
         </div>
 
-        <div className="space-y-3">
-          <Button variant="outline" className="w-full border-border hover:bg-card" onClick={handleGoogleLogin}>
-            Continue with Google
-          </Button>
-        </div>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-          <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground">or</span></div>
-        </div>
+        <Button variant="outline" onClick={handleGoogleLogin}>
+          Continue with Google
+        </Button>
 
         <form onSubmit={handleEmailAuth} className="space-y-3">
-          <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          
-          <Input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+
+          <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
 
           {isSignUp && (
             <>
-              <Input placeholder="Confirm Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
-              <Input placeholder="Referral code (optional)" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} />
+              <Input type="password" placeholder="Confirm Password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+              
+              <Input
+                placeholder="Referral code (optional)"
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+              />
+
+              <div>
+                <PwRule ok={pwRules.minLength} text="6+ characters" />
+                <PwRule ok={pwRules.hasUpper} text="Uppercase letter" />
+                <PwRule ok={pwRules.hasLower} text="Lowercase letter" />
+                <PwRule ok={pwRules.hasNumber} text="Number" />
+              </div>
             </>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full">
             {loading ? "Loading..." : isSignUp ? "Sign Up" : "Sign In"}
           </Button>
         </form>
 
-        {!isSignUp && (
-          <div className="text-center">
-            <button onClick={() => setForgotOpen(true)} className="text-xs text-primary hover:underline">Forgot password?</button>
-          </div>
-        )}
-
-        <p className="text-center text-xs text-muted-foreground">
-          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-          <button onClick={() => setIsSignUp(!isSignUp)} className="text-primary hover:underline">
+        <p className="text-center text-sm">
+          {isSignUp ? "Already have account?" : "Don't have account?"}
+          <button onClick={() => setIsSignUp(!isSignUp)} className="text-primary ml-1">
             {isSignUp ? "Sign in" : "Sign up"}
           </button>
         </p>
       </motion.div>
-
-      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Reset Password</DialogTitle></DialogHeader>
-          <Input value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
-          <Button onClick={handleForgotPassword}>Send Reset Link</Button>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

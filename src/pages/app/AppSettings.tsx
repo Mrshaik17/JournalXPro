@@ -184,32 +184,34 @@ const AppSettings = () => {
   }, [profile]);
 
   const updateProfile = useMutation({
-    mutationFn: async () => {
-      if (!user?.id) throw new Error("User not found");
+  mutationFn: async () => {
+    if (!user?.id) throw new Error("User not found");
 
-      const { error } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            id: user.id,
-            firebase_uid: user.id,
-            email: user.email,
-            full_name: fullName,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "firebase_uid" }
-        );
+    const { error } = await supabase
+      .from("profiles")
+      .upsert(
+        {
+          id: user.id,              // ✅🔥 ADD THIS (VERY IMPORTANT)
+          firebase_uid: user.id,
+          email: user.email,
+          full_name: fullName,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "firebase_uid" }
+      );
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
-      toast.success("Profile updated successfully.");
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to update profile.");
-    },
-  });
+    if (error) throw error;
+  },
+
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
+    toast.success("Profile updated successfully.");
+  },
+
+  onError: (err: any) => {
+    toast.error(err.message || "Failed to update profile.");
+  },
+});
 
   const updatePassword = useMutation({
     mutationFn: async (pw: string) => {
@@ -258,53 +260,93 @@ const AppSettings = () => {
 
     updatePassword.mutate(newPassword);
   };
+  const storedReferralCode = localStorage.getItem("referral_code");
+const cleanReferralCode = storedReferralCode?.trim().toUpperCase() || null;
 
   const saveBilling = async () => {
-    if (!user?.id) {
-      toast.error("User not found.");
-      return;
-    }
+  if (!user?.id) {
+    toast.error("User not found.");
+    return;
+  }
 
-    if (
-      !billingName.trim() ||
-      !billingEmail.trim() ||
-      !billingPhone.trim() ||
-      !billingStreet.trim() ||
-      !billingCity.trim() ||
-      !billingState.trim() ||
-      !billingCountry.trim() ||
-      !billingPincode.trim()
-    ) {
-      toast.error("All billing fields are required.");
-      return;
-    }
+  if (
+    !billingName.trim() ||
+    !billingEmail.trim() ||
+    !billingPhone.trim() ||
+    !billingStreet.trim() ||
+    !billingCity.trim() ||
+    !billingState.trim() ||
+    !billingCountry.trim() ||
+    !billingPincode.trim()
+  ) {
+    toast.error("All billing fields are required.");
+    return;
+  }
 
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          billing_name: billingName.trim(),
-          billing_email: billingEmail.trim(),
-          billing_phone: billingPhone.trim(),
-          billing_street: billingStreet.trim(),
-          billing_city: billingCity.trim(),
-          billing_district: billingDistrict.trim(),
-          billing_state: billingState.trim(),
-          billing_country: billingCountry.trim(),
-          billing_pincode: billingPincode.trim(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("firebase_uid", user.id);
+  try {
+    // 🔥 GET REFERRAL FROM LOCAL STORAGE
+    
 
-      if (error) throw error;
+let referredBy: string | null = null;
 
-      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
-      toast.success("Billing details saved.");
-    } catch (err: any) {
-      console.error("Billing save error:", err);
-      toast.error(err.message || "Failed to save billing.");
-    }
-  };
+// 🔥 FIND referral id
+if (cleanReferralCode) {
+  const { data: referral } = await supabase
+  .from("referrals")
+  .select("id, code")
+  .ilike("code", cleanReferralCode) // 🔥 case-insensitive
+  .maybeSingle();
+
+console.log("Entered Code:", cleanReferralCode);
+console.log("Matched Referral:", referral);
+
+  if (referral) {
+    referredBy = referral.id;
+  }
+}
+
+// 🔥 UPDATE PROFILE WITH REFERRAL + BILLING
+const { error } = await supabase
+  .from("profiles")
+  .upsert(
+    {
+      id: user.id,
+      firebase_uid: user.id,
+      email: user.email,
+
+      billing_name: billingName.trim(),
+      billing_email: billingEmail.trim(),
+      billing_phone: billingPhone.trim(),
+      billing_street: billingStreet.trim(),
+      billing_city: billingCity.trim(),
+      billing_district: billingDistrict.trim(),
+      billing_state: billingState.trim(),
+      billing_country: billingCountry.trim(),
+      billing_pincode: billingPincode.trim(),
+
+      referral_code: cleanReferralCode,
+      referred_by: referredBy,
+
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "firebase_uid" }
+  );
+
+if (error) throw error;
+
+// 🔥 CLEAR AFTER USE
+if (cleanReferralCode) {
+  localStorage.removeItem("referral_code");
+}
+
+    queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
+
+    toast.success("Billing + referral saved successfully!");
+  } catch (err: any) {
+    console.error("Billing save error:", err);
+    toast.error(err.message || "Failed to save billing.");
+  }
+};
 
   const saveTimezone = async () => {
     if (!user?.id) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
@@ -12,6 +12,47 @@ type UseAdminHooksProps = {
   setChatNotif: React.Dispatch<React.SetStateAction<number>>;
 };
 
+type Payment = {
+  id: string;
+  amount: number;
+  status: string;
+  created_at: string;
+  user_id?: string;
+  method?: string;
+  transaction_id?: string;
+  billing_cycle?: string;
+};
+
+type Profile = {
+  id: string;
+  email: string;
+  full_name?: string;
+  plan?: string;
+  plan_expiry?: string;
+  referred_by?: string | null;
+  referral_id?: string | null;
+  referral_code_used?: string;
+  created_at: string;
+  payments?: Payment[];
+};
+
+type Referral = {
+  id: string;
+  name: string;
+  code: string;
+  commission_percent: number;
+  email?: string;
+  is_active?: boolean;
+  paid_amount?: number;
+  remaining_amount?: number;
+  created_at: string;
+  users?: Profile[];
+  total_users?: number;
+  paid_users?: number;
+  total_revenue?: number;
+  total_earnings?: number;
+};
+
 export function useAdminHooks({
   queryClient,
   setPendingNotif,
@@ -22,60 +63,142 @@ export function useAdminHooks({
   const [chatReply, setChatReply] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Referral form state
   const [refName, setRefName] = useState("");
+  const [refEmail, setRefEmail] = useState("");
   const [refCode, setRefCode] = useState("");
   const [refCommission, setRefCommission] = useState("");
 
+  // News form state
   const [newsTitle, setNewsTitle] = useState("");
   const [newsContent, setNewsContent] = useState("");
   const [newsSource, setNewsSource] = useState("");
   const [newsCategory, setNewsCategory] = useState("forex");
   const [newsAsset, setNewsAsset] = useState("");
 
+  // Announcement form state
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementContent, setAnnouncementContent] = useState("");
   const [announcementType, setAnnouncementType] = useState("info");
 
+  // Prop firm form state
   const [propFirmName, setPropFirmName] = useState("");
   const [propFirmDescription, setPropFirmDescription] = useState("");
   const [propFirmLink, setPropFirmLink] = useState("");
   const [propFirmCoupon, setPropFirmCoupon] = useState("");
   const [propFirmDiscount, setPropFirmDiscount] = useState("");
 
-  const { data: profiles = [] } = useQuery({
+  // 🔥 FIXED REFERRALS QUERY - This is the KEY FIX
+  const { data: referrals = [] } = useQuery({
+  queryKey: ["admin-referrals"],
+  queryFn: async () => {
+  // 1. referrals
+  const { data: referralsData, error: refError } = await supabase
+    .from("referrals")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (refError) throw refError;
+
+  // 2. users
+  const { data: usersData, error: userError } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, referred_by");
+
+  if (userError) throw userError;
+
+  // 3. payments (🔥 IMPORTANT)
+  const { data: paymentsData, error: payError } = await supabase
+    .from("payments")
+    .select("*");
+
+  if (payError) throw payError;
+
+  // 4. build final data
+  const finalData = (referralsData || []).map((ref: any) => {
+    const users = (usersData || []).filter(
+  (u: any) => u.referred_by === ref.id
+);
+
+// 🔥 attach payment to each user
+const usersWithPayments = users.map((user: any) => {
+  const userPayments = (paymentsData || []).filter(
+    (p: any) =>
+      p.user_id === user.id &&
+      p.status === "approved"
+  );
+
+  return {
+    ...user,
+    payments: userPayments
+  };
+});
+
+// 🔥 paid users
+const paidUsers = usersWithPayments.filter(
+  (u: any) => u.payments.length > 0
+);
+
+return {
+  ...ref,
+  users: usersWithPayments, // ✅ IMPORTANT
+  joined_users_count: users.length,
+  paid_users_count: paidUsers.length,
+  total_revenue: paidUsers.reduce(
+    (sum: number, u: any) =>
+      sum + u.payments.reduce((s: number, p: any) => s + (p.amount || 0), 0),
+    0
+  ),
+  total_paid: 0,
+  paid_amount: 0,
+  remaining_amount: 0,
+};
+  });
+
+  return finalData;
+},
+});
+
+// ===== SYNC REFERRALS TO DB =====
+// ===== SYNC REFERRALS TO DB =====
+useEffect(() => {
+  if (!referrals || referrals.length === 0) return;
+
+  const syncReferrals = async () => {
+    for (const ref of referrals) {
+      await supabase
+        .from("referrals")
+        .update({
+          total_users: ref.users?.length || 0,
+          paid_users: ref.paid_users_count || 0,
+        })
+        .eq("id", ref.id);
+    }
+  };
+
+  syncReferrals();
+}, [referrals]);
+
+  // Other queries (unchanged)
+  const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["admin-profiles"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data = [], error } = await supabase
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       return data;
     },
   });
 
-  const { data: payments = [] } = useQuery({
+  const { data: payments = [] } = useQuery<Payment[]>({
     queryKey: ["admin-payments"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data = [], error } = await supabase
         .from("payments")
         .select("*")
         .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: referrals = [] } = useQuery({
-    queryKey: ["admin-referrals"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("referrals")
-        .select("*")
-        .order("created_at", { ascending: false });
-
       if (error) throw error;
       return data;
     },
@@ -84,7 +207,7 @@ export function useAdminHooks({
   const { data: trades = [] } = useQuery({
     queryKey: ["admin-trades"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("trades").select("*");
+      const { data = [], error } = await supabase.from("trades").select("*");
       if (error) throw error;
       return data;
     },
@@ -93,7 +216,7 @@ export function useAdminHooks({
   const { data: siteSettings = [] } = useQuery({
     queryKey: ["site-settings"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("site_settings").select("*");
+      const { data = [], error } = await supabase.from("site_settings").select("*");
       if (error) throw error;
       return data;
     },
@@ -102,11 +225,10 @@ export function useAdminHooks({
   const { data: newsList = [] } = useQuery({
     queryKey: ["admin-news"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data = [], error } = await supabase
         .from("news")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       return data;
     },
@@ -115,11 +237,10 @@ export function useAdminHooks({
   const { data: propFirms = [] } = useQuery({
     queryKey: ["admin-propfirms"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data = [], error } = await supabase
         .from("prop_firms")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       return data;
     },
@@ -128,81 +249,225 @@ export function useAdminHooks({
   const { data: announcements = [] } = useQuery({
     queryKey: ["admin-announcements"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("announcements" as any)
+      const { data = [], error } = await supabase
+        .from("announcements")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
-      return data || [];
+      return data;
     },
   });
 
   const { data: contactMessages = [] } = useQuery({
     queryKey: ["admin-contact"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("contact_messages" as any)
+      const { data = [], error } = await supabase
+        .from("contact_messages")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
-      return data || [];
+      return data;
     },
   });
 
-  const { data: chatUsers = [] } = useQuery({
+  const { data: chatUsers = [] } = useQuery<string[]>({
     queryKey: ["admin-chat-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data = [], error } = await supabase
         .from("support_messages")
         .select("user_id")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
-      return [...new Set(data.map((m: any) => m.user_id))] as string[];
+      return [...new Set(data.map((m: any) => m.user_id))];
     },
   });
 
+  // Mutations
+  const updateReferral = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase
+        .from("referrals")
+        .update({ is_active })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
+      toast.success("Referral status updated.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const markReferralPaid = useMutation({
+    mutationFn: async ({ id, paid_amount, remaining_amount }: {
+      id: string;
+      paid_amount: number;
+      remaining_amount: number;
+    }) => {
+      const { error } = await supabase
+        .from("referrals")
+        .update({ paid_amount, remaining_amount })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
+      toast.success("Referral marked as paid.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const createReferral = useMutation({
+    mutationFn: async () => {
+      if (!refName || !refCode) {
+        throw new Error("Name and code are required.");
+      }
+      const { error } = await supabase.from("referrals").insert({
+        name: refName,
+        email: refEmail || null,
+        code: refCode,
+        commission_percent: parseFloat(refCommission) || 0,
+        is_active: true,
+        paid_amount: 0,
+        remaining_amount: 0,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
+      toast.success("Referral created successfully.");
+      setRefName("");
+      setRefEmail("");
+      setRefCode("");
+      setRefCommission("");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteReferral = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("referrals").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
+      toast.success("Referral deleted.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  // Other mutations (same as before)
+  const upsertSetting = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: any }) => {
+      const existing = siteSettings.find((s: any) => s.key === key);
+      if (existing) {
+        const { error } = await supabase
+          .from("site_settings")
+          .update({ value, updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("site_settings").insert({ key, value });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["site-settings"] });
+      toast.success("Settings saved.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const updatePaymentStatus = useMutation({
+    mutationFn: async ({ id, status, userId, plan }: {
+      id: string;
+      status: string;
+      userId: string;
+      plan?: string;
+    }) => {
+      const { error } = await supabase.from("payments").update({ status }).eq("id", id);
+      if (error) throw error;
+
+      if (status === "approved" && plan) {
+        const { data: payment, error: paymentError } = await supabase
+          .from("payments")
+          .select("*")
+          .eq("id", id)
+          .single();
+        if (paymentError) throw paymentError;
+
+        const now = new Date();
+        const expiry = new Date();
+        if (payment?.billing_cycle === "monthly") {
+          expiry.setMonth(now.getMonth() + 1);
+        } else if (payment?.billing_cycle === "3months") {
+          expiry.setMonth(now.getMonth() + 3);
+        } else if (payment?.billing_cycle === "6months") {
+          expiry.setMonth(now.getMonth() + 6);
+        } else if (payment?.billing_cycle === "yearly") {
+          expiry.setFullYear(now.getFullYear() + 1);
+        } else {
+          expiry.setMonth(now.getMonth() + 1);
+        }
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({ plan, plan_expiry: expiry.toISOString() })
+          .eq("id", userId);
+        if (profileError) throw profileError;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
+      toast.success("Payment updated.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await supabase.from("trades").delete().eq("user_id", userId);
+      await supabase.from("accounts").delete().eq("user_id", userId);
+      await supabase.from("payments").delete().eq("user_id", userId);
+      await supabase.from("support_messages").delete().eq("user_id", userId);
+      const { error } = await supabase.from("profiles").delete().eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
+      toast.success("User deleted.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  // Realtime subscriptions
   useEffect(() => {
     const channel = supabase
       .channel("admin-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "payments" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
-          setPendingNotif((n) => n + 1);
-          toast.info("💰 New payment received!");
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
+        setPendingNotif((n) => n + 1);
+        toast.info("💰 New payment received!");
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" }, (payload: any) => {
+        if (payload.new?.sender === "user") {
+          queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
+          setChatNotif((n) => n + 1);
+          toast.info("💬 New chat message!");
         }
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "support_messages" },
-        (payload: any) => {
-          if (payload.new?.sender === "user") {
-            queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
-            setChatNotif((n) => n + 1);
-            toast.info("💬 New chat message!");
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "profiles" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
-          toast.info("👤 New user signed up!");
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "contact_messages" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["admin-contact"] });
-          toast.info("📧 New contact message!");
-        }
-      )
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
+        queryClient.invalidateQueries({ queryKey: ["admin-referrals"] }); // 🔥 Also refresh referrals
+        toast.info("👤 New user signed up!");
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "referrals" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
+        toast.info("🔗 New referral created!");
+      })
       .subscribe();
 
     return () => {
@@ -210,6 +475,7 @@ export function useAdminHooks({
     };
   }, [queryClient, setPendingNotif, setChatNotif]);
 
+  // Chat effect (unchanged)
   useEffect(() => {
     if (!selectedChatUser) return;
 
@@ -219,7 +485,6 @@ export function useAdminHooks({
         .select("*")
         .eq("user_id", selectedChatUser)
         .order("created_at", { ascending: true });
-
       if (!error) {
         setChatMessages(data || []);
         setTimeout(() => {
@@ -254,328 +519,23 @@ export function useAdminHooks({
     return s?.value || {};
   };
 
-  const upsertSetting = useMutation({
-    mutationFn: async ({ key, value }: { key: string; value: any }) => {
-      const existing = siteSettings.find((s: any) => s.key === key);
-
-      if (existing) {
-        const { error } = await supabase
-          .from("site_settings")
-          .update({
-            value,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existing.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("site_settings").insert({
-          key,
-          value,
-        });
-
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["site-settings"] });
-      toast.success("Settings saved.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const updatePaymentStatus = useMutation({
-    mutationFn: async ({
-      id,
-      status,
-      userId,
-      plan,
-    }: {
-      id: string;
-      status: string;
-      userId: string;
-      plan?: string;
-    }) => {
-      const { error } = await supabase
-        .from("payments")
-        .update({ status })
-        .eq("id", id);
-
-      if (error) throw error;
-
-      if (status === "approved" && plan) {
-        const { data: payment, error: paymentError } = await supabase
-          .from("payments")
-          .select("*")
-          .eq("id", id)
-          .single();
-
-        if (paymentError) throw paymentError;
-
-        const now = new Date();
-        const expiry = new Date();
-
-        if (payment?.billing_cycle === "monthly") {
-          expiry.setMonth(now.getMonth() + 1);
-        } else if (payment?.billing_cycle === "3months") {
-          expiry.setMonth(now.getMonth() + 3);
-        } else if (payment?.billing_cycle === "6months") {
-          expiry.setMonth(now.getMonth() + 6);
-        } else if (payment?.billing_cycle === "yearly") {
-          expiry.setFullYear(now.getFullYear() + 1);
-        } else {
-          expiry.setMonth(now.getMonth() + 1);
-        }
-
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .update({
-            plan,
-            plan_expiry: expiry.toISOString(),
-          })
-          .eq("id", userId);
-
-        if (profileError) throw profileError;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
-      toast.success("Payment updated.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const updateUserPlan = useMutation({
-    mutationFn: async ({
-      userId,
-      plan,
-    }: {
-      userId: string;
-      plan: string;
-    }) => {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ plan })
-        .eq("id", userId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
-      toast.success("User plan updated.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const deleteUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      await supabase.from("trades").delete().eq("user_id", userId);
-      await supabase.from("accounts").delete().eq("user_id", userId);
-      await supabase.from("payments").delete().eq("user_id", userId);
-      await supabase.from("support_messages").delete().eq("user_id", userId);
-
-      const { error } = await supabase.from("profiles").delete().eq("id", userId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
-      toast.success("User deleted.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const createReferral = useMutation({
-    mutationFn: async () => {
-      if (!refName || !refCode) throw new Error("Name and code are required.");
-
-      const { error } = await supabase.from("referrals").insert({
-        name: refName,
-        code: refCode,
-        commission_percent: parseFloat(refCommission) || 0,
-      });
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
-      toast.success("Referral created.");
-      setRefName("");
-      setRefCode("");
-      setRefCommission("");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const deleteReferral = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("referrals").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
-      toast.success("Referral deleted.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const createNews = useMutation({
-    mutationFn: async () => {
-      if (!newsTitle || !newsContent) {
-        throw new Error("Title and content are required.");
-      }
-
-      const { error } = await supabase.from("news").insert({
-        title: newsTitle,
-        content: newsContent,
-        source: newsSource || null,
-        category: newsCategory,
-        asset_name: newsAsset || null,
-      } as any);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-news"] });
-      toast.success("News published.");
-      setNewsTitle("");
-      setNewsContent("");
-      setNewsSource("");
-      setNewsCategory("forex");
-      setNewsAsset("");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const deleteNews = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("news").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-news"] });
-      toast.success("News deleted.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const createAnnouncement = useMutation({
-    mutationFn: async () => {
-      if (!announcementTitle || !announcementContent) {
-        throw new Error("Title and content are required.");
-      }
-
-      const { error } = await supabase.from("announcements" as any).insert({
-        title: announcementTitle,
-        content: announcementContent,
-        type: announcementType,
-      } as any);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-announcements"] });
-      toast.success("Announcement published.");
-      setAnnouncementTitle("");
-      setAnnouncementContent("");
-      setAnnouncementType("info");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const deleteAnnouncement = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("announcements" as any)
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-announcements"] });
-      toast.success("Announcement deleted.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const createPropFirm = useMutation({
-    mutationFn: async () => {
-      if (!propFirmName) throw new Error("Prop firm name is required.");
-
-      const { error } = await supabase.from("prop_firms").insert({
-        name: propFirmName,
-        description: propFirmDescription || null,
-        affiliate_link: propFirmLink || null,
-        coupon_code: propFirmCoupon || null,
-        discount: propFirmDiscount ? Number(propFirmDiscount) : null,
-      } as any);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] });
-      toast.success("Prop firm added.");
-      setPropFirmName("");
-      setPropFirmDescription("");
-      setPropFirmLink("");
-      setPropFirmCoupon("");
-      setPropFirmDiscount("");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const deletePropFirm = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("prop_firms").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] });
-      toast.success("Prop firm deleted.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const markContactResolved = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("contact_messages" as any)
-        .update({ status: "resolved" } as any)
-        .eq("id", id);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-contact"] });
-      toast.success("Message marked as resolved.");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
   const sendAdminReply = async () => {
     if (!chatReply.trim() || !selectedChatUser) return;
-
     const { error } = await supabase.from("support_messages").insert({
       user_id: selectedChatUser,
       sender: "admin",
       message: chatReply.trim(),
     });
-
     if (error) {
       toast.error(error.message);
       return;
     }
-
     setChatReply("");
   };
 
   const exportData = (format: "pdf" | "excel", range: string) => {
     const now = new Date();
     let since = new Date(0);
-
     if (range === "week") since = new Date(now.getTime() - 7 * 86400000);
     if (range === "month") since = new Date(now.getTime() - 30 * 86400000);
     if (range === "3month") since = new Date(now.getTime() - 90 * 86400000);
@@ -584,14 +544,12 @@ export function useAdminHooks({
     const filteredPayments = payments.filter(
       (p: any) => range === "all" || new Date(p.created_at) >= since
     );
-
     const filteredUsers = profiles.filter(
       (p: any) => range === "all" || new Date(p.created_at) >= since
     );
 
     if (format === "pdf") {
       const doc = new jsPDF();
-
       doc.setFontSize(16);
       doc.text("JournalXPro - Admin Report", 14, 20);
       doc.setFontSize(10);
@@ -608,7 +566,6 @@ export function useAdminHooks({
       });
 
       const finalY = (doc as any).lastAutoTable?.finalY || 50;
-
       autoTable(doc, {
         startY: finalY + 10,
         head: [["Amount", "Method", "Status", "Date"]],
@@ -619,11 +576,9 @@ export function useAdminHooks({
           new Date(p.created_at).toLocaleDateString(),
         ]),
       });
-
       doc.save(`admin-report-${range}.pdf`);
     } else {
       const workbook = XLSX.utils.book_new();
-
       const usersSheet = XLSX.utils.json_to_sheet(
         filteredUsers.map((u: any) => ({
           Email: u.email,
@@ -633,7 +588,6 @@ export function useAdminHooks({
           Joined: new Date(u.created_at).toLocaleDateString(),
         }))
       );
-
       const paymentsSheet = XLSX.utils.json_to_sheet(
         filteredPayments.map((p: any) => ({
           Amount: p.amount,
@@ -643,26 +597,19 @@ export function useAdminHooks({
           Date: new Date(p.created_at).toLocaleDateString(),
         }))
       );
-
       XLSX.utils.book_append_sheet(workbook, usersSheet, "Users");
       XLSX.utils.book_append_sheet(workbook, paymentsSheet, "Payments");
       XLSX.writeFile(workbook, `admin-report-${range}.xlsx`);
     }
-
     toast.success(`${format.toUpperCase()} downloaded.`);
   };
 
+  // Stats
   const totalUsers = profiles.length;
   const paidUsers = profiles.filter((p: any) => p.plan !== "free").length;
-  const totalTrades = trades.length;
-  const pendingPayments = payments.filter((p: any) => p.status === "pending").length;
   const totalRevenue = payments
     .filter((p: any) => p.status === "approved")
     .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
-
-  const thisWeekUsers = profiles.filter(
-    (p: any) => new Date(p.created_at) >= new Date(Date.now() - 7 * 86400000)
-  ).length;
 
   return {
     profiles,
@@ -675,7 +622,6 @@ export function useAdminHooks({
     announcements,
     contactMessages,
     chatUsers,
-
     selectedChatUser,
     setSelectedChatUser,
     chatMessages,
@@ -683,14 +629,14 @@ export function useAdminHooks({
     setChatReply,
     chatEndRef,
     sendAdminReply,
-
     refName,
     setRefName,
+    refEmail,
+    setRefEmail,
     refCode,
     setRefCode,
     refCommission,
     setRefCommission,
-
     newsTitle,
     setNewsTitle,
     newsContent,
@@ -701,14 +647,12 @@ export function useAdminHooks({
     setNewsCategory,
     newsAsset,
     setNewsAsset,
-
     announcementTitle,
     setAnnouncementTitle,
     announcementContent,
     setAnnouncementContent,
     announcementType,
     setAnnouncementType,
-
     propFirmName,
     setPropFirmName,
     propFirmDescription,
@@ -719,30 +663,108 @@ export function useAdminHooks({
     setPropFirmCoupon,
     propFirmDiscount,
     setPropFirmDiscount,
-
     getSetting,
     upsertSetting,
     updatePaymentStatus,
-    updateUserPlan,
+    updateUserPlan: useMutation({
+      mutationFn: async ({ userId, plan }: { userId: string; plan: string }) => {
+        const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId);
+        if (error) throw error;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
+        toast.success("User plan updated.");
+      },
+      onError: (err: any) => toast.error(err.message),
+    }),
     deleteUserMutation,
     createReferral,
     deleteReferral,
-    createNews,
-    deleteNews,
-    createAnnouncement,
-    deleteAnnouncement,
-    createPropFirm,
-    deletePropFirm,
-    markContactResolved,
+    updateReferral,
+    markReferralPaid,
+    createNews: useMutation({
+      mutationFn: async () => {
+        if (!newsTitle || !newsContent) throw new Error("Title and content are required.");
+        const { error } = await supabase.from("news").insert({
+          title: newsTitle,
+          content: newsContent,
+          source: newsSource || null,
+          category: newsCategory,
+          asset_name: newsAsset || null,
+        });
+        if (error) throw error;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-news"] });
+        toast.success("News published.");
+        setNewsTitle("");
+        setNewsContent("");
+        setNewsSource("");
+        setNewsCategory("forex");
+        setNewsAsset("");
+      },
+      onError: (err: any) => toast.error(err.message),
+    }),
+    createAnnouncement: useMutation({
+      mutationFn: async () => {
+        if (!announcementTitle || !announcementContent) throw new Error("Title and content are required.");
+        const { error } = await supabase.from("announcements").insert({
+          title: announcementTitle,
+          content: announcementContent,
+          type: announcementType,
+        });
+        if (error) throw error;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-announcements"] });
+        toast.success("Announcement published.");
+        setAnnouncementTitle("");
+        setAnnouncementContent("");
+        setAnnouncementType("info");
+      },
+      onError: (err: any) => toast.error(err.message),
+    }),
+    createPropFirm: useMutation({
+      mutationFn: async () => {
+        if (!propFirmName) throw new Error("Prop firm name is required.");
+        const { error } = await supabase.from("prop_firms").insert({
+          name: propFirmName,
+          description: propFirmDescription || null,
+          affiliate_link: propFirmLink || null,
+          coupon_code: propFirmCoupon || null,
+          discount: propFirmDiscount ? Number(propFirmDiscount) : null,
+        });
+        if (error) throw error;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] });
+        toast.success("Prop firm added.");
+        setPropFirmName("");
+        setPropFirmDescription("");
+        setPropFirmLink("");
+        setPropFirmCoupon("");
+        setPropFirmDiscount("");
+      },
+      onError: (err: any) => toast.error(err.message),
+    }),
+    markContactResolved: useMutation({
+      mutationFn: async (id: string) => {
+        const { error } = await supabase
+          .from("contact_messages")
+          .update({ status: "resolved" })
+          .eq("id", id);
+        if (error) throw error;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["admin-contact"] });
+        toast.success("Message marked as resolved.");
+      },
+      onError: (err: any) => toast.error(err.message),
+    }),
     exportData,
-
     totalUsers,
     paidUsers,
-    totalTrades,
-    pendingPayments,
     totalRevenue,
-    thisWeekUsers,
-
     queryClient,
   };
 }
