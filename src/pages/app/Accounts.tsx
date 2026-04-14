@@ -163,12 +163,22 @@ const Accounts = () => {
     maxRiskPct,
     breachedDaily,
     breachedMax,
+    peakEquity,
+    currentEquity,
+    dailyDD,
+    maxDD,
   }: {
     dailyRiskPct: number;
     maxRiskPct: number;
     breachedDaily: boolean;
     breachedMax: boolean;
+    peakEquity: number;
+    currentEquity: number;
+    dailyDD: number | null;
+    maxDD: number | null;
   }) => {
+    const dailyLimit = currentEquity * ((dailyDD || 0) / 100);
+    const maxLimit = peakEquity * ((maxDD || 0) / 100);
     const usedPct = Math.max(dailyRiskPct, maxRiskPct);
     const leadingMetric =
       dailyRiskPct >= maxRiskPct
@@ -183,7 +193,7 @@ const Accounts = () => {
         cardClass:
           "border-red-500/40 bg-red-500/[0.04] shadow-[0_0_0_1px_rgba(239,68,68,0.12),0_0_30px_rgba(239,68,68,0.06)]",
         barClass: "bg-red-500",
-        reason: "Daily and max drawdown exceeded",
+        reason: `Daily and max drawdown exceeded (${Math.round(dailyLimit).toLocaleString()} / ${Math.round(maxLimit).toLocaleString()})`,
       };
     }
 
@@ -195,7 +205,7 @@ const Accounts = () => {
         cardClass:
           "border-red-500/40 bg-red-500/[0.04] shadow-[0_0_0_1px_rgba(239,68,68,0.12),0_0_30px_rgba(239,68,68,0.06)]",
         barClass: "bg-red-500",
-        reason: "Daily drawdown exceeded",
+        reason: `Daily drawdown exceeded (${Math.round(currentEquity * ((dailyDD || 0) / 100)).toLocaleString()} limit)`,
       };
     }
 
@@ -207,7 +217,7 @@ const Accounts = () => {
         cardClass:
           "border-red-500/40 bg-red-500/[0.04] shadow-[0_0_0_1px_rgba(239,68,68,0.12),0_0_30px_rgba(239,68,68,0.06)]",
         barClass: "bg-red-500",
-        reason: "Maximum drawdown exceeded",
+        reason: `Maximum drawdown exceeded (${Math.round(maxLimit).toLocaleString()} limit)`,
       };
     }
 
@@ -481,8 +491,15 @@ const Accounts = () => {
         lossTrades.reduce((sum, t) => sum + parseNumber(t.pnl_amount), 0)
       );
 
-      const dailyLimit = dailyDD ? initialBalanceValue * (dailyDD / 100) : 0;
-      const maxLimit = maxDD ? initialBalanceValue * (maxDD / 100) : 0;
+      const peakEquity = Math.max(
+        initialBalanceValue || 0,
+        ...(equitySeries || []).map((h) => h.equity || 0),
+        currentBalanceValue || 0
+      );
+      const currentEquity = currentBalanceValue || 0;
+
+      const dailyLimit = dailyDD ? currentEquity * (dailyDD / 100) : 0;
+      const maxLimit = maxDD ? peakEquity * (maxDD / 100) : 0;
 
       const dailyRiskPct = dailyLimit > 0 ? (todayLoss / dailyLimit) * 100 : 0;
       const maxRiskPct = maxLimit > 0 ? (totalLoss / maxLimit) * 100 : 0;
@@ -500,6 +517,10 @@ const Accounts = () => {
         maxRiskPct,
         breachedDaily,
         breachedMax,
+        peakEquity,
+        currentEquity,
+        dailyDD,
+        maxDD,
       });
 
       return {
@@ -507,6 +528,8 @@ const Accounts = () => {
         accTrades,
         initialBalanceValue,
         currentBalanceValue,
+        peakEquity,
+        currentEquity,
         pnl,
         pnlPercent,
         wins,
@@ -873,6 +896,12 @@ const Accounts = () => {
                     <span className="text-xs text-muted-foreground">Initial Balance</span>
                     <span className="text-sm font-mono">
                       {currency(selectedEnhancedAccount.initialBalanceValue)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-muted-foreground">Peak Equity</span>
+                    <span className="text-sm font-mono">
+                      {currency(selectedEnhancedAccount.peakEquity)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
