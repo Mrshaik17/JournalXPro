@@ -1,4 +1,3 @@
-
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -336,44 +335,48 @@ const Accounts = () => {
     onError: (err: any) => toast.error(err.message || "Failed to create account"),
   });
 
+  const selectedAccount = useMemo(() => {
+    return accounts.find((a) => a.id === viewId);
+  }, [accounts, viewId]);
+
   const deleteAccount = useMutation({
-  mutationFn: async (id: string) => {
-    const { error } = await supabase.from("accounts").delete().eq("id", id);
-    if (error) throw error;
-    return id;
-  },
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("accounts").delete().eq("id", id);
+      if (error) throw error;
+      return id;
+    },
 
-  onSuccess: async (deletedId) => {
-    if (selectedAccount?.id === deletedId) {
-      setSelectedAccount(null);
-    }
+    onSuccess: async (deletedId) => {
+      if (selectedAccount?.id === deletedId) {
+        setSearchParams({});
+      }
 
-    setSearchParams({});
-    setDeleteDialogOpen(false);
-    setAccountToDelete(null);
+      setSearchParams({});
+      setDeleteDialogOpen(false);
+      setAccountToDelete(null);
 
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["accounts"] }),
-      queryClient.invalidateQueries({ queryKey: ["trades"] }),
-    ]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["trades"] }),
+      ]);
 
-    toast.success("Account deleted permanently");
-  },
+      toast.success("Account deleted permanently");
+    },
 
-  onError: (err: any) => {
-    toast.error(err.message || "Failed to delete account");
-  },
-});
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete account");
+    },
+  });
 
-const handleDeleteAccount = (id: string, name: string) => {
-  setAccountToDelete({ id, name });
-  setDeleteDialogOpen(true);
-};
+  const handleDeleteAccount = (id: string, name: string) => {
+    setAccountToDelete({ id, name });
+    setDeleteDialogOpen(true);
+  };
 
-const confirmDeleteAccount = () => {
-  if (!accountToDelete) return;
-  deleteAccount.mutate(accountToDelete.id);
-};
+  const confirmDeleteAccount = () => {
+    if (!accountToDelete) return;
+    deleteAccount.mutate(accountToDelete.id);
+  };
 
   const enhancedAccounts = useMemo(() => {
     return accounts.map((acc) => {
@@ -571,7 +574,7 @@ const confirmDeleteAccount = () => {
       ? [...enhancedAccounts].sort((a, b) => b.accTrades.length - a.accTrades.length)[0]
       : null;
 
-  const selectedAccount = enhancedAccounts.find((a) => a.id === viewId);
+  const selectedEnhancedAccount = enhancedAccounts.find((a) => a.id === viewId);
 
   const filteredAccounts = useMemo(() => {
     let result = [...enhancedAccounts];
@@ -623,10 +626,10 @@ const confirmDeleteAccount = () => {
 
   const hasActiveFilters = search.trim() || filterMode !== "all";
 
-  if (selectedAccount) {
+  if (selectedEnhancedAccount) {
     const handleShareAccount = () => {
-      if (selectedAccount.share_token) {
-        const url = `${window.location.origin}/shared/account/${selectedAccount.share_token}`;
+      if (selectedEnhancedAccount.share_token) {
+        const url = `${window.location.origin}/shared/account/${selectedEnhancedAccount.share_token}`;
         navigator.clipboard.writeText(url);
         toast.success("Share link copied");
       } else {
@@ -652,35 +655,35 @@ const confirmDeleteAccount = () => {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-bold truncate">
-                  {selectedAccount.name}
+                  {selectedEnhancedAccount.name}
                 </h1>
 
                 <span
                   className={`text-[10px] px-2 py-1 rounded-full border ${
-                    selectedAccount.isProp
+                    selectedEnhancedAccount.isProp
                       ? "border-yellow-500/20 text-yellow-500 bg-yellow-500/10"
                       : "border-primary/20 text-primary bg-primary/10"
                   }`}
                 >
-                  {getAccountBaseType(selectedAccount.account_type)}
+                  {getAccountBaseType(selectedEnhancedAccount.account_type)}
                 </span>
 
                 <span
-                  className={`text-[10px] px-2 py-1 rounded-full border font-medium ${selectedAccount.health.badgeClass}`}
+                  className={`text-[10px] px-2 py-1 rounded-full border font-medium ${selectedEnhancedAccount.health.badgeClass}`}
                 >
-                  {selectedAccount.health.label}
+                  {selectedEnhancedAccount.health.label}
                 </span>
               </div>
 
               <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-                <span>{selectedAccount.broker || "—"}</span>
+                <span>{selectedEnhancedAccount.broker || "—"}</span>
                 <span>
-                  Created {format(new Date(selectedAccount.created_at), "MMM dd, yyyy")}
+                  Created {format(new Date(selectedEnhancedAccount.created_at), "MMM dd, yyyy")}
                 </span>
                 <span>
-                  {selectedAccount.lastTrade
+                  {selectedEnhancedAccount.lastTrade
                     ? `Last trade ${format(
-                        new Date(selectedAccount.lastTrade.created_at),
+                        new Date(selectedEnhancedAccount.lastTrade.created_at),
                         "MMM dd, HH:mm"
                       )}`
                     : "No trades yet"}
@@ -698,7 +701,7 @@ const confirmDeleteAccount = () => {
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  handleDeleteAccount(selectedAccount.id, selectedAccount.name)
+                  handleDeleteAccount(selectedEnhancedAccount.id, selectedEnhancedAccount.name)
                 }
                 disabled={deleteAccount.isPending}
                 className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
@@ -709,7 +712,7 @@ const confirmDeleteAccount = () => {
             </div>
           </div>
 
-          {selectedAccount.health.status === "breached" && (
+          {selectedEnhancedAccount.health.status === "breached" && (
             <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
               <div>
@@ -717,7 +720,7 @@ const confirmDeleteAccount = () => {
                   Account breached
                 </p>
                 <p className="text-xs text-red-200/80 mt-1">
-                  {selectedAccount.health.reason}. This account has exceeded its
+                  {selectedEnhancedAccount.health.reason}. This account has exceeded its
                   allowed risk parameters.
                 </p>
               </div>
@@ -728,50 +731,53 @@ const confirmDeleteAccount = () => {
             {[
               {
                 label: "Current Balance",
-                value: currency(selectedAccount.currentBalanceValue),
+                value: currency(selectedEnhancedAccount.currentBalanceValue),
                 icon: Wallet,
                 color: "text-primary",
               },
               {
                 label: "Net P&L",
-                value: percent(selectedAccount.pnlPercent),
-                icon: selectedAccount.pnl >= 0 ? TrendingUp : TrendingDown,
-                color: selectedAccount.pnl >= 0 ? "text-green-500" : "text-red-500",
+                value: percent(selectedEnhancedAccount.pnlPercent),
+                icon:
+                  selectedEnhancedAccount.pnl >= 0 ? TrendingUp : TrendingDown,
+                color: selectedEnhancedAccount.pnl >= 0 ? "text-green-500" : "text-red-500",
               },
               {
                 label: "Win Rate",
-                value: `${selectedAccount.winRate.toFixed(0)}%`,
+                value: `${selectedEnhancedAccount.winRate.toFixed(0)}%`,
                 icon: Target,
                 color: "text-primary",
               },
               {
                 label: "Trades",
-                value: String(selectedAccount.accTrades.length),
+                value: String(selectedEnhancedAccount.accTrades.length),
                 icon: BarChart3,
                 color: "text-muted-foreground",
               },
               {
                 label: "Total Lots",
-                value: selectedAccount.totalLots.toFixed(2),
+                value: selectedEnhancedAccount.totalLots.toFixed(2),
                 icon: Activity,
                 color: "text-primary",
               },
               {
                 label: "Avg RR",
                 value:
-                  selectedAccount.avgRR > 0 ? selectedAccount.avgRR.toFixed(2) : "—",
+                  selectedEnhancedAccount.avgRR > 0
+                    ? selectedEnhancedAccount.avgRR.toFixed(2)
+                    : "—",
                 icon: BadgeDollarSign,
                 color: "text-primary",
               },
               {
                 label: "Avg Profit",
-                value: currency(selectedAccount.avgProfit),
+                value: currency(selectedEnhancedAccount.avgProfit),
                 icon: ArrowUpRight,
                 color: "text-green-500",
               },
               {
                 label: "Avg Loss",
-                value: currency(selectedAccount.avgLoss),
+                value: currency(selectedEnhancedAccount.avgLoss),
                 icon: ArrowDownRight,
                 color: "text-red-500",
               },
@@ -806,16 +812,16 @@ const confirmDeleteAccount = () => {
                   </p>
                 </div>
                 <div
-                  className={`text-xs px-2.5 py-1 rounded-full border font-medium ${selectedAccount.health.badgeClass}`}
+                  className={`text-xs px-2.5 py-1 rounded-full border font-medium ${selectedEnhancedAccount.health.badgeClass}`}
                 >
-                  {selectedAccount.health.label}
+                  {selectedEnhancedAccount.health.label}
                 </div>
               </div>
 
               <div className="h-64">
-                {selectedAccount.equitySeries.length > 0 ? (
+                {selectedEnhancedAccount.equitySeries.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={selectedAccount.equitySeries}>
+                    <AreaChart data={selectedEnhancedAccount.equitySeries}>
                       <defs>
                         <linearGradient id="accountEquityFill" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.28} />
@@ -866,13 +872,13 @@ const confirmDeleteAccount = () => {
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-muted-foreground">Initial Balance</span>
                     <span className="text-sm font-mono">
-                      {currency(selectedAccount.initialBalanceValue)}
+                      {currency(selectedEnhancedAccount.initialBalanceValue)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Current Balance</span>
                     <span className="text-sm font-mono">
-                      {currency(selectedAccount.currentBalanceValue)}
+                      {currency(selectedEnhancedAccount.currentBalanceValue)}
                     </span>
                   </div>
                 </div>
@@ -881,49 +887,49 @@ const confirmDeleteAccount = () => {
                   <p className="text-xs text-muted-foreground mb-1">Account Health</p>
                   <p
                     className={`text-sm font-semibold ${
-                      selectedAccount.health.status === "healthy"
+                      selectedEnhancedAccount.health.status === "healthy"
                         ? "text-green-400"
-                        : selectedAccount.health.status === "warning"
+                        : selectedEnhancedAccount.health.status === "warning"
                         ? "text-yellow-400"
                         : "text-red-400"
                     }`}
                   >
-                    {selectedAccount.health.label}
+                    {selectedEnhancedAccount.health.label}
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    {selectedAccount.health.reason}
+                    {selectedEnhancedAccount.health.reason}
                   </p>
                 </div>
 
-                {selectedAccount.isProp &&
-                  (selectedAccount.dailyDD || selectedAccount.maxDD) && (
+                {selectedEnhancedAccount.isProp &&
+                  (selectedEnhancedAccount.dailyDD || selectedEnhancedAccount.maxDD) && (
                     <>
-                      {selectedAccount.dailyDD ? (
+                      {selectedEnhancedAccount.dailyDD ? (
                         <div>
                           <div className="flex justify-between text-xs mb-1">
                             <span className="text-muted-foreground">Daily DD Used</span>
                             <span className="font-mono">
-                              {currency(selectedAccount.todayLoss)} /{" "}
-                              {currency(selectedAccount.dailyLimit)}
+                              {currency(selectedEnhancedAccount.todayLoss)} /{" "}
+                              {currency(selectedEnhancedAccount.dailyLimit)}
                             </span>
                           </div>
                           <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full ${
-                                selectedAccount.breachedDaily
+                                selectedEnhancedAccount.breachedDaily
                                   ? "bg-red-500"
-                                  : selectedAccount.dailyRiskPct >= 80
+                                  : selectedEnhancedAccount.dailyRiskPct >= 80
                                   ? "bg-red-500"
-                                  : selectedAccount.dailyRiskPct >= 50
+                                  : selectedEnhancedAccount.dailyRiskPct >= 50
                                   ? "bg-yellow-500"
                                   : "bg-green-500"
                               }`}
                               style={{
-                                width: `${Math.min(selectedAccount.dailyRiskPct, 100)}%`,
+                                width: `${Math.min(selectedEnhancedAccount.dailyRiskPct, 100)}%`,
                               }}
                             />
                           </div>
-                          {selectedAccount.breachedDaily && (
+                          {selectedEnhancedAccount.breachedDaily && (
                             <p className="text-[11px] text-red-400 mt-1 font-medium">
                               Daily drawdown breached
                             </p>
@@ -931,32 +937,32 @@ const confirmDeleteAccount = () => {
                         </div>
                       ) : null}
 
-                      {selectedAccount.maxDD ? (
+                      {selectedEnhancedAccount.maxDD ? (
                         <div>
                           <div className="flex justify-between text-xs mb-1">
                             <span className="text-muted-foreground">Max DD Used</span>
                             <span className="font-mono">
-                              {currency(selectedAccount.totalLoss)} /{" "}
-                              {currency(selectedAccount.maxLimit)}
+                              {currency(selectedEnhancedAccount.totalLoss)} /{" "}
+                              {currency(selectedEnhancedAccount.maxLimit)}
                             </span>
                           </div>
                           <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full ${
-                                selectedAccount.breachedMax
+                                selectedEnhancedAccount.breachedMax
                                   ? "bg-red-500"
-                                  : selectedAccount.maxRiskPct >= 80
+                                  : selectedEnhancedAccount.maxRiskPct >= 80
                                   ? "bg-red-500"
-                                  : selectedAccount.maxRiskPct >= 50
+                                  : selectedEnhancedAccount.maxRiskPct >= 50
                                   ? "bg-yellow-500"
                                   : "bg-green-500"
                               }`}
                               style={{
-                                width: `${Math.min(selectedAccount.maxRiskPct, 100)}%`,
+                                width: `${Math.min(selectedEnhancedAccount.maxRiskPct, 100)}%`,
                               }}
                             />
                           </div>
-                          {selectedAccount.breachedMax && (
+                          {selectedEnhancedAccount.breachedMax && (
                             <p className="text-[11px] text-red-400 mt-1 font-medium">
                               Maximum drawdown breached
                             </p>
@@ -964,14 +970,14 @@ const confirmDeleteAccount = () => {
                         </div>
                       ) : null}
 
-                      {selectedAccount.consistency ? (
+                      {selectedEnhancedAccount.consistency ? (
                         <div className="rounded-lg bg-background/50 border border-border p-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-muted-foreground">
                               Consistency Rule
                             </span>
                             <span className="text-sm font-mono">
-                              {selectedAccount.consistency}%
+                              {selectedEnhancedAccount.consistency}%
                             </span>
                           </div>
                         </div>
@@ -979,7 +985,7 @@ const confirmDeleteAccount = () => {
                     </>
                   )}
 
-                {!selectedAccount.isProp && (
+                {!selectedEnhancedAccount.isProp && (
                   <div className="rounded-lg bg-background/50 border border-border p-3">
                     <p className="text-xs text-muted-foreground mb-1">Account Type</p>
                     <p className="text-sm font-medium">
@@ -991,8 +997,8 @@ const confirmDeleteAccount = () => {
                 <div className="rounded-lg bg-background/50 border border-border p-3">
                   <p className="text-xs text-muted-foreground mb-1">Performance Mix</p>
                   <p className="text-sm font-medium">
-                    {selectedAccount.wins}W / {selectedAccount.losses}L /{" "}
-                    {selectedAccount.breakeven} BE
+                    {selectedEnhancedAccount.wins}W / {selectedEnhancedAccount.losses}L /{" "}
+                    {selectedEnhancedAccount.breakeven} BE
                   </p>
                 </div>
               </div>
@@ -1008,12 +1014,12 @@ const confirmDeleteAccount = () => {
                 </p>
               </div>
               <div className="text-xs text-muted-foreground">
-                {selectedAccount.accTrades.length} total trade
-                {selectedAccount.accTrades.length === 1 ? "" : "s"}
+                {selectedEnhancedAccount.accTrades.length} total trade
+                {selectedEnhancedAccount.accTrades.length === 1 ? "" : "s"}
               </div>
             </div>
 
-            {selectedAccount.accTrades.length > 0 ? (
+            {selectedEnhancedAccount.accTrades.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -1027,7 +1033,7 @@ const confirmDeleteAccount = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedAccount.accTrades.map((trade) => {
+                    {selectedEnhancedAccount.accTrades.map((trade) => {
                       const pnlValue = parseNumber(trade.pnl_amount);
                       return (
                         <tr

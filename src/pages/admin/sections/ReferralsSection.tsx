@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Trash2,
   Plus,
@@ -33,6 +33,7 @@ type PaymentItem = {
   status?: string;
   approved?: boolean;
   created_at?: string;
+  plan?: string;
 };
 
 type ReferredUser = {
@@ -58,7 +59,6 @@ type ReferralRow = {
   is_active?: boolean;
   users?: ReferredUser[];
 
-  // optional aliases from DB or old payloads
   idx?: number;
   commission?: number | string;
   total_users?: number | string;
@@ -76,7 +76,7 @@ type Props = {
   setRefCode: (v: string) => void;
   refCommission: string | number;
   setRefCommission: (v: string) => void;
-  createReferral: {
+  createReferral?: {
     mutate: () => void;
     isPending?: boolean;
   };
@@ -130,20 +130,13 @@ const formatDate = (value?: string) => {
 function normalizeReferral(ref: ReferralRow): ReferralRow {
   return {
     ...ref,
-    commission_percent:
-      ref.commission_percent ?? ref.commission ?? 0,
-    joined_users_count:
-      ref.joined_users_count ?? ref.total_users ?? 0,
-    paid_users_count:
-      ref.paid_users_count ?? ref.paid_users ?? 0,
-    total_revenue:
-      ref.total_revenue ?? 0,
-    total_paid:
-      ref.total_paid ?? 0,
-    paid_amount:
-      ref.paid_amount ?? ref.total_paid ?? 0,
-    remaining_amount:
-      ref.remaining_amount ?? 0,
+    commission_percent: ref.commission_percent ?? ref.commission ?? 0,
+    joined_users_count: ref.joined_users_count ?? ref.total_users ?? 0,
+    paid_users_count: ref.paid_users_count ?? ref.paid_users ?? 0,
+    total_revenue: ref.total_revenue ?? 0,
+    total_paid: ref.total_paid ?? 0,
+    paid_amount: ref.paid_amount ?? ref.total_paid ?? 0,
+    remaining_amount: ref.remaining_amount ?? 0,
     is_active:
       typeof ref.is_active === "boolean"
         ? ref.is_active
@@ -168,6 +161,7 @@ function getReferralAnalytics(ref: ReferralRow) {
     earning: number;
     createdAt?: string;
     status?: string;
+    plan?: string;
   }> = [];
 
   for (const user of users) {
@@ -192,6 +186,7 @@ function getReferralAnalytics(ref: ReferralRow) {
         earning,
         createdAt: payment.created_at,
         status: payment.status,
+        plan: payment.plan,
       });
     }
   }
@@ -200,7 +195,7 @@ function getReferralAnalytics(ref: ReferralRow) {
   const fallbackPaidUsers = toNumber(normalized.paid_users_count);
   const fallbackRevenue = toNumber(normalized.total_revenue);
   const fallbackEarnings = toNumber(
-    (normalized as any).total_earnings ?? normalized.total_paid
+    normalized.total_earnings ?? normalized.total_paid
   );
   const paidAmount = toNumber(normalized.paid_amount || normalized.total_paid);
   const remainingAmount = Math.max(
@@ -222,6 +217,180 @@ function getReferralAnalytics(ref: ReferralRow) {
   };
 }
 
+function ReferralDetailsContent({
+  referral,
+  analytics,
+  onMarkAsPaid,
+  canMarkPaid,
+  markLoading,
+}: {
+  referral: ReferralRow;
+  analytics: ReturnType<typeof getReferralAnalytics>;
+  onMarkAsPaid: () => void;
+  canMarkPaid: boolean;
+  markLoading?: boolean;
+}) {
+  const remaining = Math.max(analytics.totalEarnings - analytics.paidAmount, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Total Users
+          </p>
+          <p className="mt-2 text-2xl font-semibold tabular-nums">
+            {analytics.totalUsers}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Paid Users
+          </p>
+          <p className="mt-2 text-2xl font-semibold tabular-nums">
+            {analytics.paidUsers}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Total Revenue
+          </p>
+          <p className="mt-2 text-2xl font-semibold tabular-nums">
+            {formatMoney(analytics.totalRevenue)}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Total Earnings
+          </p>
+          <p className="mt-2 text-2xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+            {formatMoney(analytics.totalEarnings)}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Remaining Amount
+          </p>
+          <p className="mt-2 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+            {formatMoney(remaining)}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h4 className="font-semibold">Referral Summary</h4>
+            <p className="text-sm text-muted-foreground">
+              Code: <span className="font-mono">{referral.code || "—"}</span>,
+              commission: {toNumber(referral.commission_percent)}%, status:{" "}
+              {referral.is_active ?? true ? "Active" : "Inactive"}.
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            onClick={onMarkAsPaid}
+            disabled={!canMarkPaid || remaining <= 0 || markLoading}
+            className="rounded-2xl border-0"
+          >
+            {markLoading ? "Updating..." : "Mark as Paid"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
+          <h4 className="font-semibold mb-3">User Emails</h4>
+
+          {analytics.users.length > 0 ? (
+            <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
+              {analytics.users.map((user, index) => {
+                const approvedPayment = (user.payments || []).find(isApprovedPayment);
+
+                return (
+                  <div
+                    key={user.id || `${user.email}-${index}`}
+                    className="rounded-2xl bg-background/70 px-4 py-3 flex items-center justify-between"
+                  >
+                    <span className="text-sm font-medium">
+                      {user.email || "No email"}
+                    </span>
+
+                    <span className="text-xs">
+                      {approvedPayment ? (
+                        <span className="text-green-400">
+                          {approvedPayment.plan ? (
+                            <>
+                              <span className="capitalize">{approvedPayment.plan}</span> • ${approvedPayment.amount}
+                            </>
+                          ) : (
+                            <>${approvedPayment.amount}</>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-red-400">Unpaid</span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No user list connected yet. This usually means referrals, profiles,
+              and payments are not fully joined in the query.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
+          <h4 className="font-semibold mb-3">Payment Breakdown</h4>
+
+          {analytics.paymentBreakdown.length > 0 ? (
+            <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
+              {analytics.paymentBreakdown.map((item, index) => (
+                <div
+                  key={`${item.userEmail}-${item.paymentAmount}-${index}`}
+                  className="rounded-2xl bg-background/70 px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium">{item.userEmail}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(item.createdAt)}{" "}
+                        {item.status ? `• ${item.status}` : ""}
+                        {item.plan ? ` • ${item.plan}` : ""}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-sm font-semibold tabular-nums">
+                        {formatMoney(item.paymentAmount)}
+                      </p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 tabular-nums">
+                        Earned {formatMoney(item.earning)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No approved payment breakdown found for this referral yet.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ReferralsSection({
   referrals,
   refName,
@@ -241,8 +410,6 @@ export default function ReferralsSection({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState<string | null>(null);
   const [selectedReferral, setSelectedReferral] = useState<ReferralRow | null>(null);
-
-  // local fallback cache so table does not disappear if parent query is broken momentarily
   const [localReferrals, setLocalReferrals] = useState<ReferralRow[]>([]);
 
   useEffect(() => {
@@ -293,7 +460,7 @@ export default function ReferralsSection({
     );
   }, [displayReferrals]);
 
-  const copyCode = async (id: string, code?: string) => {
+  const copyCode = useCallback(async (id: string, code?: string) => {
     if (!code) return;
     try {
       await navigator.clipboard.writeText(code);
@@ -302,9 +469,10 @@ export default function ReferralsSection({
     } catch (error) {
       console.error("Copy failed", error);
     }
-  };
+  }, []);
 
-  const emailTemplate = (ref: ReferralRow) => `
+  const emailTemplate = useCallback((ref: ReferralRow) => {
+    return `
 Subject: Your Prop Firm Referral Code - ${ref.code || "N/A"}
 
 Hi ${ref.name || "Partner"},
@@ -318,87 +486,135 @@ Share this code to earn commission from approved referred payments.
 
 Best regards,
 Prop Firm Team
-  `.trim();
+    `.trim();
+  }, []);
 
-  const handleToggleStatus = (ref: ReferralRow) => {
-    if (!updateReferral) return;
+  const handleToggleStatus = useCallback(
+    (ref: ReferralRow) => {
+      if (!updateReferral) return;
 
-    const nextActive = !(ref.is_active ?? true);
+      const nextActive = !(ref.is_active ?? true);
 
-    setLocalReferrals((prev) =>
-      prev.map((item) =>
-        item.id === ref.id ? { ...item, is_active: nextActive } : item
-      )
-    );
+      setLocalReferrals((prev) =>
+        prev.map((item) =>
+          item.id === ref.id ? { ...item, is_active: nextActive } : item
+        )
+      );
 
-    updateReferral.mutate({
-      id: ref.id,
-      is_active: nextActive,
-    });
-  };
-
-  const handleMarkAsPaid = (ref: ReferralRow) => {
-    const analytics = getReferralAnalytics(ref);
-    const newPaidAmount = analytics.totalEarnings;
-    const newRemainingAmount = 0;
-
-    setLocalReferrals((prev) =>
-      prev.map((item) =>
-        item.id === ref.id
-          ? {
-              ...item,
-              paid_amount: newPaidAmount,
-              remaining_amount: newRemainingAmount,
-            }
-          : item
-      )
-    );
-
-    if (markReferralPaid) {
-      markReferralPaid.mutate({
+      updateReferral.mutate({
         id: ref.id,
-        paid_amount: newPaidAmount,
-        remaining_amount: newRemainingAmount,
+        is_active: nextActive,
       });
+    },
+    [updateReferral]
+  );
+
+  const handleMarkAsPaid = useCallback(
+    async (ref: ReferralRow) => {
+      const analytics = getReferralAnalytics(ref);
+      const newPaidAmount = analytics.totalEarnings;
+      const newRemainingAmount = 0;
+
+      const { error } = await supabase.from("payouts").insert({
+        referral_id: ref.id,
+        amount: newPaidAmount,
+      });
+
+      if (error) {
+        console.error("Error saving payout:", error);
+        alert("Error saving payout ❌");
+        return;
+      }
+
+      setLocalReferrals((prev) =>
+        prev.map((item) =>
+          item.id === ref.id
+            ? {
+                ...item,
+                paid_amount: newPaidAmount,
+                remaining_amount: newRemainingAmount,
+              }
+            : item
+        )
+      );
+
+      if (markReferralPaid) {
+        markReferralPaid.mutate({
+          id: ref.id,
+          paid_amount: newPaidAmount,
+          remaining_amount: newRemainingAmount,
+        });
+      }
+
+      if (updateReferral) {
+        updateReferral.mutate({
+          id: ref.id,
+          paid_amount: newPaidAmount,
+          remaining_amount: newRemainingAmount,
+        });
+      }
+
+      alert("Payment recorded ✅");
+    },
+    [markReferralPaid, updateReferral]
+  );
+
+  const handleCreate = useCallback(async () => {
+    if (
+      !refEmail ||
+      !refCode ||
+      refCommission === "" ||
+      refEmail.trim() === "" ||
+      refCode.trim() === ""
+    ) {
+      alert("Fill all fields");
       return;
     }
 
-    if (updateReferral) {
-      updateReferral.mutate({
-        id: ref.id,
-        paid_amount: newPaidAmount,
-        remaining_amount: newRemainingAmount,
-      });
+    const payload: any = {
+      email: refEmail.trim(),
+      code: refCode.trim().toUpperCase(),
+      commission_percent: Number(refCommission),
+      is_active: true,
+    };
+
+    if (refName?.trim()) {
+      payload.name = refName.trim();
     }
-  };
 
-  const handleCreate = async () => {
-  if (
-    !refEmail ||
-    !refCode ||
-    refCommission === "" ||
-    refEmail.trim() === "" ||
-    refCode.trim() === ""
-  ) {
-    alert("Fill all fields");
-    return;
-  }
+    const { data, error } = await supabase
+      .from("referrals")
+      .insert(payload)
+      .select()
+      .single();
 
-  const { error } = await supabase.from("referrals").insert({
-  email: refEmail,
-  code: refCode,
-  commission: Number(refCommission),
-  
-});
+    if (error) {
+      console.error(error);
+      alert("Error creating referral ❌");
+      return;
+    }
 
-  if (error) {
-    console.error(error);
-    alert("Error creating referral ❌");
-  } else {
+    if (data) {
+      const normalized = normalizeReferral(data as ReferralRow);
+      setLocalReferrals((prev) => [normalized, ...prev]);
+    }
+
+    setRefName("");
+    setRefEmail("");
+    setRefCode("");
+    setRefCommission("");
+
     alert("Referral created ✅");
-    window.location.reload();
-  }
-};
+  }, [
+    refEmail,
+    refCode,
+    refCommission,
+    refName,
+    setRefCode,
+    setRefCommission,
+    setRefEmail,
+    setRefName,
+  ]);
 
   const createDisabled =
     !!createReferral?.isPending ||
@@ -596,19 +812,45 @@ Prop Firm Team
           <table className="w-full text-sm min-w-[1450px]">
             <thead>
               <tr className="bg-background/70 backdrop-blur-sm border-0">
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Email</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Name</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Code</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Status</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Commission</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Users</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Paid Users</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Revenue</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Earnings</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Paid Out</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Remaining</th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">Created</th>
-                <th className="text-center px-6 py-4 font-semibold text-foreground/90">Actions</th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Email
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Name
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Code
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Status
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Commission
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Users
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Paid Users
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Revenue
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Earnings
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Paid Out
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Remaining
+                </th>
+                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
+                  Created
+                </th>
+                <th className="text-center px-6 py-4 font-semibold text-foreground/90">
+                  Actions
+                </th>
               </tr>
             </thead>
 
@@ -815,7 +1057,9 @@ Prop Firm Team
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            setLocalReferrals((prev) => prev.filter((item) => item.id !== ref.id));
+                            setLocalReferrals((prev) =>
+                              prev.filter((item) => item.id !== ref.id)
+                            );
                             deleteReferral.mutate(ref.id);
                           }}
                           className="h-10 w-10 rounded-2xl hover:bg-destructive/10 hover:text-destructive p-0 border-0"
@@ -857,178 +1101,6 @@ Prop Firm Team
             </span>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function ReferralDetailsContent({
-  referral,
-  analytics,
-  onMarkAsPaid,
-  canMarkPaid,
-  markLoading,
-}: {
-  referral: ReferralRow;
-  analytics: ReturnType<typeof getReferralAnalytics>;
-  onMarkAsPaid: () => void;
-  canMarkPaid: boolean;
-  markLoading?: boolean;
-}) {
-  const remaining = Math.max(analytics.totalEarnings - analytics.paidAmount, 0);
-
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Total Users
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">
-            {analytics.totalUsers}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Paid Users
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">
-            {analytics.paidUsers}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Total Revenue
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">
-            {formatMoney(analytics.totalRevenue)}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Total Earnings
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">
-            {formatMoney(analytics.totalEarnings)}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Remaining Amount
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-            {formatMoney(remaining)}
-          </p>
-        </div>
-      </div>
-
-      <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h4 className="font-semibold">Referral Summary</h4>
-            <p className="text-sm text-muted-foreground">
-              Code: <span className="font-mono">{referral.code || "—"}</span>, commission:{" "}
-              {toNumber(referral.commission_percent)}%, status:{" "}
-              {referral.is_active ?? true ? "Active" : "Inactive"}.
-            </p>
-          </div>
-
-          <Button
-            type="button"
-            onClick={onMarkAsPaid}
-            disabled={!canMarkPaid || remaining <= 0 || markLoading}
-            className="rounded-2xl border-0"
-          >
-            {markLoading ? "Updating..." : "Mark as Paid"}
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
-          <h4 className="font-semibold mb-3">User Emails</h4>
-
-          {analytics.users.length > 0 ? (
-  <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
-    {analytics.users.map((user, index) => {
-      const approvedPayment = (user.payments || []).find(isApprovedPayment);
-
-      return (
-        <div
-          key={user.id || `${user.email}-${index}`}
-          className="rounded-2xl bg-background/70 px-4 py-3 flex items-center justify-between"
-        >
-          <span className="text-sm font-medium">
-            {user.email || "No email"}
-          </span>
-
-          <span className="text-xs">
-  {approvedPayment ? (
-    <span className="text-green-400">
-      {approvedPayment.plan ? (
-        <>
-          <span className="capitalize">{approvedPayment.plan}</span> • ${approvedPayment.amount}
-        </>
-      ) : (
-        <>${approvedPayment.amount}</>
-      )}
-    </span>
-  ) : (
-    <span className="text-red-400">Unpaid</span>
-  )}
-</span>
-        </div>
-      );
-    })}
-  </div>
-) : (
-  <p className="text-sm text-muted-foreground">
-    No user list connected yet. This usually means referrals, profiles, and payments
-    are not fully joined in the query.
-  </p>
-)}
-        </div>
-
-        <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
-          <h4 className="font-semibold mb-3">Payment Breakdown</h4>
-
-          {analytics.paymentBreakdown.length > 0 ? (
-            <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
-              {analytics.paymentBreakdown.map((item, index) => (
-                <div
-                  key={`${item.userEmail}-${item.paymentAmount}-${index}`}
-                  className="rounded-2xl bg-background/70 px-4 py-3"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-medium">{item.userEmail}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(item.createdAt)} {item.status ? `• ${item.status}` : ""}
-                      </p>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="text-sm font-semibold tabular-nums">
-                        {formatMoney(item.paymentAmount)}
-                      </p>
-                      <p className="text-xs text-amber-600 dark:text-amber-400 tabular-nums">
-                        Earned {formatMoney(item.earning)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No approved payment breakdown found for this referral yet.
-            </p>
-          )}
-        </div>
       </div>
     </div>
   );
