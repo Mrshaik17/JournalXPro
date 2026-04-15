@@ -650,15 +650,36 @@ const Accounts = () => {
   const hasActiveFilters = search.trim() || filterMode !== "all";
 
   if (selectedEnhancedAccount) {
-    const handleShareAccount = () => {
-      if (selectedEnhancedAccount.share_token) {
-        const url = `${window.location.origin}/shared/account/${selectedEnhancedAccount.share_token}`;
-        navigator.clipboard.writeText(url);
-        toast.success("Share link copied");
-      } else {
-        toast.info("Account sharing can be added in the next step");
-      }
-    };
+    const handleShareAccount = async (account) => {
+  try {
+    if (!account?.id) {
+      console.error("Account ID missing:", account);
+      alert("❌ Account not found");
+      return;
+    }
+
+    const token = crypto.randomUUID();
+
+    const { error } = await supabase
+      .from("accounts")
+      .update({
+        share_token: token,
+        is_shared: true,
+      })
+      .eq("id", account.id);
+
+    if (error) throw error;
+
+    const url = `${window.location.origin}/shared/${token}`;
+    await navigator.clipboard.writeText(url);
+
+    alert("✅ Share link copied!");
+
+  } catch (err) {
+    console.error(err);
+    alert("❌ Failed to generate share link");
+  }
+};
 
     return (
       <>
@@ -715,7 +736,7 @@ const Accounts = () => {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <Button variant="outline" size="sm" onClick={handleShareAccount}>
+              <Button variant="outline" size="sm" onClick={() => handleShareAccount(selectedEnhancedAccount)}>
                 <Share2 className="h-4 w-4 mr-1" />
                 Share
               </Button>

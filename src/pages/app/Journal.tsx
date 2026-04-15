@@ -726,7 +726,8 @@ const tradeDateTime = form.tradeDate
     type="date"
     value={form.tradeDate}
     onChange={(e) => setField("tradeDate", e.target.value)}
-    className="bg-background border-border"
+    style={{ colorScheme: "dark" }}
+    className="bg-background text-white border-border px-2 py-1 rounded-md"
   />
 </div>
 
@@ -999,7 +1000,7 @@ const tradeDateTime = form.tradeDate
                     className="border-b border-border last:border-0 hover:bg-muted/10"
                   >
                     <td className="p-3 font-mono text-xs">
-                      {format(new Date(trade.created_at), "MMM dd, HH:mm")}
+                      {format(new Date(trade.trade_date || trade.created_at), "MMM dd, HH:mm")}
                     </td>
                     <td className="p-3 text-xs font-mono">{trade.pair || "—"}</td>
                     <td className="p-3 text-xs">{trade.direction || "—"}</td>

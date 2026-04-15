@@ -62,7 +62,7 @@ const App = () => (
               <Route path="/rules" element={<Rules />} />
 
               {/* 🔥 SHARED ROUTES (IMPORTANT - OUTSIDE /app) */}
-              <Route path="/shared/account/:token" element={<SharedAccount />} />
+              <Route path="/shared/:token" element={<SharedAccount />} />
               <Route path="/shared/payout/:token" element={<SharedPayouts />} />
               <Route path="/shared/payouts/:token" element={<SharedPayouts />} />
 

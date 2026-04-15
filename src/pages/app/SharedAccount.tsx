@@ -12,7 +12,12 @@ const SharedAccount = () => {
   const { data: account, isLoading } = useQuery({
     queryKey: ["shared-account", token],
     queryFn: async () => {
-      const { data, error } = await supabase.from("accounts").select("*").eq("share_token", token!).single();
+      const { data, error } = await supabase
+  .from("accounts")
+  .select("*")
+  .eq("share_token", token)
+  .eq("is_shared", true)
+  .single();
       if (error) throw error;
       return data;
     },
@@ -32,8 +37,26 @@ const SharedAccount = () => {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background text-foreground"><p>Loading...</p></div>;
   if (!account) return <div className="min-h-screen flex items-center justify-center bg-background text-foreground"><p className="text-muted-foreground">Account not found or link expired.</p></div>;
 
-  const pnl = Number(account.current_balance) - Number(account.initial_balance);
-  const pnlPercent = Number(account.initial_balance) > 0 ? ((pnl / Number(account.initial_balance)) * 100).toFixed(1) : "0";
+const current = Number(account?.current_balance || 0);
+
+// fallback initial (if DB doesn't have it)
+const fallbackInitial = trades.length > 0
+  ? current - trades.reduce((sum, t) => sum + (Number(t.pnl_amount) || 0), 0)
+  : 0;
+
+const initial = Number(account?.initial_balance || fallbackInitial);
+
+// total pnl
+const totalPnL = current - initial;
+
+// percentage
+const pnlPercent =
+  initial > 0
+    ? (totalPnL / initial) * 100
+    : 0;
+
+// formatted
+const formattedPnL = `${totalPnL >= 0 ? "+" : ""}${pnlPercent.toFixed(2)}%`;
   const wins = trades.filter(t => t.result === "win").length;
   const winRate = trades.length > 0 ? ((wins / trades.length) * 100).toFixed(0) : "0";
   const totalLots = trades.reduce((s, t) => s + (Number(t.lot_size) || 0), 0);
@@ -47,14 +70,43 @@ const SharedAccount = () => {
   const eqData = sortedTrades.map(t => { eq += Number(t.pnl_amount); return { date: format(new Date(t.created_at), "MMM dd"), equity: eq }; });
 
   const stats = [
-    { label: "Balance", value: `$${Number(account.current_balance).toFixed(2)}`, icon: TrendingUp, color: "text-primary" },
-    { label: "P&L", value: `${pnl >= 0 ? "+" : ""}${pnlPercent}%`, icon: BarChart3, color: pnl >= 0 ? "text-green-400" : "text-red-400" },
-    { label: "Win Rate", value: `${winRate}%`, icon: Target, color: "text-primary" },
-    { label: "Trades", value: String(trades.length), icon: BarChart3, color: "text-muted-foreground" },
-    { label: "Total Lots", value: totalLots.toFixed(2), icon: Activity, color: "text-primary" },
-    { label: "Avg Profit", value: `$${avgProfit.toFixed(2)}`, icon: TrendingUp, color: "text-green-400" },
-    { label: "Avg Loss", value: `$${avgLoss.toFixed(2)}`, icon: AlertTriangle, color: "text-red-400" },
-  ];
+  {
+    label: "Balance",
+    value: `$${Number(account.current_balance).toFixed(2)}`,
+    icon: TrendingUp,
+    color: "text-primary",
+  },
+  {
+    label: "P&L",
+    value: `${totalPnL >= 0 ? "+" : ""}${pnlPercent}%`,
+    icon: TrendingUp,
+    color: totalPnL >= 0 ? "text-green-400" : "text-red-400",
+  },
+  {
+    label: "Win Rate",
+    value: `${winRate}%`,
+    icon: Target,
+    color: "text-primary",
+  },
+  {
+    label: "Trades",
+    value: String(trades.length),
+    icon: BarChart3,
+    color: "text-muted-foreground",
+  },
+  {
+    label: "Avg Profit",
+    value: `$${avgProfit.toFixed(2)}`,
+    icon: TrendingUp,
+    color: "text-green-400",
+  },
+  {
+    label: "Avg Loss",
+    value: `$${avgLoss.toFixed(2)}`,
+    icon: AlertTriangle,
+    color: "text-red-400",
+  },
+];
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-8 max-w-5xl mx-auto">
