@@ -1,6 +1,12 @@
 export const FOREX_PAIRS = [
+  // Metals
+  "XAUUSD", "XAGUSD", "XAUEUR", "XAUGBP",
   // Major Pairs
   "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+  // Crypto
+  "BTCUSD", "ETHUSD", "LTCUSD", "XRPUSD", "SOLUSD", "DOGEUSD", "ADAUSD", "DOTUSD", "AVAXUSD", "BNBUSD",
+  // Commodities
+  "USOIL", "UKOIL", "NATGAS", "COPPER",
   // Minor Pairs
   "EURGBP", "EURJPY", "EURCHF", "EURAUD", "EURCAD", "EURNZD",
   "GBPJPY", "GBPCHF", "GBPAUD", "GBPCAD", "GBPNZD",
@@ -11,14 +17,9 @@ export const FOREX_PAIRS = [
   "USDTRY", "USDZAR", "USDMXN", "USDSGD", "USDHKD", "USDNOK", "USDSEK", "USDDKK", "USDPLN", "USDHUF", "USDCZK", "USDINR", "USDTHB",
   "EURTRY", "EURZAR", "EURNOK", "EURSEK", "EURDKK", "EURPLN", "EURHUF",
   "GBPTRY", "GBPZAR", "GBPNOK", "GBPSEK",
-  // Metals
-  "XAUUSD", "XAGUSD", "XAUEUR", "XAUGBP",
   // Indices (CFD)
   "US30", "US100", "US500", "UK100", "GER40", "FRA40", "JPN225", "AUS200",
-  // Crypto
-  "BTCUSD", "ETHUSD", "LTCUSD", "XRPUSD", "SOLUSD", "DOGEUSD", "ADAUSD", "DOTUSD", "AVAXUSD", "BNBUSD",
-  // Commodities
-  "USOIL", "UKOIL", "NATGAS", "COPPER",
+  
   // Energies
   "XTIUSD", "XBRUSD",
 ];

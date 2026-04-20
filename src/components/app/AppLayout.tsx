@@ -67,7 +67,7 @@ export function AppLayout() {
 
               <div className="flex items-center gap-2 rounded-xl border border-cyan-500/10 bg-cyan-500/5 px-3 py-2 text-xs font-medium text-cyan-300">
                 <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Premium Trading Journal</span>
+                <span className="hidden sm:inline">Personalized Trading Journal</span>
                 <span className="sm:hidden">Premium</span>
               </div>
             </header>

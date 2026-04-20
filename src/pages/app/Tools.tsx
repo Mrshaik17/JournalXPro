@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
 
 const COMMON_PAIRS = [
+  "XAUUSD",
   "EURUSD",
   "GBPUSD",
   "USDJPY",
@@ -22,7 +23,6 @@ const COMMON_PAIRS = [
   "USDCAD",
   "EURJPY",
   "GBPJPY",
-  "XAUUSD",
   "BTCUSD",
   "ETHUSD",
   "NAS100",

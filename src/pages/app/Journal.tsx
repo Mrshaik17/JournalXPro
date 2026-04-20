@@ -102,7 +102,7 @@ const emptyForm = {
   direction: "",
   went: "",
   lotSize: "",
-  bias1d: "",
+  bias: "",
   pips: "",
   entryPrice: "",
   stopLoss: "",
@@ -358,52 +358,100 @@ const deleteTrade = useMutation({
 });
 
   const saveTrade = useMutation({
-  mutationFn: async () => {
-    if (!user) throw new Error("Not authenticated");
+ mutationFn: async () => {
+  if (!user) throw new Error("Not authenticated");
 
-    const pnl =
-      form.result === "loss"
-        ? -Math.abs(parseFloat(form.pnlAmount))
-        : form.result === "breakeven"
-        ? 0
-        : Math.abs(parseFloat(form.pnlAmount));
+  const pnl =
+    form.result === "loss"
+      ? -Math.abs(parseFloat(form.pnlAmount))
+      : form.result === "breakeven"
+      ? 0
+      : Math.abs(parseFloat(form.pnlAmount));
 
-    const cfObj: Record<string, string> = {};
-    form.customFields.forEach((cf) => {
-      cfObj[cf.label] = cf.value;
-    });
-    let screenshotUrl: string | null = null;
-let screenshotPublicIds: string[] | null = null;
+  // custom fields
+  const cfObj: Record<string, string> = {};
+  form.customFields.forEach((cf) => {
+    cfObj[cf.label] = cf.value;
+  });
 
-const hasNewScreenshots = screenshotFiles.some(Boolean);
+  // screenshots
+  let screenshotUrl: string | null = null;
+  let screenshotPublicIds: string[] | null = null;
 
-if (hasNewScreenshots) {
-  const uploadResult = await uploadScreenshotsToCloudinary();
-  screenshotUrl = uploadResult.urls;
-  screenshotPublicIds = uploadResult.publicIds;
-} else if (editingId) {
-  const existingTrade = trades.find((t: any) => t.id === editingId);
-  screenshotUrl = existingTrade?.screenshot_url || null;
-  screenshotPublicIds = existingTrade?.screenshot_public_ids || null;
-}
-const tradeDateTime = form.tradeDate
-  ? `${form.tradeDate}T${form.entryTime || "00:00"}:00`
-  : null;
+  const hasNewScreenshots = screenshotFiles.some(Boolean);
 
-    const tradePayload: any = {
-      user_id: user.id,
-      account_id: form.accountId,
-      pair: form.pair || null,
-      direction: form.direction || null,
-      lot_size: form.lotSize ? parseFloat(form.lotSize) : null,
-      result: form.result,
-      pnl_amount: pnl,
-      follow_plan: form.followPlan,
-      trade_date: tradeDateTime,
-      custom_fields: cfObj,
-      screenshot_url: screenshotUrl,
-      screenshot_public_ids: screenshotPublicIds,
-    };
+  if (hasNewScreenshots) {
+    const uploadResult = await uploadScreenshotsToCloudinary();
+    screenshotUrl = uploadResult.urls;
+    screenshotPublicIds = uploadResult.publicIds;
+  } else if (editingId) {
+    const existingTrade = trades.find((t: any) => t.id === editingId);
+    screenshotUrl = existingTrade?.screenshot_url || null;
+    screenshotPublicIds = existingTrade?.screenshot_public_ids || null;
+  }
+
+  // date fix
+  const tradeDateTime =
+    form.tradeDate && form.entryTime
+      ? `${form.tradeDate}T${form.entryTime}:00`
+      : form.tradeDate
+      ? `${form.tradeDate}T00:00:00`
+      : null;
+
+  // ✅ FINAL CLEAN PAYLOAD
+  const tradePayload: any = {
+    user_id: user.id,
+    account_id: form.accountId,
+
+    pair: form.pair || null,
+    direction: form.direction || null,
+    went: form.went || null,
+
+    lot_size: form.lotSize !== "" ? parseFloat(form.lotSize) : null,
+    bias_1d: form.bias || null,
+    pips: form.pips !== "" ? parseFloat(form.pips) : null,
+
+    entry_price:
+      form.entryPrice !== "" ? parseFloat(form.entryPrice) : null,
+
+    stop_loss:
+      form.stopLoss !== "" ? parseFloat(form.stopLoss) : null,
+
+    take_profit:
+      form.takeProfit !== "" ? parseFloat(form.takeProfit) : null,
+
+    result: form.result,
+    pnl_amount: pnl,
+
+    start_balance:
+      form.startBalance !== "" ? parseFloat(form.startBalance) : null,
+
+    end_balance:
+      form.endBalance !== "" ? parseFloat(form.endBalance) : null,
+
+    trade_date: tradeDateTime,
+
+    entry_time:
+      form.tradeDate && form.entryTime
+        ? `${form.tradeDate}T${form.entryTime}:00`
+        : null,
+
+    exit_time:
+      form.tradeDate && form.exitTime
+        ? `${form.tradeDate}T${form.exitTime}:00`
+        : null,
+
+    follow_plan: form.followPlan,
+    notes: form.notes || null,
+
+    tags: form.tags
+      ? form.tags.split(",").map((tag) => tag.trim()).filter(Boolean)
+      : [],
+
+    custom_fields: cfObj,
+    screenshot_url: screenshotUrl,
+    screenshot_public_ids: screenshotPublicIds,
+  };
 
     if (editingId) {
       // 🧠 GET OLD TRADE
@@ -482,7 +530,7 @@ const tradeDateTime = form.tradeDate
       direction: trade.direction || "",
       went: trade.went || "",
       lotSize: trade.lot_size?.toString() || "",
-      bias1d: trade.bias_1d || "",
+      bias: trade.bias_1d || "",
       pips: trade.pips?.toString() || "",
       entryPrice: trade.entry_price?.toString() || "",
       stopLoss: trade.stop_loss?.toString() || "",
@@ -589,11 +637,11 @@ const tradeDateTime = form.tradeDate
         </div>
         <div>
           <label className="text-xs text-muted-foreground mb-1 block">
-            1D Bias
+            Bias
           </label>
           <Input
-            value={form.bias1d}
-            onChange={(e) => setField("bias1d", e.target.value)}
+            value={form.bias}
+            onChange={(e) => setField("bias", e.target.value)}
             placeholder="Bullish"
             className="bg-background border-border"
           />

@@ -159,7 +159,7 @@ const ShowcaseSection = () => {
                   <div>
                     <p className="font-semibold">{currentItem.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      Premium trading journal experience
+                      Personalized trading journal experience
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
