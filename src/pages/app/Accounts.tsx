@@ -473,40 +473,106 @@ const Accounts = () => {
             equity: runningEquity,
           };
         });
+        const peakEquity = Math.max(
+  initialBalanceValue || 0,
+  ...(equitySeries || []).map((h) => h.equity || 0),
+  currentBalanceValue || 0
+);
+
+const currentEquity = currentBalanceValue || 0;
 
       const { dailyDD, maxDD, consistency } = getDDValues(acc);
 
-      const todayTrades = accTrades.filter(
-        (t) =>
-          new Date(t.created_at).toDateString() === new Date().toDateString()
-      );
+      // ✅ NEW PROP FIRM DD LOGIC
 
-      const todayLoss = Math.abs(
-        todayTrades
-          .filter((t) => parseNumber(t.pnl_amount) < 0)
-          .reduce((sum, t) => sum + parseNumber(t.pnl_amount), 0)
-      );
+const today = new Date().toDateString();
 
-      const totalLoss = Math.abs(
-        lossTrades.reduce((sum, t) => sum + parseNumber(t.pnl_amount), 0)
-      );
+// today's trades sorted
+const todayTrades = accTrades
+  .filter((t) => new Date(t.created_at).toDateString() === today)
+  .sort(
+    (a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
 
-      const peakEquity = Math.max(
-        initialBalanceValue || 0,
-        ...(equitySeries || []).map((h) => h.equity || 0),
-        currentBalanceValue || 0
-      );
-      const currentEquity = currentBalanceValue || 0;
+// 🔹 find start of day balance
+let startOfDayBalance = initialBalanceValue;
 
-      const dailyLimit = dailyDD ? currentEquity * (dailyDD / 100) : 0;
-      const maxLimit = maxDD ? peakEquity * (maxDD / 100) : 0;
+if (todayTrades.length > 0) {
+  const firstTradeIndex = accTrades.findIndex(
+    (t) => t.id === todayTrades[0].id
+  );
 
-      const dailyRiskPct = dailyLimit > 0 ? (todayLoss / dailyLimit) * 100 : 0;
-      const maxRiskPct = maxLimit > 0 ? (totalLoss / maxLimit) * 100 : 0;
-      const riskPct = Math.max(dailyRiskPct, maxRiskPct);
+  startOfDayBalance = initialBalanceValue;
 
-      const breachedDaily = dailyLimit > 0 && todayLoss >= dailyLimit;
-      const breachedMax = maxLimit > 0 && totalLoss >= maxLimit;
+  for (let i = 0; i < firstTradeIndex; i++) {
+    startOfDayBalance += parseNumber(accTrades[i].pnl_amount);
+  }
+}
+
+// 🔹 current running balance (today)
+let runningBalance = startOfDayBalance;
+
+todayTrades.forEach((t) => {
+  runningBalance += parseNumber(t.pnl_amount);
+});
+
+// ✅ DAILY DD
+// ✅ NEW PROP FIRM DAILY DD (CORRECT)
+
+const todayNetPnL = todayTrades.reduce(
+  (sum, t) => sum + parseNumber(t.pnl_amount),
+  0
+);
+
+// Base DD (example: 5% of initial balance)
+const baseDailyLimit = initialBalanceValue * ((dailyDD || 0) / 100);
+
+// Add profit buffer
+const dynamicDailyLimit = baseDailyLimit + Math.max(todayNetPnL, 0);
+
+// Used DD (only when negative)
+const dailyDrawdownUsed = Math.abs(Math.min(todayNetPnL, 0));
+
+// Remaining
+const dailyRemaining = dynamicDailyLimit - dailyDrawdownUsed;
+
+// % used
+const dailyRiskPct =
+  dynamicDailyLimit > 0
+    ? (dailyDrawdownUsed / dynamicDailyLimit) * 100
+    : 0;
+
+// FINAL LIMIT (for UI)
+const dailyLimit = dynamicDailyLimit;
+
+
+
+// ✅ MAX DD
+// ✅ STATIC MAX DD (NO TRAILING)
+
+const maxLimit = maxDD
+  ? initialBalanceValue * (maxDD / 100)
+  : 0;
+
+// total loss from initial balance
+const totalLossFromStart =
+  initialBalanceValue > currentEquity
+    ? initialBalanceValue - currentEquity
+    : 0;
+
+const maxDrawdownUsed = totalLossFromStart;
+
+const maxRemaining = maxLimit - maxDrawdownUsed;
+
+const maxRiskPct =
+  maxLimit > 0 ? (maxDrawdownUsed / maxLimit) * 100 : 0;
+
+// FINAL RISK %
+const riskPct = Math.max(dailyRiskPct, maxRiskPct);
+
+      const breachedDaily = dailyLimit > 0 && dailyDrawdownUsed >= dailyLimit;
+      const breachedMax = maxLimit > 0 && maxDrawdownUsed >= maxLimit;
       const isBreached = breachedDaily || breachedMax;
 
       const isProp = acc.account_type?.startsWith("Prop Firm");
@@ -549,8 +615,8 @@ const Accounts = () => {
         consistency,
         dailyLimit,
         maxLimit,
-        todayLoss,
-        totalLoss,
+        dailyDrawdownUsed,
+        maxDrawdownUsed,
         dailyRiskPct,
         maxRiskPct,
         riskPct,
@@ -959,7 +1025,7 @@ const Accounts = () => {
                           <div className="flex justify-between text-xs mb-1">
                             <span className="text-muted-foreground">Daily DD Used</span>
                             <span className="font-mono">
-                              {currency(selectedEnhancedAccount.todayLoss)} /{" "}
+                              {currency(selectedEnhancedAccount.dailyDrawdownUsed)} /{" "}
                               {currency(selectedEnhancedAccount.dailyLimit)}
                             </span>
                           </div>
@@ -992,7 +1058,7 @@ const Accounts = () => {
                           <div className="flex justify-between text-xs mb-1">
                             <span className="text-muted-foreground">Max DD Used</span>
                             <span className="font-mono">
-                              {currency(selectedEnhancedAccount.totalLoss)} /{" "}
+                              {currency(selectedEnhancedAccount.maxDrawdownUsed)} /{" "}
                               {currency(selectedEnhancedAccount.maxLimit)}
                             </span>
                           </div>
