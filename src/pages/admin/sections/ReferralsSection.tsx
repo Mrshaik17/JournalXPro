@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -24,7 +25,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 
 type PaymentItem = {
@@ -153,7 +153,7 @@ function getReferralAnalytics(ref: ReferralRow) {
   let totalUsers = 0;
   let paidUsers = 0;
   let totalRevenue = 0;
-  let totalEarnings = 0;
+  let calculatedEarnings = 0;
 
   const paymentBreakdown: Array<{
     userEmail: string;
@@ -178,7 +178,7 @@ function getReferralAnalytics(ref: ReferralRow) {
       const earning = (amount * commission) / 100;
 
       totalRevenue += amount;
-      totalEarnings += earning;
+      calculatedEarnings += earning;
 
       paymentBreakdown.push({
         userEmail: user.email || "Unknown user",
@@ -191,24 +191,18 @@ function getReferralAnalytics(ref: ReferralRow) {
     }
   }
 
-  const fallbackTotalUsers = toNumber(normalized.joined_users_count);
-  const fallbackPaidUsers = toNumber(normalized.paid_users_count);
-  const fallbackRevenue = toNumber(normalized.total_revenue);
-  const fallbackEarnings = toNumber(
-    normalized.total_earnings ?? normalized.total_paid
-  );
-  const paidAmount = toNumber(normalized.paid_amount || normalized.total_paid);
-  const remainingAmount = Math.max(
-    toNumber(normalized.remaining_amount) ||
-      (totalEarnings || fallbackEarnings) - paidAmount,
-    0
-  );
+  // ✅ ALWAYS TRUST DB IF EXISTS
+  const totalEarnings = toNumber(normalized.total_earnings) || calculatedEarnings;
+const paidAmount = toNumber(normalized.total_paid) || 0;
+
+
+  const remainingAmount = Math.max(totalEarnings - paidAmount, 0);
 
   return {
-    totalUsers: totalUsers || fallbackTotalUsers,
-    paidUsers: paidUsers || fallbackPaidUsers,
-    totalRevenue: totalRevenue || fallbackRevenue,
-    totalEarnings: totalEarnings || fallbackEarnings,
+    totalUsers: totalUsers || toNumber(normalized.joined_users_count),
+    paidUsers: paidUsers || toNumber(normalized.paid_users_count),
+    totalRevenue: totalRevenue || toNumber(normalized.total_revenue),
+    totalEarnings,
     paidAmount,
     remainingAmount,
     paymentBreakdown,
@@ -230,11 +224,11 @@ function ReferralDetailsContent({
   canMarkPaid: boolean;
   markLoading?: boolean;
 }) {
-  const remaining = Math.max(analytics.totalEarnings - analytics.paidAmount, 0);
+  const remaining = analytics.remainingAmount;
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
             Total Users
@@ -273,9 +267,24 @@ function ReferralDetailsContent({
 
         <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Remaining Amount
+            Total Paid
           </p>
           <p className="mt-2 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+            {formatMoney(analytics.paidAmount)}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-background/60 p-4 shadow-lg">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Remaining Amount
+          </p>
+          <p
+            className={`mt-2 text-2xl font-semibold tabular-nums ${
+              remaining > 0
+                ? "text-red-600 dark:text-red-400"
+                : "text-emerald-600 dark:text-emerald-400"
+            }`}
+          >
             {formatMoney(remaining)}
           </p>
         </div>
@@ -286,8 +295,8 @@ function ReferralDetailsContent({
           <div>
             <h4 className="font-semibold">Referral Summary</h4>
             <p className="text-sm text-muted-foreground">
-              Code: <span className="font-mono">{referral.code || "—"}</span>,
-              commission: {toNumber(referral.commission_percent)}%, status:{" "}
+              Code: <span className="font-mono">{referral.code || "—"}</span>, commission:{" "}
+              {toNumber(referral.commission_percent)}%, status:{" "}
               {referral.is_active ?? true ? "Active" : "Inactive"}.
             </p>
           </div>
@@ -305,74 +314,34 @@ function ReferralDetailsContent({
 
       <div className="grid gap-6 xl:grid-cols-2">
         <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
-          <h4 className="font-semibold mb-3">User Emails</h4>
-
-          {analytics.users.length > 0 ? (
-            <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
-              {analytics.users.map((user, index) => {
-                const approvedPayment = (user.payments || []).find(isApprovedPayment);
-
-                return (
-                  <div
-                    key={user.id || `${user.email}-${index}`}
-                    className="rounded-2xl bg-background/70 px-4 py-3 flex items-center justify-between"
-                  >
-                    <span className="text-sm font-medium">
-                      {user.email || "No email"}
-                    </span>
-
-                    <span className="text-xs">
-                      {approvedPayment ? (
-                        <span className="text-green-400">
-                          {approvedPayment.plan ? (
-                            <>
-                              <span className="capitalize">{approvedPayment.plan}</span> • ${approvedPayment.amount}
-                            </>
-                          ) : (
-                            <>${approvedPayment.amount}</>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="text-red-400">Unpaid</span>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No user list connected yet. This usually means referrals, profiles,
-              and payments are not fully joined in the query.
-            </p>
-          )}
-        </div>
-
-        <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
-          <h4 className="font-semibold mb-3">Payment Breakdown</h4>
+          <h4 className="mb-3 font-semibold">Users Who Used This Referral</h4>
 
           {analytics.paymentBreakdown.length > 0 ? (
-            <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
+            <div className="space-y-3 max-h-[360px] overflow-auto pr-1">
               {analytics.paymentBreakdown.map((item, index) => (
                 <div
                   key={`${item.userEmail}-${item.paymentAmount}-${index}`}
                   className="rounded-2xl bg-background/70 px-4 py-3"
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-medium">{item.userEmail}</p>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {item.userEmail}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.plan ? `Plan: ${item.plan}` : "Plan: —"}
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        {formatDate(item.createdAt)}{" "}
-                        {item.status ? `• ${item.status}` : ""}
-                        {item.plan ? ` • ${item.plan}` : ""}
+                        {item.createdAt ? formatDate(item.createdAt) : "—"}
+                        {item.status ? ` • ${item.status}` : ""}
                       </p>
                     </div>
 
-                    <div className="text-right">
-                      <p className="text-sm font-semibold tabular-nums">
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold tabular-nums text-foreground">
                         {formatMoney(item.paymentAmount)}
                       </p>
-                      <p className="text-xs text-amber-600 dark:text-amber-400 tabular-nums">
+                      <p className="text-xs tabular-nums text-amber-600 dark:text-amber-400">
                         Earned {formatMoney(item.earning)}
                       </p>
                     </div>
@@ -382,7 +351,61 @@ function ReferralDetailsContent({
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No approved payment breakdown found for this referral yet.
+              No approved users/payments found for this referral yet.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-background/50 p-5 shadow-lg">
+          <h4 className="mb-3 font-semibold">All Referred Users</h4>
+
+          {analytics.users.length > 0 ? (
+            <div className="space-y-2 max-h-[360px] overflow-auto pr-1">
+              {analytics.users.map((user, index) => {
+                const approvedPayments = (user.payments || []).filter(isApprovedPayment);
+                const totalPaidByUser = approvedPayments.reduce(
+                  (sum, payment) => sum + toNumber(payment.amount),
+                  0
+                );
+
+                return (
+                  <div
+                    key={user.id || `${user.email}-${index}`}
+                    className="rounded-2xl bg-background/70 px-4 py-3 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {user.email || "No email"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {approvedPayments.length > 0
+                          ? `${approvedPayments.length} approved payment(s)`
+                          : "Unpaid user"}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      {approvedPayments.length > 0 ? (
+                        <>
+                          <p className="text-sm font-semibold tabular-nums">
+                            {formatMoney(totalPaidByUser)}
+                          </p>
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                            Paid
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs font-medium text-red-500">Unpaid</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No referred user list connected yet. This usually means referrals,
+              profiles, and payments are not fully joined in the query.
             </p>
           )}
         </div>
@@ -390,6 +413,8 @@ function ReferralDetailsContent({
     </div>
   );
 }
+
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function ReferralsSection({
   referrals,
@@ -406,6 +431,10 @@ export default function ReferralsSection({
   updateReferral,
   markReferralPaid,
 }: Props) {
+
+  const queryClient = useQueryClient(); // ✅ CORRECT PLACE
+
+  // rest of your code...
   const [search, setSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState<string | null>(null);
@@ -427,6 +456,7 @@ export default function ReferralsSection({
   }, [referrals, localReferrals]);
 
   const filteredReferrals = useMemo(() => {
+    console.log("FULL REFERRALS FROM DB:", displayReferrals);
     const q = search.trim().toLowerCase();
     if (!q) return displayReferrals;
 
@@ -510,54 +540,75 @@ Prop Firm Team
   );
 
   const handleMarkAsPaid = useCallback(
-    async (ref: ReferralRow) => {
-      const analytics = getReferralAnalytics(ref);
-      const newPaidAmount = analytics.totalEarnings;
-      const newRemainingAmount = 0;
+  async (ref: ReferralRow) => {
+    const analytics = getReferralAnalytics(ref);
 
-      const { error } = await supabase.from("payouts").insert({
-        referral_id: ref.id,
-        amount: newPaidAmount,
-      });
+    const totalEarnings = analytics.totalEarnings;
+    const alreadyPaid = analytics.paidAmount;
+    const remaining = totalEarnings - alreadyPaid;
 
-      if (error) {
-        console.error("Error saving payout:", error);
-        alert("Error saving payout ❌");
-        return;
-      }
+    if (remaining <= 0) {
+      alert("Nothing to pay");
+      return;
+    }
 
-      setLocalReferrals((prev) =>
-        prev.map((item) =>
-          item.id === ref.id
-            ? {
-                ...item,
-                paid_amount: newPaidAmount,
-                remaining_amount: newRemainingAmount,
-              }
-            : item
-        )
-      );
+    // ✅ Insert payout record
+    const { error: payoutError } = await supabase.from("payouts").insert({
+      referral_id: ref.id,
+      amount: remaining,
+    });
 
-      if (markReferralPaid) {
-        markReferralPaid.mutate({
-          id: ref.id,
-          paid_amount: newPaidAmount,
-          remaining_amount: newRemainingAmount,
-        });
-      }
+    if (payoutError) {
+      console.error(payoutError);
+      alert("Error saving payout ❌");
+      return;
+    }
 
-      if (updateReferral) {
-        updateReferral.mutate({
-          id: ref.id,
-          paid_amount: newPaidAmount,
-          remaining_amount: newRemainingAmount,
-        });
-      }
+    // ✅ IMPORTANT FIX: increment total_paid (NOT overwrite blindly)
+    const newPaidTotal = alreadyPaid + remaining;
 
-      alert("Payment recorded ✅");
-    },
-    [markReferralPaid, updateReferral]
-  );
+    const { error: updateError } = await supabase
+      .from("referrals")
+      .update({
+        total_paid: newPaidTotal,
+        total_earnings: totalEarnings, // keep consistent
+      })
+      .eq("id", ref.id);
+
+    if (updateError) {
+      console.error(updateError);
+      alert("Error updating ❌");
+      return;
+    }
+
+    // ✅ update local state properly
+    setLocalReferrals((prev) =>
+      prev.map((item) =>
+        item.id === ref.id
+          ? {
+              ...item,
+              total_paid: newPaidTotal,
+              total_earnings: totalEarnings,
+            }
+          : item
+      )
+    );
+
+    setSelectedReferral((prev) =>
+      prev?.id === ref.id
+        ? {
+            ...prev,
+            total_paid: newPaidTotal,
+            total_earnings: totalEarnings,
+          }
+        : prev
+    );
+
+    alert("Paid successfully ✅");
+    
+  },
+  []
+);
 
   const handleCreate = useCallback(async () => {
     if (
@@ -626,13 +677,13 @@ Prop Firm Team
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <div className="group rounded-3xl bg-gradient-to-br from-card to-card/60 px-6 py-5 shadow-xl hover:shadow-2xl transition-all duration-300 border-0">
+        <div className="rounded-3xl bg-gradient-to-br from-card to-card/60 px-6 py-5 shadow-xl">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                 Total Referrals
               </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+              <p className="mt-2 text-2xl font-semibold tabular-nums">
                 {dashboardTotals.totalReferrals}
               </p>
             </div>
@@ -642,13 +693,13 @@ Prop Firm Team
           </div>
         </div>
 
-        <div className="group rounded-3xl bg-gradient-to-br from-card to-card/60 px-6 py-5 shadow-xl hover:shadow-2xl transition-all duration-300 border-0">
+        <div className="rounded-3xl bg-gradient-to-br from-card to-card/60 px-6 py-5 shadow-xl">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                 Total Users
               </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+              <p className="mt-2 text-2xl font-semibold tabular-nums">
                 {dashboardTotals.totalUsers}
               </p>
             </div>
@@ -658,13 +709,13 @@ Prop Firm Team
           </div>
         </div>
 
-        <div className="group rounded-3xl bg-gradient-to-br from-card to-card/60 px-6 py-5 shadow-xl hover:shadow-2xl transition-all duration-300 border-0">
+        <div className="rounded-3xl bg-gradient-to-br from-card to-card/60 px-6 py-5 shadow-xl">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                 Total Revenue
               </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+              <p className="mt-2 text-2xl font-semibold tabular-nums">
                 {formatMoney(dashboardTotals.totalRevenue)}
               </p>
             </div>
@@ -674,13 +725,13 @@ Prop Firm Team
           </div>
         </div>
 
-        <div className="group rounded-3xl bg-gradient-to-br from-card to-card/60 px-6 py-5 shadow-xl hover:shadow-2xl transition-all duration-300 border-0">
+        <div className="rounded-3xl bg-gradient-to-br from-card to-card/60 px-6 py-5 shadow-xl">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                 Total Earnings
               </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+              <p className="mt-2 text-2xl font-semibold tabular-nums">
                 {formatMoney(dashboardTotals.totalEarnings)}
               </p>
             </div>
@@ -690,7 +741,7 @@ Prop Firm Team
           </div>
         </div>
 
-        <div className="group rounded-3xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-6 py-5 shadow-xl hover:shadow-2xl transition-all duration-300 border-0">
+        <div className="rounded-3xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-6 py-5 shadow-xl">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
@@ -786,113 +837,73 @@ Prop Firm Team
         </div>
       </div>
 
-      <div className="rounded-3xl bg-gradient-to-br from-card/80 to-card/30 shadow-2xl border-0 overflow-hidden backdrop-blur-xl">
-        <div className="p-6 pb-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">Referral Records</h3>
-              <p className="text-sm text-muted-foreground">
-                Search, inspect, copy, track payouts, and manage referral records.
-              </p>
-            </div>
+      <div className="rounded-3xl bg-gradient-to-br from-card/80 to-card/30 shadow-2xl border-0 overflow-hidden backdrop-blur-xl p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-semibold">Referral Records</h3>
+            <p className="text-sm text-muted-foreground">
+              Search, inspect, copy, track payouts, and manage referral records.
+            </p>
+          </div>
 
-            <div className="relative w-full lg:w-[320px]">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by email, name or code"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-11 rounded-3xl border-0 bg-background/80 pl-11 shadow-lg focus-visible:ring-2 focus-visible:ring-primary/50"
-              />
-            </div>
+          <div className="relative w-full lg:w-[320px]">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by email, name or code"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-11 rounded-3xl border-0 bg-background/80 pl-11 shadow-lg"
+            />
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1450px]">
-            <thead>
-              <tr className="bg-background/70 backdrop-blur-sm border-0">
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Email
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Name
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Code
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Status
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Commission
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Users
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Paid Users
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Revenue
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Earnings
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Paid Out
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Remaining
-                </th>
-                <th className="text-left px-6 py-4 font-semibold text-foreground/90">
-                  Created
-                </th>
-                <th className="text-center px-6 py-4 font-semibold text-foreground/90">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
+        {filteredReferrals.length === 0 ? (
+          <div className="py-16 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <Users className="h-16 w-16 text-muted-foreground/50" />
+              <div>
+                <p className="text-lg font-semibold text-foreground mb-1">No Referrals Yet</p>
+                <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                  No referral rows are reaching this component right now.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {filteredReferrals.map((ref) => {
                 const analytics = getReferralAnalytics(ref);
                 const active = ref.is_active ?? true;
+                const conversion =
+                  analytics.totalUsers > 0
+                    ? Math.round((analytics.paidUsers / analytics.totalUsers) * 100)
+                    : 0;
 
                 return (
-                  <tr
+                  <div
                     key={ref.id}
-                    className="hover:bg-secondary/40 transition-all duration-200 border-0"
+                    onClick={() => setSelectedReferral(ref)}
+                    className="cursor-pointer rounded-3xl border border-border/40 bg-background/70 p-5 shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
                   >
-                    <td className="px-6 py-5 font-medium text-foreground max-w-[220px] truncate">
-                      {ref.email || "—"}
-                    </td>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h4 className="truncate text-lg font-semibold text-foreground">
+                          {ref.name || "Unnamed Referral"}
+                        </h4>
+                        <p className="mt-1 truncate text-sm text-muted-foreground">
+                          {ref.email || "—"}
+                        </p>
+                      </div>
 
-                    <td className="px-6 py-5 font-medium">
-                      {ref.name || "—"}
-                    </td>
-
-                    <td className="px-6 py-5">
                       <button
                         type="button"
-                        onClick={() => copyCode(ref.id, ref.code)}
-                        className="inline-flex items-center gap-2 rounded-3xl bg-background/80 hover:bg-background px-4 py-2.5 font-mono text-sm font-semibold text-foreground shadow-md hover:shadow-lg transition-all duration-200 border-0"
-                      >
-                        <span>{ref.code || "—"}</span>
-                        {copiedId === ref.id ? (
-                          <Check className="h-4 w-4 text-emerald-500" />
-                        ) : (
-                          <Copy className="h-4 w-4 text-muted-foreground/70" />
-                        )}
-                      </button>
-                    </td>
-
-                    <td className="px-6 py-5">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(ref)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleStatus(ref);
+                        }}
                         disabled={!updateReferral?.mutate}
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold shadow-sm transition ${
+                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm transition ${
                           active
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                             : "bg-red-500/10 text-red-600 dark:text-red-400"
@@ -905,150 +916,126 @@ Prop Firm Team
                         )}
                         {active ? "Active" : "Inactive"}
                       </button>
-                    </td>
+                    </div>
 
-                    <td className="px-6 py-5">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-3 py-1.5 text-sm font-semibold text-primary shadow-sm">
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-background px-3 py-1.5 font-mono text-xs font-semibold text-foreground shadow-sm">
+                        {ref.code || "—"}
+                      </span>
+
+                      <span className="inline-flex items-center rounded-full bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary shadow-sm">
                         {toNumber(ref.commission_percent)}%
                       </span>
-                    </td>
 
-                    <td className="px-6 py-5 text-sm font-medium tabular-nums">
-                      {analytics.totalUsers}
-                    </td>
-
-                    <td className="px-6 py-5 text-sm font-medium tabular-nums">
-                      {analytics.paidUsers}
-                    </td>
-
-                    <td className="px-6 py-5 text-sm font-medium tabular-nums">
-                      {formatMoney(analytics.totalRevenue)}
-                    </td>
-
-                    <td className="px-6 py-5">
-                      <span className="inline-flex rounded-full bg-amber-500/10 px-3 py-1.5 text-sm font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
-                        {formatMoney(analytics.totalEarnings)}
+                      <span className="inline-flex items-center rounded-full bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-600 dark:text-sky-400 shadow-sm">
+                        {conversion}% conversion
                       </span>
-                    </td>
+                    </div>
 
-                    <td className="px-6 py-5">
-                      <span className="inline-flex rounded-full bg-emerald-500/10 px-3 py-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                        {formatMoney(analytics.paidAmount)}
-                      </span>
-                    </td>
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl bg-background/80 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Total Users
+                        </p>
+                        <p className="mt-1 text-lg font-semibold tabular-nums">
+                          {analytics.totalUsers}
+                        </p>
+                      </div>
 
-                    <td className="px-6 py-5 text-sm font-medium tabular-nums">
-                      {formatMoney(
-                        Math.max(analytics.totalEarnings - analytics.paidAmount, 0) ||
-                          analytics.remainingAmount
-                      )}
-                    </td>
+                      <div className="rounded-2xl bg-background/80 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Paid Users
+                        </p>
+                        <p className="mt-1 text-lg font-semibold tabular-nums">
+                          {analytics.paidUsers}
+                        </p>
+                      </div>
 
-                    <td className="px-6 py-5 text-xs text-muted-foreground font-mono">
-                      {formatDate(ref.created_at)}
-                    </td>
+                      <div className="rounded-2xl bg-background/80 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Revenue
+                        </p>
+                        <p className="mt-1 text-sm font-semibold tabular-nums">
+                          {formatMoney(analytics.totalRevenue)}
+                        </p>
+                      </div>
 
-                    <td className="px-6 py-5 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <Dialog
-                          open={selectedReferral?.id === ref.id}
-                          onOpenChange={(open) => {
-                            if (!open) setSelectedReferral(null);
+                      <div className="rounded-2xl bg-background/80 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Earnings
+                        </p>
+                        <p className="mt-1 text-sm font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                          {formatMoney(analytics.totalEarnings)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl bg-background/80 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Paid
+                        </p>
+                        <p className="mt-1 text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                          {formatMoney(analytics.paidAmount)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl bg-background/80 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Remaining
+                        </p>
+                        <p
+                          className={`mt-1 text-sm font-semibold tabular-nums ${
+                            analytics.remainingAmount > 0
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-emerald-600 dark:text-emerald-400"
+                          }`}
+                        >
+                          {formatMoney(analytics.remainingAmount)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex items-center justify-between gap-2">
+                      <div className="text-xs text-muted-foreground">
+                        Created {formatDate(ref.created_at)}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyCode(ref.id, ref.code);
                           }}
+                          className="h-9 w-9 rounded-2xl p-0"
                         >
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedReferral(ref)}
-                              className="h-10 w-10 rounded-2xl hover:bg-primary/10 p-0 border-0"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-
-                          <DialogContent className="rounded-3xl max-w-5xl border-0 bg-card/95 backdrop-blur-xl">
-                            <DialogHeader>
-                              <DialogTitle>
-                                Referral Details — {ref.name || ref.code || "Referral"}
-                              </DialogTitle>
-                              <DialogDescription>
-                                Users, paid users, revenue, earnings, payout status, and payment breakdown.
-                              </DialogDescription>
-                            </DialogHeader>
-
-                            <ReferralDetailsContent
-                              referral={ref}
-                              analytics={analytics}
-                              onMarkAsPaid={() => handleMarkAsPaid(ref)}
-                              canMarkPaid={!!markReferralPaid || !!updateReferral}
-                              markLoading={
-                                markReferralPaid?.isPending || updateReferral?.isPending
-                              }
-                            />
-                          </DialogContent>
-                        </Dialog>
-
-                        <Dialog
-                          open={showEmailModal === ref.id}
-                          onOpenChange={(open) => !open && setShowEmailModal(null)}
-                        >
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-10 w-10 rounded-2xl hover:bg-primary/10 p-0 border-0"
-                              onClick={() => setShowEmailModal(ref.id)}
-                            >
-                              <Mail className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-
-                          <DialogContent className="rounded-3xl max-w-2xl border-0 bg-card/95 backdrop-blur-xl">
-                            <DialogHeader>
-                              <DialogTitle>Send Welcome Email</DialogTitle>
-                              <DialogDescription>
-                                Pre-filled email template for {ref.name || "this referral"}.
-                              </DialogDescription>
-                            </DialogHeader>
-
-                            <div className="space-y-3">
-                              <div className="bg-muted/20 p-4 rounded-2xl font-mono text-sm border-0">
-                                <pre className="whitespace-pre-wrap">
-                                  {emailTemplate(ref)}
-                                </pre>
-                              </div>
-
-                              <div className="flex gap-3 pt-2">
-                                <Button
-                                  type="button"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(emailTemplate(ref));
-                                    setShowEmailModal(null);
-                                  }}
-                                  className="flex-1 rounded-2xl border-0"
-                                >
-                                  Copy Email
-                                </Button>
-
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => setShowEmailModal(null)}
-                                  className="flex-1 rounded-2xl border-0"
-                                >
-                                  Send Later
-                                </Button>
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                          {copiedId === ref.id ? (
+                            <Check className="h-4 w-4 text-emerald-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
 
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleMarkAsPaid(ref)}
-                          className="h-10 w-10 rounded-2xl hover:bg-emerald-500/10 hover:text-emerald-600 p-0 border-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowEmailModal(ref.id);
+                          }}
+                          className="h-9 w-9 rounded-2xl p-0"
+                        >
+                          <Mail className="h-4 w-4" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkAsPaid(ref);
+                          }}
+                          className="h-9 w-9 rounded-2xl p-0 hover:bg-emerald-500/10 hover:text-emerald-600"
                         >
                           <Wallet className="h-4 w-4" />
                         </Button>
@@ -1056,52 +1043,111 @@ Prop Firm Team
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setLocalReferrals((prev) =>
                               prev.filter((item) => item.id !== ref.id)
                             );
                             deleteReferral.mutate(ref.id);
                           }}
-                          className="h-10 w-10 rounded-2xl hover:bg-destructive/10 hover:text-destructive p-0 border-0"
+                          className="h-9 w-9 rounded-2xl p-0 hover:bg-destructive/10 hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
+            </div>
 
-              {filteredReferrals.length === 0 && (
-                <tr>
-                  <td colSpan={13} className="px-6 py-20 text-center">
-                    <div className="flex flex-col items-center gap-4">
-                      <Users className="h-16 w-16 text-muted-foreground/50" />
-                      <div>
-                        <p className="text-lg font-semibold text-foreground mb-1">
-                          No Referrals Yet
-                        </p>
-                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                          No referral rows are reaching this component right now. If your DB already has data,
-                          the parent query or RLS policy is likely returning an empty array.
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredReferrals.length > 0 && (
-          <div className="px-6 py-4 text-center text-xs text-muted-foreground bg-background/60 border-0">
-            <span className="font-mono tabular-nums">
+            <div className="pt-5 text-center text-xs text-muted-foreground">
               Showing {filteredReferrals.length} of {displayReferrals.length} referral records
-            </span>
-          </div>
+            </div>
+          </>
         )}
       </div>
+
+      <Dialog
+        open={!!selectedReferral}
+        onOpenChange={(open) => {
+          if (!open) setSelectedReferral(null);
+        }}
+      >
+        <DialogContent className="rounded-3xl max-w-6xl border-0 bg-card/95 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle>
+              Referral Details — {selectedReferral?.name || selectedReferral?.code || "Referral"}
+            </DialogTitle>
+            <DialogDescription>
+              Users, paid users, revenue, earnings, payout status, and all emails with amounts.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedReferral && (
+            <ReferralDetailsContent
+              referral={selectedReferral}
+              analytics={getReferralAnalytics(selectedReferral)}
+              onMarkAsPaid={() => handleMarkAsPaid(selectedReferral)}
+              canMarkPaid={!!markReferralPaid || !!updateReferral}
+              markLoading={markReferralPaid?.isPending || updateReferral?.isPending}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!showEmailModal}
+        onOpenChange={(open) => {
+          if (!open) setShowEmailModal(null);
+        }}
+      >
+        <DialogContent className="rounded-3xl max-w-2xl border-0 bg-card/95 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle>Send Welcome Email</DialogTitle>
+            <DialogDescription>
+              Pre-filled email template for the referral partner.
+            </DialogDescription>
+          </DialogHeader>
+
+          {showEmailModal && (
+            <div className="space-y-3">
+              <div className="rounded-2xl bg-muted/20 p-4 font-mono text-sm">
+                <pre className="whitespace-pre-wrap">
+                  {emailTemplate(
+                    displayReferrals.find((item) => item.id === showEmailModal) as ReferralRow
+                  )}
+                </pre>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const ref = displayReferrals.find((item) => item.id === showEmailModal);
+                    if (ref) {
+                      navigator.clipboard.writeText(emailTemplate(ref));
+                    }
+                    setShowEmailModal(null);
+                  }}
+                  className="flex-1 rounded-2xl border-0"
+                >
+                  Copy Email
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEmailModal(null)}
+                  className="flex-1 rounded-2xl border-0"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

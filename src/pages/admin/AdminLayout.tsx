@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 import { useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -103,6 +104,7 @@ export default function AdminLayout({ handleAdminLogout }: Props) {
                   setRefCode={setRefCode}
                   refCommission={refCommission}
                   setRefCommission={setRefCommission}
+                  
                 />
               )}
 
