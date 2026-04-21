@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import Chart from "chart.js/auto";
 import {
   Tabs,
   TabsContent,
@@ -372,13 +373,77 @@ if (cleanReferralCode) {
       toast.error(err.message || "Failed to save timezone.");
     }
   };
+  
+
+  
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
   };
+  const generatePnLChart = (trades: any[]) => {
+  return new Promise<string>((resolve) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 600;
+    canvas.height = 300;
+
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) return resolve("");
+
+    // SORT BY DATE
+    const sorted = [...trades].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() -
+        new Date(b.created_at).getTime()
+    );
+
+    // CUMULATIVE PNL
+    let cumulative = 0;
+    const labels: string[] = [];
+    const data: number[] = [];
+
+    sorted.forEach((t) => {
+      cumulative += Number(t.pnl_amount || 0);
+      labels.push(new Date(t.created_at).toLocaleDateString());
+      data.push(cumulative);
+    });
+
+    new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "PnL",
+            data,
+            borderWidth: 2,
+            tension: 0.3,
+          },
+        ],
+      },
+      options: {
+        responsive: false,
+        plugins: { legend: { display: false } },
+      },
+    });
+
+    setTimeout(() => {
+      resolve(canvas.toDataURL("image/png"));
+    }, 500);
+  });
+};
 
   const exportUserData = async (format: "pdf" | "excel") => {
+    // 🔥 CAPTURE CHART FROM SCREEN
+const chartElement = document.getElementById("report-chart");
+
+let chartImage = null;
+
+if (chartElement) {
+  const canvas = await html2canvas(chartElement);
+  chartImage = canvas.toDataURL("image/png");
+}
     const filteredAccounts =
   selectedAccountId === "all"
     ? accounts
@@ -400,16 +465,76 @@ const filteredTrades =
   selectedAccountId === "all"
     ? latestTrades
     : latestTrades.filter((t: any) => t.account_id === selectedAccountId);
+    const totalPnL = filteredTrades.reduce(
+  (sum, t) => sum + Number(t.pnl_amount || 0),
+  0
+);
+
+const totalTrades = filteredTrades.length;
+
+const wins = filteredTrades.filter(
+  (t) => t.result === "win"
+).length;
+
+const losses = filteredTrades.filter(
+  (t) => t.result === "loss"
+).length;
+
+const winRate = totalTrades
+  ? ((wins / totalTrades) * 100).toFixed(1)
+  : 0;
   if (format === "pdf") {
+    const chartImage = await generatePnLChart(filteredTrades);
     const doc = new jsPDF();
 
-    doc.setFontSize(18);
-    doc.text("JournalXPro Report", 14, 15);
+    // 🔥 HEADER DESIGN
+doc.setFillColor(15, 23, 42); // dark bg
+doc.rect(0, 0, 210, 25, "F");
 
-    doc.setFontSize(10);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
+doc.setTextColor(255, 255, 255);
+doc.setFontSize(16);
+doc.text("JournalXPro Trading Report", 14, 15);
+
+doc.setFontSize(9);
+doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 21);
+
+// reset color
+doc.setTextColor(0, 0, 0);
+
+   
 
     let currentY = 30;
+    // 🔥 ANALYTICS CALCULATION
+const totalTrades = filteredTrades.length;
+const totalPnL = filteredTrades.reduce(
+  (sum, t) => sum + Number(t.pnl_amount || 0),
+  0
+);
+
+const wins = filteredTrades.filter(
+  (t) => Number(t.pnl_amount) > 0
+).length;
+
+const losses = filteredTrades.filter(
+  (t) => Number(t.pnl_amount) < 0
+).length;
+
+const winRate = totalTrades
+  ? ((wins / totalTrades) * 100).toFixed(1)
+  : 0;
+
+// 🔥 ANALYTICS BOX DESIGN
+doc.setFillColor(240, 240, 240);
+doc.roundedRect(14, currentY, 180, 25, 3, 3, "F");
+
+doc.setFontSize(11);
+doc.text(`Total Trades: ${totalTrades}`, 18, currentY + 8);
+doc.text(`Win Rate: ${winRate}%`, 18, currentY + 14);
+
+doc.text(`Total PnL: $${totalPnL.toFixed(2)}`, 110, currentY + 8);
+doc.text(`Wins: ${wins} | Losses: ${losses}`, 110, currentY + 14);
+
+currentY += 35;
 
     // ======================
     // 🔹 ACCOUNTS SUMMARY
