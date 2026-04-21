@@ -135,20 +135,19 @@ const AppSettings = () => {
   });
 
   const { data: trades = [] } = useQuery({
-    queryKey: ["trades", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("trades")
-        .select("*")
-        .eq("firebase_uid", user!.id)
-        .order("created_at", { ascending: false });
+  queryKey: ["trades", user?.id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("trades")
+      .select("*")
+      
+      .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
-  });
-
+    if (error) throw error;
+    return data || [];
+  },
+  enabled: !!user?.id,
+});
   const [fullName, setFullName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -156,6 +155,7 @@ const AppSettings = () => {
   const [deleteAccountId, setDeleteAccountId] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [timezone, setTimezone] = useState("UTC");
+  const [selectedAccountId, setSelectedAccountId] = useState("all");
 
   const [billingName, setBillingName] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
@@ -378,76 +378,176 @@ if (cleanReferralCode) {
     navigate("/");
   };
 
-  const exportUserData = (format: "pdf" | "excel") => {
-    if (format === "pdf") {
-      const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text("My Trading Data", 14, 20);
-      doc.setFontSize(10);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 28);
+  const exportUserData = async (format: "pdf" | "excel") => {
+    const filteredAccounts =
+  selectedAccountId === "all"
+    ? accounts
+    : accounts.filter((a) => a.id === selectedAccountId);
 
-      autoTable(doc, {
-        startY: 36,
-        head: [["Account", "Balance", "P&L"]],
-        body: accounts.map((a: any) => [
-          a.name,
-          `$${Number(a.current_balance).toFixed(2)}`,
-          `$${(Number(a.current_balance) - Number(a.initial_balance)).toFixed(
-            2
-          )}`,
-        ]),
-      });
+// 🔥 ALWAYS FETCH LATEST TRADES FROM DB
+const { data: latestTrades, error } = await supabase
+  .from("trades")
+  .select("*")
+  
 
-      const fy = (doc as any).lastAutoTable?.finalY || 50;
+if (error) {
+  toast.error("Failed to fetch latest trades");
+  return;
+}
 
-      autoTable(doc, {
-        startY: fy + 10,
-        head: [["Date", "Pair", "Result", "P&L"]],
-        body: trades.slice(0, 100).map((t: any) => [
-          new Date(t.created_at).toLocaleDateString(),
-          t.pair || "—",
-          t.result || "—",
-          `$${Number(t.pnl_amount).toFixed(2)}`,
-        ]),
-      });
+// 🔥 FILTER BASED ON ACCOUNT
+const filteredTrades =
+  selectedAccountId === "all"
+    ? latestTrades
+    : latestTrades.filter((t: any) => t.account_id === selectedAccountId);
+  if (format === "pdf") {
+    const doc = new jsPDF();
 
-      doc.save("my-trading-data.pdf");
-      toast.success("PDF exported!");
-    } else {
-      const wb = XLSX.utils.book_new();
+    doc.setFontSize(18);
+    doc.text("JournalXPro Report", 14, 15);
 
-      XLSX.utils.book_append_sheet(
-        wb,
-        XLSX.utils.json_to_sheet(
-          accounts.map((a: any) => ({
-            Account: a.name,
-            Type: a.account_type,
-            Balance: a.current_balance,
-            Initial: a.initial_balance,
-          }))
-        ),
-        "Accounts"
-      );
+    doc.setFontSize(10);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
 
-      XLSX.utils.book_append_sheet(
-        wb,
-        XLSX.utils.json_to_sheet(
-          trades.map((t: any) => ({
-            Date: new Date(t.created_at).toLocaleDateString(),
-            Pair: t.pair,
-            Direction: t.direction,
-            Result: t.result,
-            PnL: t.pnl_amount,
-            Pips: t.pips,
-          }))
-        ),
-        "Trades"
-      );
+    let currentY = 30;
 
-      XLSX.writeFile(wb, "my-trading-data.xlsx");
-      toast.success("Excel exported!");
-    }
+    // ======================
+    // 🔹 ACCOUNTS SUMMARY
+    // ======================
+    doc.setFontSize(14);
+    doc.text("Accounts Summary", 14, currentY);
+    currentY += 6;
+
+    filteredAccounts.forEach((acc: any) => {
+  const pnl =
+    Number(acc.current_balance || 0) -
+    Number(acc.starting_balance || 0);
+
+  doc.setFontSize(10);
+
+  doc.text(`Account: ${acc.name}`, 14, currentY);
+  currentY += 5;
+
+  doc.text(
+    `Initial: $${Number(acc.starting_balance).toFixed(2)} | Current: $${Number(
+      acc.current_balance
+    ).toFixed(2)} | PnL: $${pnl.toFixed(2)}`,
+    14,
+    currentY
+  );
+
+  currentY += 8;
+});
+
+    currentY += 4;
+
+    // ======================
+    // 🔹 TRADES PER ACCOUNT
+    // ======================
+
+    for (const acc of filteredAccounts) {
+  const accTrades = filteredTrades.filter(
+    (t: any) => t.account_id === acc.id
+  );
+
+  if (accTrades.length === 0) continue;
+
+  doc.addPage();
+
+  doc.setFontSize(14);
+  doc.text(`Account: ${acc.name}`, 14, 15);
+
+  const tableData = accTrades.map((t: any) => [
+    new Date(t.created_at).toLocaleDateString(),
+    t.pair || "-",
+    t.direction || "-",
+    t.lot_size || "-",
+    t.entry_price || "-",
+    t.stop_loss || "-",
+    t.take_profit || "-",
+    t.result || "-",
+    t.pnl_amount || "-",
+    t.note || "-",
+    t.entry_time || "-",
+    t.exit_time || "-",
+    t.screenshot_url || "-",
+  ]);
+
+  autoTable(doc, {
+    startY: 22,
+    head: [[
+      "Date",
+      "Pair",
+      "Type",
+      "Lot",
+      "Entry",
+      "SL",
+      "TP",
+      "Result",
+      "PnL",
+      "Note",
+      "Entry Time",
+      "Exit Time",
+      "Screenshot"
+    ]],
+    body: tableData,
+    styles: { fontSize: 7 },
+  });
+}
+
+    doc.save("JournalXPro_Report.pdf");
+    toast.success("Custom PDF exported!");
+  }
+
+  // ======================
+  // 🔹 KEEP YOUR EXCEL SAME
+  // ======================
+  else {
+    const wb = XLSX.utils.book_new();
+
+// ======================
+// 🔹 ACCOUNTS CLEAN DATA
+// ======================
+const accountData = filteredAccounts.map((acc: any) => {
+  const pnl =
+    Number(acc.current_balance || 0) -
+    Number(acc.starting_balance || 0);
+
+  return {
+    "Account Name": acc.name,
+    "Initial Balance": acc.starting_balance,
+    "Current Balance": acc.current_balance,
+    "PnL": pnl,
   };
+});
+
+const accountSheet = XLSX.utils.json_to_sheet(accountData);
+XLSX.utils.book_append_sheet(wb, accountSheet, "Accounts");
+
+// ======================
+// 🔹 TRADES CLEAN DATA
+// ======================
+const tradeData = filteredTrades.map((t: any) => ({
+  "Date": new Date(t.created_at).toLocaleDateString(),
+  "Pair": t.pair || "-",
+  "Type": t.direction || "-",
+  "Lot": t.lot_size || "-",
+  "Entry": t.entry_price || "-",
+  "SL": t.stop_loss || "-",
+  "TP": t.take_profit || "-",
+  "Result": t.result || "-",
+  "PnL": t.pnl_amount || "-",
+  "Note": t.note || "-",
+}));
+
+const tradeSheet = XLSX.utils.json_to_sheet(tradeData);
+XLSX.utils.book_append_sheet(wb, tradeSheet, "Trades");
+
+// ======================
+XLSX.writeFile(wb, "JournalXPro_Report.xlsx");
+toast.success("Clean Excel exported!");
+  }
+};
 
   const planBadge = (plan: string) => {
     if (plan === "elite") {
@@ -871,30 +971,42 @@ if (cleanReferralCode) {
               </Button>
             </div>
 
-            {trades.length > 0 && (
+            
               <div className="rounded-lg border border-border bg-card p-6 space-y-4">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <Download className="h-4 w-4 text-primary" />
-                  Export My Data
-                </h3>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportUserData("pdf")}
-                  >
-                    Export PDF
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportUserData("excel")}
-                  >
-                    Export Excel
-                  </Button>
-                </div>
-              </div>
-            )}
+  <h3 className="font-semibold flex items-center gap-2">
+    <Download className="h-4 w-4 text-primary" />
+    Export My Data
+  </h3>
+
+  {/* 🔽 Account Selector */}
+  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+    <SelectTrigger className="bg-background border-border max-w-sm">
+      <SelectValue placeholder="Select account" />
+    </SelectTrigger>
+
+    <SelectContent>
+      <SelectItem value="all">All Accounts</SelectItem>
+
+      {accounts.map((acc: any)=> (
+        <SelectItem key={acc.id} value={acc.id}>
+          {acc.name}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+
+  {/* 🔽 Buttons */}
+  <div className="flex gap-2">
+    <Button onClick={() => exportUserData("pdf")}>
+      Export PDF
+    </Button>
+
+    <Button onClick={() => exportUserData("excel")}>
+      Export Excel
+    </Button>
+  </div>
+</div>
+            
           </motion.div>
         </TabsContent>
 
