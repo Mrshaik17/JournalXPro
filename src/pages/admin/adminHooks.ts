@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
@@ -51,6 +51,19 @@ type Referral = {
   paid_users?: number;
   total_revenue?: number;
   total_earnings?: number;
+  joined_users_count?: number;
+  paid_users_count?: number;
+  total_paid?: number;
+};
+
+type Announcement = {
+  id: string;
+  title: string;
+  content: string;
+  type: string;
+  link?: string | null;
+  is_active?: boolean | null;
+  created_at: string;
 };
 
 export function useAdminHooks({
@@ -79,7 +92,9 @@ export function useAdminHooks({
   // Announcement form state
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementContent, setAnnouncementContent] = useState("");
-  const [announcementType, setAnnouncementType] = useState("info");
+  const [announcementType, setAnnouncementType] = useState("update");
+  const [announcementLink, setAnnouncementLink] = useState("");
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
 
   // Prop firm form state
   const [propFirmName, setPropFirmName] = useState("");
@@ -88,98 +103,103 @@ export function useAdminHooks({
   const [propFirmCoupon, setPropFirmCoupon] = useState("");
   const [propFirmDiscount, setPropFirmDiscount] = useState("");
 
-  // 🔥 FIXED REFERRALS QUERY - This is the KEY FIX
-  const { data: referrals = [] } = useQuery({
-  queryKey: ["admin-referrals"],
-  queryFn: async () => {
-  // 1. referrals
-  const { data: referralsData, error: refError } = await supabase
-    .from("referrals")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (refError) throw refError;
-
-  // 2. users
-  const { data: usersData, error: userError } = await supabase
-    .from("profiles")
-    .select("id, email, full_name, referred_by");
-
-  if (userError) throw userError;
-
-  // 3. payments (🔥 IMPORTANT)
-  const { data: paymentsData, error: payError } = await supabase
-    .from("payments")
-    .select("*");
-
-  if (payError) throw payError;
-
-  // 4. build final data
-  const finalData = (referralsData || []).map((ref: any) => {
-    const users = (usersData || []).filter(
-  (u: any) => u.referred_by === ref.id
-);
-
-// 🔥 attach payment to each user
-const usersWithPayments = users.map((user: any) => {
-  const userPayments = (paymentsData || []).filter(
-    (p: any) =>
-      p.user_id === user.id &&
-      p.status === "approved"
-  );
-
-  return {
-    ...user,
-    payments: userPayments
+  const invalidateAnnouncementQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-announcements"] });
+    queryClient.invalidateQueries({ queryKey: ["announcements"] });
+    queryClient.invalidateQueries({ queryKey: ["user-announcements"] });
   };
-});
 
-// 🔥 paid users
-const paidUsers = usersWithPayments.filter(
-  (u: any) => u.payments.length > 0
-);
+  const resetAnnouncementForm = () => {
+    setAnnouncementTitle("");
+    setAnnouncementContent("");
+    setAnnouncementType("update");
+    setAnnouncementLink("");
+    setEditingAnnouncement(null);
+  };
 
-return {
-  ...ref,
-  users: usersWithPayments, // ✅ IMPORTANT
-  joined_users_count: users.length,
-  paid_users_count: paidUsers.length,
-  total_revenue: paidUsers.reduce(
-    (sum: number, u: any) =>
-      sum + u.payments.reduce((s: number, p: any) => s + (p.amount || 0), 0),
-    0
-  ),
-  total_paid: 0,
-  paid_amount: 0,
-  remaining_amount: 0,
-};
+  const normalizeLink = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const { data: referrals = [] } = useQuery({
+    queryKey: ["admin-referrals"],
+    queryFn: async () => {
+      const { data: referralsData, error: refError } = await supabase
+        .from("referrals")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (refError) throw refError;
+
+      const { data: usersData, error: userError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name, referred_by");
+
+      if (userError) throw userError;
+
+      const { data: paymentsData, error: payError } = await supabase
+        .from("payments")
+        .select("*");
+
+      if (payError) throw payError;
+
+      const finalData = (referralsData || []).map((ref: any) => {
+        const users = (usersData || []).filter((u: any) => u.referred_by === ref.id);
+
+        const usersWithPayments = users.map((user: any) => {
+          const userPayments = (paymentsData || []).filter(
+            (p: any) => p.user_id === user.id && p.status === "approved"
+          );
+
+          return {
+            ...user,
+            payments: userPayments,
+          };
+        });
+
+        const paidUsers = usersWithPayments.filter((u: any) => u.payments.length > 0);
+
+        return {
+          ...ref,
+          users: usersWithPayments,
+          joined_users_count: users.length,
+          paid_users_count: paidUsers.length,
+          total_revenue: paidUsers.reduce(
+            (sum: number, u: any) =>
+              sum + u.payments.reduce((s: number, p: any) => s + (p.amount || 0), 0),
+            0
+          ),
+          total_paid: 0,
+          paid_amount: ref.paid_amount || 0,
+          remaining_amount: ref.remaining_amount || 0,
+        };
+      });
+
+      return finalData;
+    },
   });
 
-  return finalData;
-},
-});
+  useEffect(() => {
+    if (!referrals || referrals.length === 0) return;
 
-// ===== SYNC REFERRALS TO DB =====
-// ===== SYNC REFERRALS TO DB =====
-useEffect(() => {
-  if (!referrals || referrals.length === 0) return;
+    const syncReferrals = async () => {
+      for (const ref of referrals) {
+        await supabase
+          .from("referrals")
+          .update({
+            total_users: ref.users?.length || 0,
+            paid_users: ref.paid_users_count || 0,
+          })
+          .eq("id", ref.id);
+      }
+    };
 
-  const syncReferrals = async () => {
-    for (const ref of referrals) {
-      await supabase
-        .from("referrals")
-        .update({
-          total_users: ref.users?.length || 0,
-          paid_users: ref.paid_users_count || 0,
-        })
-        .eq("id", ref.id);
-    }
-  };
+    syncReferrals();
+  }, [referrals]);
 
-  syncReferrals();
-}, [referrals]);
-
-  // Other queries (unchanged)
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["admin-profiles"],
     queryFn: async () => {
@@ -246,15 +266,20 @@ useEffect(() => {
     },
   });
 
-  const { data: announcements = [] } = useQuery({
+  const { data: announcements = [] } = useQuery<Announcement[]>({
     queryKey: ["admin-announcements"],
     queryFn: async () => {
       const { data = [], error } = await supabase
         .from("announcements")
         .select("*")
         .order("created_at", { ascending: false });
+
       if (error) throw error;
-      return data;
+
+      return data.map((item: any) => ({
+        ...item,
+        is_active: item.is_active ?? true,
+      }));
     },
   });
 
@@ -282,7 +307,6 @@ useEffect(() => {
     },
   });
 
-  // Mutations
   const updateReferral = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       const { error } = await supabase
@@ -299,7 +323,11 @@ useEffect(() => {
   });
 
   const markReferralPaid = useMutation({
-    mutationFn: async ({ id, paid_amount, remaining_amount }: {
+    mutationFn: async ({
+      id,
+      paid_amount,
+      remaining_amount,
+    }: {
       id: string;
       paid_amount: number;
       remaining_amount: number;
@@ -322,6 +350,7 @@ useEffect(() => {
       if (!refName || !refCode) {
         throw new Error("Name and code are required.");
       }
+
       const { error } = await supabase.from("referrals").insert({
         name: refName,
         email: refEmail || null,
@@ -331,6 +360,7 @@ useEffect(() => {
         paid_amount: 0,
         remaining_amount: 0,
       });
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -356,10 +386,10 @@ useEffect(() => {
     onError: (err: any) => toast.error(err.message),
   });
 
-  // Other mutations (same as before)
   const upsertSetting = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: any }) => {
       const existing = siteSettings.find((s: any) => s.key === key);
+
       if (existing) {
         const { error } = await supabase
           .from("site_settings")
@@ -379,7 +409,12 @@ useEffect(() => {
   });
 
   const updatePaymentStatus = useMutation({
-    mutationFn: async ({ id, status, userId, plan }: {
+    mutationFn: async ({
+      id,
+      status,
+      userId,
+      plan,
+    }: {
       id: string;
       status: string;
       userId: string;
@@ -394,10 +429,12 @@ useEffect(() => {
           .select("*")
           .eq("id", id)
           .single();
+
         if (paymentError) throw paymentError;
 
         const now = new Date();
         const expiry = new Date();
+
         if (payment?.billing_cycle === "monthly") {
           expiry.setMonth(now.getMonth() + 1);
         } else if (payment?.billing_cycle === "3months") {
@@ -414,6 +451,7 @@ useEffect(() => {
           .from("profiles")
           .update({ plan, plan_expiry: expiry.toISOString() })
           .eq("id", userId);
+
         if (profileError) throw profileError;
       }
     },
@@ -443,6 +481,152 @@ useEffect(() => {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const createAnnouncement = useMutation({
+    mutationFn: async () => {
+      if (!announcementTitle.trim() || !announcementContent.trim()) {
+        throw new Error("Title and content are required.");
+      }
+
+      const finalLink = normalizeLink(announcementLink);
+      if (finalLink) {
+        new URL(finalLink);
+      }
+
+      const { error } = await supabase.from("announcements").insert({
+        title: announcementTitle.trim(),
+        content: announcementContent.trim(),
+        type: announcementType,
+        link: finalLink,
+        is_active: true,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateAnnouncementQueries();
+      toast.success("Announcement published.");
+      resetAnnouncementForm();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const updateAnnouncement = useMutation({
+    mutationFn: async ({
+      id,
+      title,
+      content,
+      type,
+      link,
+      is_active,
+    }: {
+      id: string;
+      title: string;
+      content: string;
+      type: string;
+      link?: string | null;
+      is_active?: boolean;
+    }) => {
+      const finalLink = normalizeLink(link || "");
+      if (finalLink) {
+        new URL(finalLink);
+      }
+
+      const { error } = await supabase
+        .from("announcements")
+        .update({
+          title: title.trim(),
+          content: content.trim(),
+          type,
+          link: finalLink,
+          ...(typeof is_active === "boolean" ? { is_active } : {}),
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateAnnouncementQueries();
+      toast.success("Announcement updated.");
+      resetAnnouncementForm();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const toggleAnnouncementStatus = useMutation({
+    mutationFn: async ({
+      id,
+      is_active,
+    }: {
+      id: string;
+      is_active: boolean;
+    }) => {
+      const { data, error } = await supabase
+        .from("announcements")
+        .update({ is_active })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_data, variables) => {
+      invalidateAnnouncementQueries();
+
+      queryClient.setQueryData(["admin-announcements"], (oldData: any[] = []) =>
+        oldData.map((item: any) =>
+          item.id === variables.id ? { ...item, is_active: variables.is_active } : item
+        )
+      );
+
+      queryClient.setQueryData(["announcements"], (oldData: any[] = []) =>
+        oldData
+          .map((item: any) =>
+            item.id === variables.id ? { ...item, is_active: variables.is_active } : item
+          )
+          .filter((item: any) => item.is_active !== false)
+      );
+
+      queryClient.setQueryData(["user-announcements"], (oldData: any[] = []) =>
+        oldData
+          .map((item: any) =>
+            item.id === variables.id ? { ...item, is_active: variables.is_active } : item
+          )
+          .filter((item: any) => item.is_active !== false)
+      );
+
+      toast.success(
+        variables.is_active ? "Announcement enabled." : "Announcement disabled."
+      );
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteAnnouncement = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("announcements").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateAnnouncementQueries();
+      toast.success("Announcement deleted.");
+      resetAnnouncementForm();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const startEditAnnouncement = (item: Announcement) => {
+    setEditingAnnouncement(item);
+    setAnnouncementTitle(item.title || "");
+    setAnnouncementContent(item.content || "");
+    setAnnouncementType(item.type || "update");
+    setAnnouncementLink(item.link || "");
+  };
+
+  const cancelEditAnnouncement = () => {
+    resetAnnouncementForm();
+  };
+
   // Realtime subscriptions
   useEffect(() => {
     const channel = supabase
@@ -452,21 +636,35 @@ useEffect(() => {
         setPendingNotif((n) => n + 1);
         toast.info("💰 New payment received!");
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" }, (payload: any) => {
-        if (payload.new?.sender === "user") {
-          queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
-          setChatNotif((n) => n + 1);
-          toast.info("💬 New chat message!");
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "support_messages" },
+        (payload: any) => {
+          if (payload.new?.sender === "user") {
+            queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
+            setChatNotif((n) => n + 1);
+            toast.info("💬 New chat message!");
+          }
         }
-      })
+      )
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, () => {
         queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
-        queryClient.invalidateQueries({ queryKey: ["admin-referrals"] }); // 🔥 Also refresh referrals
+        queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
         toast.info("👤 New user signed up!");
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "referrals" }, () => {
         queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
         toast.info("🔗 New referral created!");
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements" }, () => {
+        invalidateAnnouncementQueries();
+        toast.info("📢 New announcement published!");
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "announcements" }, () => {
+        invalidateAnnouncementQueries();
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "announcements" }, () => {
+        invalidateAnnouncementQueries();
       })
       .subscribe();
 
@@ -475,7 +673,7 @@ useEffect(() => {
     };
   }, [queryClient, setPendingNotif, setChatNotif]);
 
-  // Chat effect (unchanged)
+  // Chat effect
   useEffect(() => {
     if (!selectedChatUser) return;
 
@@ -485,6 +683,7 @@ useEffect(() => {
         .select("*")
         .eq("user_id", selectedChatUser)
         .order("created_at", { ascending: true });
+
       if (!error) {
         setChatMessages(data || []);
         setTimeout(() => {
@@ -521,21 +720,25 @@ useEffect(() => {
 
   const sendAdminReply = async () => {
     if (!chatReply.trim() || !selectedChatUser) return;
+
     const { error } = await supabase.from("support_messages").insert({
       user_id: selectedChatUser,
       sender: "admin",
       message: chatReply.trim(),
     });
+
     if (error) {
       toast.error(error.message);
       return;
     }
+
     setChatReply("");
   };
 
   const exportData = (format: "pdf" | "excel", range: string) => {
     const now = new Date();
     let since = new Date(0);
+
     if (range === "week") since = new Date(now.getTime() - 7 * 86400000);
     if (range === "month") since = new Date(now.getTime() - 30 * 86400000);
     if (range === "3month") since = new Date(now.getTime() - 90 * 86400000);
@@ -566,6 +769,7 @@ useEffect(() => {
       });
 
       const finalY = (doc as any).lastAutoTable?.finalY || 50;
+
       autoTable(doc, {
         startY: finalY + 10,
         head: [["Amount", "Method", "Status", "Date"]],
@@ -601,10 +805,10 @@ useEffect(() => {
       XLSX.utils.book_append_sheet(workbook, paymentsSheet, "Payments");
       XLSX.writeFile(workbook, `admin-report-${range}.xlsx`);
     }
+
     toast.success(`${format.toUpperCase()} downloaded.`);
   };
 
-  // Stats
   const totalUsers = profiles.length;
   const paidUsers = profiles.filter((p: any) => p.plan !== "free").length;
   const totalRevenue = payments
@@ -629,6 +833,7 @@ useEffect(() => {
     setChatReply,
     chatEndRef,
     sendAdminReply,
+
     refName,
     setRefName,
     refEmail,
@@ -637,6 +842,7 @@ useEffect(() => {
     setRefCode,
     refCommission,
     setRefCommission,
+
     newsTitle,
     setNewsTitle,
     newsContent,
@@ -647,12 +853,20 @@ useEffect(() => {
     setNewsCategory,
     newsAsset,
     setNewsAsset,
+
     announcementTitle,
     setAnnouncementTitle,
     announcementContent,
     setAnnouncementContent,
     announcementType,
     setAnnouncementType,
+    announcementLink,
+    setAnnouncementLink,
+    editingAnnouncement,
+    setEditingAnnouncement,
+    startEditAnnouncement,
+    cancelEditAnnouncement,
+
     propFirmName,
     setPropFirmName,
     propFirmDescription,
@@ -663,9 +877,11 @@ useEffect(() => {
     setPropFirmCoupon,
     propFirmDiscount,
     setPropFirmDiscount,
+
     getSetting,
     upsertSetting,
     updatePaymentStatus,
+
     updateUserPlan: useMutation({
       mutationFn: async ({ userId, plan }: { userId: string; plan: string }) => {
         const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId);
@@ -677,11 +893,13 @@ useEffect(() => {
       },
       onError: (err: any) => toast.error(err.message),
     }),
+
     deleteUserMutation,
     createReferral,
     deleteReferral,
     updateReferral,
     markReferralPaid,
+
     createNews: useMutation({
       mutationFn: async () => {
         if (!newsTitle || !newsContent) throw new Error("Title and content are required.");
@@ -705,25 +923,12 @@ useEffect(() => {
       },
       onError: (err: any) => toast.error(err.message),
     }),
-    createAnnouncement: useMutation({
-      mutationFn: async () => {
-        if (!announcementTitle || !announcementContent) throw new Error("Title and content are required.");
-        const { error } = await supabase.from("announcements").insert({
-          title: announcementTitle,
-          content: announcementContent,
-          type: announcementType,
-        });
-        if (error) throw error;
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["admin-announcements"] });
-        toast.success("Announcement published.");
-        setAnnouncementTitle("");
-        setAnnouncementContent("");
-        setAnnouncementType("info");
-      },
-      onError: (err: any) => toast.error(err.message),
-    }),
+
+    createAnnouncement,
+    updateAnnouncement,
+    toggleAnnouncementStatus,
+    deleteAnnouncement,
+
     createPropFirm: useMutation({
       mutationFn: async () => {
         if (!propFirmName) throw new Error("Prop firm name is required.");
@@ -747,6 +952,7 @@ useEffect(() => {
       },
       onError: (err: any) => toast.error(err.message),
     }),
+
     markContactResolved: useMutation({
       mutationFn: async (id: string) => {
         const { error } = await supabase
@@ -761,6 +967,7 @@ useEffect(() => {
       },
       onError: (err: any) => toast.error(err.message),
     }),
+
     exportData,
     totalUsers,
     paidUsers,

@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Megaphone,
@@ -10,7 +10,9 @@ import {
   Sparkles,
   CalendarDays,
   Inbox,
+  ExternalLink,
 } from "lucide-react";
+import { useEffect } from "react";
 
 const typeIcon: Record<string, any> = {
   update: Bell,
@@ -78,28 +80,50 @@ const formatRelative = (date: string) => {
 };
 
 const Announcements = () => {
+  const queryClient = useQueryClient();
+
   const { data: announcements = [], isLoading } = useQuery({
     queryKey: ["announcements"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("announcements")
         .select("*")
+        .eq("is_active", true)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data;
+      return data || [];
     },
   });
 
+  useEffect(() => {
+    const channel = supabase
+      .channel("announcements-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "announcements" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["announcements"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   const latestAnnouncement = announcements[0];
 
-  const counts = announcements.reduce(
-    (acc: Record<string, number>, item: any) => {
-      acc[item.type] = (acc[item.type] || 0) + 1;
-      return acc;
-    },
-    {}
-  );
+  const counts = announcements.reduce((acc: Record<string, number>, item: any) => {
+    acc[item.type] = (acc[item.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  const openLink = (url?: string | null) => {
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div className="space-y-6">
@@ -108,37 +132,37 @@ const Announcements = () => {
         animate={{ opacity: 1, y: 0 }}
         className="relative overflow-hidden rounded-3xl bg-card/80 p-6 sm:p-7"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-primary/10 via-transparent to-transparent" />
 
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary border border-primary/15">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary">
               <Megaphone className="h-3.5 w-3.5" />
               Team Feed
             </div>
 
-            <h1 className="mt-3 text-2xl font-bold tracking-tight flex items-center gap-2">
+            <h1 className="mt-3 flex items-center gap-2 text-2xl font-bold tracking-tight">
               Announcements
             </h1>
 
-            <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
               Stay updated with product changes, giveaways, winner posts, and important maintenance notices.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <div className="rounded-2xl bg-background/70 px-4 py-3 min-w-[120px]">
+            <div className="min-w-[120px] rounded-2xl bg-background/70 px-4 py-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                 Total Posts
               </div>
               <div className="mt-1 text-lg font-bold">{announcements.length}</div>
             </div>
 
-            <div className="rounded-2xl bg-background/70 px-4 py-3 min-w-[150px]">
+            <div className="min-w-[150px] rounded-2xl bg-background/70 px-4 py-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                 Latest Update
               </div>
-              <div className="mt-1 text-sm font-semibold truncate max-w-[140px]">
+              <div className="mt-1 max-w-[140px] truncate text-sm font-semibold">
                 {latestAnnouncement ? latestAnnouncement.title : "No updates yet"}
               </div>
             </div>
@@ -171,7 +195,7 @@ const Announcements = () => {
       {isLoading ? (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="rounded-2xl bg-card/70 p-5 animate-pulse">
+            <div key={i} className="animate-pulse rounded-2xl bg-card/70 p-5">
               <div className="flex gap-4">
                 <div className="h-11 w-11 rounded-xl bg-muted" />
                 <div className="flex-1 space-y-3">
@@ -196,7 +220,7 @@ const Announcements = () => {
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.04 }}
-                className="group rounded-2xl bg-card/85 p-5 sm:p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
+                className="group rounded-2xl bg-card/85 p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg sm:p-6"
               >
                 <div className="flex items-start gap-4">
                   <div
@@ -206,7 +230,7 @@ const Announcements = () => {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span
                         className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.14em] ${style.badge}`}
                       >
@@ -223,13 +247,34 @@ const Announcements = () => {
                       </span>
                     </div>
 
-                    <h3 className="text-sm sm:text-base font-semibold tracking-tight group-hover:text-primary transition-colors">
-                      {a.title}
-                    </h3>
+                    {a.link ? (
+                      <button
+                        type="button"
+                        onClick={() => openLink(a.link)}
+                        className="text-left text-sm font-semibold tracking-tight transition-colors hover:text-primary sm:text-base"
+                      >
+                        {a.title}
+                      </button>
+                    ) : (
+                      <h3 className="text-sm font-semibold tracking-tight sm:text-base">
+                        {a.title}
+                      </h3>
+                    )}
 
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground whitespace-pre-line">
+                    <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">
                       {a.content}
                     </p>
+
+                    {a.link && (
+                      <button
+                        type="button"
+                        onClick={() => openLink(a.link)}
+                        className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+                      >
+                        Open link
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -246,7 +291,7 @@ const Announcements = () => {
             No announcements yet
           </h3>
 
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
             There are no team updates right now. New announcements, giveaway posts, winners, and maintenance notices will appear here.
           </p>
         </div>
