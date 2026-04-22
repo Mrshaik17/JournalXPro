@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 
 export default function AnnouncementsSection({
-  announcements,
+  announcements = [],
   announcementTitle,
   setAnnouncementTitle,
   announcementContent,
@@ -117,7 +117,7 @@ export default function AnnouncementsSection({
 
   const handleSubmit = () => {
     if (editingAnnouncement?.id) {
-      updateAnnouncement.mutate({
+      updateAnnouncement?.mutate({
         id: editingAnnouncement.id,
         title: announcementTitle,
         content: announcementContent,
@@ -128,12 +128,12 @@ export default function AnnouncementsSection({
       return;
     }
 
-    createAnnouncement.mutate();
+    createAnnouncement?.mutate();
   };
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Total Announcements
@@ -170,7 +170,7 @@ export default function AnnouncementsSection({
       </div>
 
       <div className="rounded-2xl bg-card/75 p-4 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="mb-4 flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Megaphone className="h-4 w-4" />
           </div>
@@ -209,7 +209,7 @@ export default function AnnouncementsSection({
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Select value={announcementType} onValueChange={setAnnouncementType}>
-              <SelectTrigger className="h-11 w-full sm:w-52 rounded-xl border-0 bg-background/70 shadow-none">
+              <SelectTrigger className="h-11 w-full rounded-xl border-0 bg-background/70 shadow-none sm:w-52">
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
@@ -238,7 +238,7 @@ export default function AnnouncementsSection({
               <Button
                 onClick={handleSubmit}
                 className="h-11 rounded-xl px-5"
-                disabled={createAnnouncement.isPending || updateAnnouncement.isPending}
+                disabled={!!createAnnouncement?.isPending || !!updateAnnouncement?.isPending}
               >
                 {editingAnnouncement ? "Update Announcement" : "Publish Announcement"}
               </Button>
@@ -257,7 +257,7 @@ export default function AnnouncementsSection({
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative w-full sm:w-[320px]">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -269,7 +269,7 @@ export default function AnnouncementsSection({
               </div>
 
               <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="h-10 w-full sm:w-44 rounded-xl border-0 bg-background/70 shadow-none">
+                <SelectTrigger className="h-10 w-full rounded-xl border-0 bg-background/70 shadow-none sm:w-44">
                   <SelectValue placeholder="Filter type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -301,7 +301,7 @@ export default function AnnouncementsSection({
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1 space-y-3">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-wrap items-center gap-2">
                       <div className="flex items-center gap-2">
                         {ui.icon}
                         <h4 className="text-sm font-semibold text-foreground">
@@ -342,7 +342,7 @@ export default function AnnouncementsSection({
                       </a>
                     )}
 
-                    <p className="text-xs text-muted-foreground font-mono">
+                    <p className="font-mono text-xs text-muted-foreground">
                       {new Date(item.created_at).toLocaleString("en-IN")}
                     </p>
                   </div>
@@ -352,13 +352,13 @@ export default function AnnouncementsSection({
                       type="button"
                       variant="outline"
                       onClick={() =>
-                        toggleAnnouncementStatus.mutate({
+                        toggleAnnouncementStatus?.mutate({
                           id: item.id,
                           is_active: !isActive,
                         })
                       }
                       className="h-9 rounded-xl px-3"
-                      disabled={toggleAnnouncementStatus.isPending}
+                      disabled={!!toggleAnnouncementStatus?.isPending}
                     >
                       {isActive ? (
                         <>
@@ -374,14 +374,14 @@ export default function AnnouncementsSection({
                     </Button>
 
                     <button
-                      onClick={() => startEditAnnouncement(item)}
+                      onClick={() => startEditAnnouncement?.(item)}
                       className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
 
                     <button
-                      onClick={() => deleteAnnouncement.mutate(item.id)}
+                      onClick={() => deleteAnnouncement?.mutate(item.id)}
                       className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />

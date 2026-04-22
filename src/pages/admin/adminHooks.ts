@@ -62,7 +62,21 @@ type Announcement = {
   content: string;
   type: string;
   link?: string | null;
-  is_active?: boolean | null;
+  is_active?: boolean;
+  created_at: string;
+};
+
+type PropFirm = {
+  id: string;
+  name: string;
+  description?: string | null;
+  affiliate_link?: string | null;
+  website_url?: string | null;
+  coupon_code?: string | null;
+  discount?: number | null;
+  tags?: string[] | null;
+  is_active?: boolean;
+  is_featured?: boolean;
   created_at: string;
 };
 
@@ -76,52 +90,64 @@ export function useAdminHooks({
   const [chatReply, setChatReply] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Referral form state
   const [refName, setRefName] = useState("");
   const [refEmail, setRefEmail] = useState("");
   const [refCode, setRefCode] = useState("");
   const [refCommission, setRefCommission] = useState("");
 
-  // News form state
   const [newsTitle, setNewsTitle] = useState("");
   const [newsContent, setNewsContent] = useState("");
   const [newsSource, setNewsSource] = useState("");
   const [newsCategory, setNewsCategory] = useState("forex");
   const [newsAsset, setNewsAsset] = useState("");
 
-  // Announcement form state
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementContent, setAnnouncementContent] = useState("");
   const [announcementType, setAnnouncementType] = useState("update");
   const [announcementLink, setAnnouncementLink] = useState("");
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
 
-  // Prop firm form state
   const [propFirmName, setPropFirmName] = useState("");
   const [propFirmDescription, setPropFirmDescription] = useState("");
   const [propFirmLink, setPropFirmLink] = useState("");
   const [propFirmCoupon, setPropFirmCoupon] = useState("");
   const [propFirmDiscount, setPropFirmDiscount] = useState("");
+  const [propFirmWebsiteUrl, setPropFirmWebsiteUrl] = useState("");
+  const [propFirmIsActive, setPropFirmIsActive] = useState(true);
+  const [propFirmIsFeatured, setPropFirmIsFeatured] = useState(false);
+  const [propFirmTags, setPropFirmTags] = useState("");
+  const [editingPropFirm, setEditingPropFirm] = useState<PropFirm | null>(null);
 
   const invalidateAnnouncementQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-announcements"] });
     queryClient.invalidateQueries({ queryKey: ["announcements"] });
-    queryClient.invalidateQueries({ queryKey: ["user-announcements"] });
   };
 
-  const resetAnnouncementForm = () => {
-    setAnnouncementTitle("");
-    setAnnouncementContent("");
-    setAnnouncementType("update");
-    setAnnouncementLink("");
-    setEditingAnnouncement(null);
+  const invalidatePropFirmQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] });
+    queryClient.invalidateQueries({ queryKey: ["prop-firms"] });
+    queryClient.invalidateQueries({ queryKey: ["propFirms"] });
+    queryClient.invalidateQueries({ queryKey: ["user-propfirms"] });
   };
 
-  const normalizeLink = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/^https?:\/\//i.test(trimmed)) return trimmed;
-    return `https://${trimmed}`;
+  const resetPropFirmForm = () => {
+    setPropFirmName("");
+    setPropFirmDescription("");
+    setPropFirmLink("");
+    setPropFirmCoupon("");
+    setPropFirmDiscount("");
+    setPropFirmWebsiteUrl("");
+    setPropFirmIsActive(true);
+    setPropFirmIsFeatured(false);
+    setPropFirmTags("");
+    setEditingPropFirm(null);
+  };
+
+  const normalizeTags = (value: string) => {
+    return value
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
   };
 
   const { data: referrals = [] } = useQuery({
@@ -254,7 +280,7 @@ export function useAdminHooks({
     },
   });
 
-  const { data: propFirms = [] } = useQuery({
+  const { data: propFirms = [] } = useQuery<PropFirm[]>({
     queryKey: ["admin-propfirms"],
     queryFn: async () => {
       const { data = [], error } = await supabase
@@ -275,11 +301,7 @@ export function useAdminHooks({
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-
-      return data.map((item: any) => ({
-        ...item,
-        is_active: item.is_active ?? true,
-      }));
+      return data;
     },
   });
 
@@ -347,9 +369,7 @@ export function useAdminHooks({
 
   const createReferral = useMutation({
     mutationFn: async () => {
-      if (!refName || !refCode) {
-        throw new Error("Name and code are required.");
-      }
+      if (!refName || !refCode) throw new Error("Name and code are required.");
 
       const { error } = await supabase.from("referrals").insert({
         name: refName,
@@ -435,17 +455,11 @@ export function useAdminHooks({
         const now = new Date();
         const expiry = new Date();
 
-        if (payment?.billing_cycle === "monthly") {
-          expiry.setMonth(now.getMonth() + 1);
-        } else if (payment?.billing_cycle === "3months") {
-          expiry.setMonth(now.getMonth() + 3);
-        } else if (payment?.billing_cycle === "6months") {
-          expiry.setMonth(now.getMonth() + 6);
-        } else if (payment?.billing_cycle === "yearly") {
-          expiry.setFullYear(now.getFullYear() + 1);
-        } else {
-          expiry.setMonth(now.getMonth() + 1);
-        }
+        if (payment?.billing_cycle === "monthly") expiry.setMonth(now.getMonth() + 1);
+        else if (payment?.billing_cycle === "3months") expiry.setMonth(now.getMonth() + 3);
+        else if (payment?.billing_cycle === "6months") expiry.setMonth(now.getMonth() + 6);
+        else if (payment?.billing_cycle === "yearly") expiry.setFullYear(now.getFullYear() + 1);
+        else expiry.setMonth(now.getMonth() + 1);
 
         const { error: profileError } = await supabase
           .from("profiles")
@@ -487,16 +501,11 @@ export function useAdminHooks({
         throw new Error("Title and content are required.");
       }
 
-      const finalLink = normalizeLink(announcementLink);
-      if (finalLink) {
-        new URL(finalLink);
-      }
-
       const { error } = await supabase.from("announcements").insert({
         title: announcementTitle.trim(),
         content: announcementContent.trim(),
         type: announcementType,
-        link: finalLink,
+        link: announcementLink.trim() || null,
         is_active: true,
       });
 
@@ -505,7 +514,11 @@ export function useAdminHooks({
     onSuccess: () => {
       invalidateAnnouncementQueries();
       toast.success("Announcement published.");
-      resetAnnouncementForm();
+      setAnnouncementTitle("");
+      setAnnouncementContent("");
+      setAnnouncementType("update");
+      setAnnouncementLink("");
+      setEditingAnnouncement(null);
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -523,21 +536,16 @@ export function useAdminHooks({
       title: string;
       content: string;
       type: string;
-      link?: string | null;
+      link?: string;
       is_active?: boolean;
     }) => {
-      const finalLink = normalizeLink(link || "");
-      if (finalLink) {
-        new URL(finalLink);
-      }
-
       const { error } = await supabase
         .from("announcements")
         .update({
           title: title.trim(),
           content: content.trim(),
           type,
-          link: finalLink,
+          link: link?.trim() || null,
           ...(typeof is_active === "boolean" ? { is_active } : {}),
         })
         .eq("id", id);
@@ -547,57 +555,27 @@ export function useAdminHooks({
     onSuccess: () => {
       invalidateAnnouncementQueries();
       toast.success("Announcement updated.");
-      resetAnnouncementForm();
+      setAnnouncementTitle("");
+      setAnnouncementContent("");
+      setAnnouncementType("update");
+      setAnnouncementLink("");
+      setEditingAnnouncement(null);
     },
     onError: (err: any) => toast.error(err.message),
   });
 
   const toggleAnnouncementStatus = useMutation({
-    mutationFn: async ({
-      id,
-      is_active,
-    }: {
-      id: string;
-      is_active: boolean;
-    }) => {
-      const { data, error } = await supabase
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase
         .from("announcements")
         .update({ is_active })
-        .eq("id", id)
-        .select()
-        .single();
+        .eq("id", id);
 
       if (error) throw error;
-      return data;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       invalidateAnnouncementQueries();
-
-      queryClient.setQueryData(["admin-announcements"], (oldData: any[] = []) =>
-        oldData.map((item: any) =>
-          item.id === variables.id ? { ...item, is_active: variables.is_active } : item
-        )
-      );
-
-      queryClient.setQueryData(["announcements"], (oldData: any[] = []) =>
-        oldData
-          .map((item: any) =>
-            item.id === variables.id ? { ...item, is_active: variables.is_active } : item
-          )
-          .filter((item: any) => item.is_active !== false)
-      );
-
-      queryClient.setQueryData(["user-announcements"], (oldData: any[] = []) =>
-        oldData
-          .map((item: any) =>
-            item.id === variables.id ? { ...item, is_active: variables.is_active } : item
-          )
-          .filter((item: any) => item.is_active !== false)
-      );
-
-      toast.success(
-        variables.is_active ? "Announcement enabled." : "Announcement disabled."
-      );
+      toast.success("Announcement status updated.");
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -610,7 +588,11 @@ export function useAdminHooks({
     onSuccess: () => {
       invalidateAnnouncementQueries();
       toast.success("Announcement deleted.");
-      resetAnnouncementForm();
+      setEditingAnnouncement(null);
+      setAnnouncementTitle("");
+      setAnnouncementContent("");
+      setAnnouncementType("update");
+      setAnnouncementLink("");
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -624,10 +606,114 @@ export function useAdminHooks({
   };
 
   const cancelEditAnnouncement = () => {
-    resetAnnouncementForm();
+    setEditingAnnouncement(null);
+    setAnnouncementTitle("");
+    setAnnouncementContent("");
+    setAnnouncementType("update");
+    setAnnouncementLink("");
   };
 
-  // Realtime subscriptions
+  const savePropFirm = useMutation({
+    mutationFn: async () => {
+      if (!propFirmName.trim()) {
+        throw new Error("Prop firm name is required.");
+      }
+
+      const payload = {
+        name: propFirmName.trim(),
+        description: propFirmDescription.trim() || null,
+        affiliate_link: propFirmLink.trim() || null,
+        website_url: propFirmWebsiteUrl.trim() || null,
+        coupon_code: propFirmCoupon.trim() || null,
+        discount: propFirmDiscount !== "" ? Number(propFirmDiscount) : null,
+        tags: normalizeTags(propFirmTags),
+        is_active: propFirmIsActive,
+        is_featured: propFirmIsFeatured,
+      };
+
+      if (editingPropFirm?.id) {
+        const { error } = await supabase
+          .from("prop_firms")
+          .update(payload)
+          .eq("id", editingPropFirm.id);
+
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await supabase.from("prop_firms").insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidatePropFirmQueries();
+      toast.success(editingPropFirm ? "Prop firm updated." : "Prop firm added.");
+      resetPropFirmForm();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deletePropFirm = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("prop_firms").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidatePropFirmQueries();
+      toast.success("Prop firm deleted.");
+      resetPropFirmForm();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const togglePropFirmActive = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase
+        .from("prop_firms")
+        .update({ is_active })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidatePropFirmQueries();
+      toast.success("Prop firm status updated.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const togglePropFirmFeatured = useMutation({
+    mutationFn: async ({ id, is_featured }: { id: string; is_featured: boolean }) => {
+      const { error } = await supabase
+        .from("prop_firms")
+        .update({ is_featured })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidatePropFirmQueries();
+      toast.success("Prop firm featured status updated.");
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const startEditPropFirm = (firm: PropFirm) => {
+    setEditingPropFirm(firm);
+    setPropFirmName(firm.name || "");
+    setPropFirmDescription(firm.description || "");
+    setPropFirmLink(firm.affiliate_link || "");
+    setPropFirmWebsiteUrl(firm.website_url || "");
+    setPropFirmCoupon(firm.coupon_code || "");
+    setPropFirmDiscount(
+      firm.discount !== null && firm.discount !== undefined ? String(firm.discount) : ""
+    );
+    setPropFirmIsActive(Boolean(firm.is_active));
+    setPropFirmIsFeatured(Boolean(firm.is_featured));
+    setPropFirmTags(Array.isArray(firm.tags) ? firm.tags.join(", ") : "");
+  };
+
+  const cancelEditPropFirm = () => {
+    resetPropFirmForm();
+  };
+
   useEffect(() => {
     const channel = supabase
       .channel("admin-realtime")
@@ -658,13 +744,21 @@ export function useAdminHooks({
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements" }, () => {
         invalidateAnnouncementQueries();
-        toast.info("📢 New announcement published!");
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "announcements" }, () => {
         invalidateAnnouncementQueries();
       })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "announcements" }, () => {
         invalidateAnnouncementQueries();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "prop_firms" }, () => {
+        invalidatePropFirmQueries();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "prop_firms" }, () => {
+        invalidatePropFirmQueries();
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "prop_firms" }, () => {
+        invalidatePropFirmQueries();
       })
       .subscribe();
 
@@ -673,7 +767,6 @@ export function useAdminHooks({
     };
   }, [queryClient, setPendingNotif, setChatNotif]);
 
-  // Chat effect
   useEffect(() => {
     if (!selectedChatUser) return;
 
@@ -747,6 +840,7 @@ export function useAdminHooks({
     const filteredPayments = payments.filter(
       (p: any) => range === "all" || new Date(p.created_at) >= since
     );
+
     const filteredUsers = profiles.filter(
       (p: any) => range === "all" || new Date(p.created_at) >= since
     );
@@ -780,9 +874,11 @@ export function useAdminHooks({
           new Date(p.created_at).toLocaleDateString(),
         ]),
       });
+
       doc.save(`admin-report-${range}.pdf`);
     } else {
       const workbook = XLSX.utils.book_new();
+
       const usersSheet = XLSX.utils.json_to_sheet(
         filteredUsers.map((u: any) => ({
           Email: u.email,
@@ -792,6 +888,7 @@ export function useAdminHooks({
           Joined: new Date(u.created_at).toLocaleDateString(),
         }))
       );
+
       const paymentsSheet = XLSX.utils.json_to_sheet(
         filteredPayments.map((p: any) => ({
           Amount: p.amount,
@@ -801,6 +898,7 @@ export function useAdminHooks({
           Date: new Date(p.created_at).toLocaleDateString(),
         }))
       );
+
       XLSX.utils.book_append_sheet(workbook, usersSheet, "Users");
       XLSX.utils.book_append_sheet(workbook, paymentsSheet, "Payments");
       XLSX.writeFile(workbook, `admin-report-${range}.xlsx`);
@@ -826,6 +924,7 @@ export function useAdminHooks({
     announcements,
     contactMessages,
     chatUsers,
+
     selectedChatUser,
     setSelectedChatUser,
     chatMessages,
@@ -877,6 +976,18 @@ export function useAdminHooks({
     setPropFirmCoupon,
     propFirmDiscount,
     setPropFirmDiscount,
+    propFirmWebsiteUrl,
+    setPropFirmWebsiteUrl,
+    propFirmIsActive,
+    setPropFirmIsActive,
+    propFirmIsFeatured,
+    setPropFirmIsFeatured,
+    propFirmTags,
+    setPropFirmTags,
+    editingPropFirm,
+    setEditingPropFirm,
+    startEditPropFirm,
+    cancelEditPropFirm,
 
     getSetting,
     upsertSetting,
@@ -903,6 +1014,7 @@ export function useAdminHooks({
     createNews: useMutation({
       mutationFn: async () => {
         if (!newsTitle || !newsContent) throw new Error("Title and content are required.");
+
         const { error } = await supabase.from("news").insert({
           title: newsTitle,
           content: newsContent,
@@ -910,6 +1022,7 @@ export function useAdminHooks({
           category: newsCategory,
           asset_name: newsAsset || null,
         });
+
         if (error) throw error;
       },
       onSuccess: () => {
@@ -929,29 +1042,12 @@ export function useAdminHooks({
     toggleAnnouncementStatus,
     deleteAnnouncement,
 
-    createPropFirm: useMutation({
-      mutationFn: async () => {
-        if (!propFirmName) throw new Error("Prop firm name is required.");
-        const { error } = await supabase.from("prop_firms").insert({
-          name: propFirmName,
-          description: propFirmDescription || null,
-          affiliate_link: propFirmLink || null,
-          coupon_code: propFirmCoupon || null,
-          discount: propFirmDiscount ? Number(propFirmDiscount) : null,
-        });
-        if (error) throw error;
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["admin-propfirms"] });
-        toast.success("Prop firm added.");
-        setPropFirmName("");
-        setPropFirmDescription("");
-        setPropFirmLink("");
-        setPropFirmCoupon("");
-        setPropFirmDiscount("");
-      },
-      onError: (err: any) => toast.error(err.message),
-    }),
+    savePropFirm,
+    deletePropFirm,
+    togglePropFirmActive,
+    togglePropFirmFeatured,
+
+    createAnnouncementFormReset: cancelEditAnnouncement,
 
     markContactResolved: useMutation({
       mutationFn: async (id: string) => {
