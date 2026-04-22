@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -90,13 +90,28 @@ type NewsItem = {
   created_at: string;
 };
 
+type ChatMessage = {
+  id: string;
+  user_id: string;
+  sender: "user" | "admin" | "bot";
+  message: string;
+  created_at: string;
+};
+
+type ChatUser = {
+  id: string;
+  email: string;
+  full_name?: string;
+  latest_message_at?: string;
+};
+
 export function useAdminHooks({
   queryClient,
   setPendingNotif,
   setChatNotif,
 }: UseAdminHooksProps) {
   const [selectedChatUser, setSelectedChatUser] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatReply, setChatReply] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -116,7 +131,8 @@ export function useAdminHooks({
   const [announcementContent, setAnnouncementContent] = useState("");
   const [announcementType, setAnnouncementType] = useState("update");
   const [announcementLink, setAnnouncementLink] = useState("");
-  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
+  const [editingAnnouncement, setEditingAnnouncement] =
+    useState<Announcement | null>(null);
 
   const [propFirmName, setPropFirmName] = useState("");
   const [propFirmDescription, setPropFirmDescription] = useState("");
@@ -165,6 +181,28 @@ export function useAdminHooks({
       .split(",")
       .map((tag) => tag.trim())
       .filter(Boolean);
+  };
+
+  const scrollChatToBottom = () => {
+    setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+  };
+
+  const upsertChatMessage = (message: ChatMessage) => {
+    setChatMessages((prev) => {
+      const exists = prev.some((msg) => msg.id === message.id);
+      if (exists) {
+        return prev.map((msg) => (msg.id === message.id ? message : msg));
+      }
+
+      const next = [...prev, message];
+      next.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      return next;
+    });
   };
 
   const { data: referrals = [] } = useQuery({
@@ -333,21 +371,54 @@ export function useAdminHooks({
     },
   });
 
-  const { data: chatUsers = [] } = useQuery<string[]>({
+  const { data: chatUsers = [] } = useQuery<ChatUser[]>({
     queryKey: ["admin-chat-users"],
     queryFn: async () => {
-      const { data = [], error } = await supabase
+      const { data: messages, error } = await supabase
         .from("support_messages")
-        .select("user_id")
+        .select("user_id, created_at")
         .order("created_at", { ascending: false });
+
       if (error) throw error;
-      return [...new Set(data.map((m: any) => m.user_id))];
+
+      const uniqueUserIds = [
+        ...new Set((messages || []).map((m: any) => m.user_id).filter(Boolean)),
+      ];
+
+      if (uniqueUserIds.length === 0) return [];
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", uniqueUserIds);
+
+      if (profilesError) throw profilesError;
+
+      return uniqueUserIds.map((id) => {
+        const profile = (profilesData || []).find((p: any) => p.id === id);
+        const lastMsg = (messages || []).find((m: any) => m.user_id === id);
+
+        return {
+          id,
+          email: profile?.email || "No email",
+          full_name: profile?.full_name || "",
+          latest_message_at: lastMsg?.created_at || "",
+        };
+      });
     },
   });
 
+  const selectedChatUserDetails = useMemo(
+    () => chatUsers.find((u) => u.id === selectedChatUser) || null,
+    [chatUsers, selectedChatUser]
+  );
+
   const updateReferral = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase.from("referrals").update({ is_active }).eq("id", id);
+      const { error } = await supabase
+        .from("referrals")
+        .update({ is_active })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -469,9 +540,12 @@ export function useAdminHooks({
         const expiry = new Date();
 
         if (payment?.billing_cycle === "monthly") expiry.setMonth(now.getMonth() + 1);
-        else if (payment?.billing_cycle === "3months") expiry.setMonth(now.getMonth() + 3);
-        else if (payment?.billing_cycle === "6months") expiry.setMonth(now.getMonth() + 6);
-        else if (payment?.billing_cycle === "yearly") expiry.setFullYear(now.getFullYear() + 1);
+        else if (payment?.billing_cycle === "3months")
+          expiry.setMonth(now.getMonth() + 3);
+        else if (payment?.billing_cycle === "6months")
+          expiry.setMonth(now.getMonth() + 6);
+        else if (payment?.billing_cycle === "yearly")
+          expiry.setFullYear(now.getFullYear() + 1);
         else expiry.setMonth(now.getMonth() + 1);
 
         const { error: profileError } = await supabase
@@ -510,7 +584,9 @@ export function useAdminHooks({
 
   const createNews = useMutation({
     mutationFn: async () => {
-      if (!newsTitle.trim() || !newsContent.trim()) throw new Error("Title and content are required.");
+      if (!newsTitle.trim() || !newsContent.trim()) {
+        throw new Error("Title and content are required.");
+      }
 
       const { error } = await supabase.from("news").insert({
         title: newsTitle.trim(),
@@ -586,6 +662,11 @@ export function useAdminHooks({
       invalidateNewsQueries();
       toast.success("News deleted.");
       setEditingNews(null);
+      setNewsTitle("");
+      setNewsContent("");
+      setNewsSource("");
+      setNewsCategory("forex");
+      setNewsAsset("");
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -652,15 +733,20 @@ export function useAdminHooks({
       link?: string;
       is_active?: boolean;
     }) => {
+      const payload: any = {
+        title: title.trim(),
+        content: content.trim(),
+        type,
+        link: link?.trim() || null,
+      };
+
+      if (typeof is_active === "boolean") {
+        payload.is_active = is_active;
+      }
+
       const { error } = await supabase
         .from("announcements")
-        .update({
-          title: title.trim(),
-          content: content.trim(),
-          type,
-          link: link?.trim() || null,
-          ...(typeof is_active === "boolean" ? { is_active } : {}),
-        })
+        .update(payload)
         .eq("id", id);
 
       if (error) throw error;
@@ -679,7 +765,10 @@ export function useAdminHooks({
 
   const toggleAnnouncementStatus = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase.from("announcements").update({ is_active }).eq("id", id);
+      const { error } = await supabase
+        .from("announcements")
+        .update({ is_active })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -724,9 +813,7 @@ export function useAdminHooks({
 
   const savePropFirm = useMutation({
     mutationFn: async () => {
-      if (!propFirmName.trim()) {
-        throw new Error("Prop firm name is required.");
-      }
+      if (!propFirmName.trim()) throw new Error("Prop firm name is required.");
 
       const payload = {
         name: propFirmName.trim(),
@@ -741,7 +828,11 @@ export function useAdminHooks({
       };
 
       if (editingPropFirm?.id) {
-        const { error } = await supabase.from("prop_firms").update(payload).eq("id", editingPropFirm.id);
+        const { error } = await supabase
+          .from("prop_firms")
+          .update(payload)
+          .eq("id", editingPropFirm.id);
+
         if (error) throw error;
         return;
       }
@@ -772,7 +863,10 @@ export function useAdminHooks({
 
   const togglePropFirmActive = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase.from("prop_firms").update({ is_active }).eq("id", id);
+      const { error } = await supabase
+        .from("prop_firms")
+        .update({ is_active })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -784,7 +878,10 @@ export function useAdminHooks({
 
   const togglePropFirmFeatured = useMutation({
     mutationFn: async ({ id, is_featured }: { id: string; is_featured: boolean }) => {
-      const { error } = await supabase.from("prop_firms").update({ is_featured }).eq("id", id);
+      const { error } = await supabase
+        .from("prop_firms")
+        .update({ is_featured })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -818,16 +915,17 @@ export function useAdminHooks({
       .channel("admin-realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" }, () => {
         queryClient.invalidateQueries({ queryKey: ["admin-payments"] });
-        setPendingNotif((n) => n + 1);
+        setPendingNotif((n: number) => n + 1);
         toast.info("💰 New payment received!");
       })
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "support_messages" },
+        { event: "*", schema: "public", table: "support_messages" },
         (payload: any) => {
-          if (payload.new?.sender === "user") {
-            queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
-            setChatNotif((n) => n + 1);
+          queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
+
+          if (payload.eventType === "INSERT" && payload.new?.sender === "user") {
+            setChatNotif((n: number) => n + 1);
             toast.info("💬 New chat message!");
           }
         }
@@ -841,15 +939,33 @@ export function useAdminHooks({
         queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
         toast.info("🔗 New referral created!");
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements" }, invalidateAnnouncementQueries)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "announcements" }, invalidateAnnouncementQueries)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "announcements" }, invalidateAnnouncementQueries)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "news" }, invalidateNewsQueries)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "news" }, invalidateNewsQueries)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "news" }, invalidateNewsQueries)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "prop_firms" }, invalidatePropFirmQueries)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "prop_firms" }, invalidatePropFirmQueries)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "prop_firms" }, invalidatePropFirmQueries)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements" }, () => {
+        invalidateAnnouncementQueries();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "announcements" }, () => {
+        invalidateAnnouncementQueries();
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "announcements" }, () => {
+        invalidateAnnouncementQueries();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "news" }, () => {
+        invalidateNewsQueries();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "news" }, () => {
+        invalidateNewsQueries();
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "news" }, () => {
+        invalidateNewsQueries();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "prop_firms" }, () => {
+        invalidatePropFirmQueries();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "prop_firms" }, () => {
+        invalidatePropFirmQueries();
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "prop_firms" }, () => {
+        invalidatePropFirmQueries();
+      })
       .subscribe();
 
     return () => {
@@ -858,7 +974,10 @@ export function useAdminHooks({
   }, [queryClient, setPendingNotif, setChatNotif]);
 
   useEffect(() => {
-    if (!selectedChatUser) return;
+    if (!selectedChatUser) {
+      setChatMessages([]);
+      return;
+    }
 
     const fetchMessages = async () => {
       const { data, error } = await supabase
@@ -868,33 +987,50 @@ export function useAdminHooks({
         .order("created_at", { ascending: true });
 
       if (!error) {
-        setChatMessages(data || []);
-        setTimeout(() => {
-          chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        }, 100);
+        setChatMessages((data || []) as ChatMessage[]);
+        scrollChatToBottom();
       }
     };
 
     fetchMessages();
 
     const channel = supabase
-      .channel(`chat-${selectedChatUser}`)
+      .channel(`chat-live-${selectedChatUser}`)
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "support_messages",
-          filter: `user_id=eq.${selectedChatUser}`,
         },
-        () => fetchMessages()
+        (payload: any) => {
+          const changedUserId = payload.new?.user_id || payload.old?.user_id;
+          if (changedUserId !== selectedChatUser) return;
+
+          if (payload.eventType === "INSERT") {
+            upsertChatMessage(payload.new as ChatMessage);
+            scrollChatToBottom();
+          }
+
+          if (payload.eventType === "UPDATE") {
+            upsertChatMessage(payload.new as ChatMessage);
+          }
+
+          if (payload.eventType === "DELETE") {
+            setChatMessages((prev) =>
+              prev.filter((msg) => msg.id !== payload.old.id)
+            );
+          }
+
+          queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
+        }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedChatUser]);
+  }, [selectedChatUser, queryClient]);
 
   const getSetting = (key: string): any => {
     const s = siteSettings.find((item: any) => item.key === key);
@@ -904,18 +1040,30 @@ export function useAdminHooks({
   const sendAdminReply = async () => {
     if (!chatReply.trim() || !selectedChatUser) return;
 
-    const { error } = await supabase.from("support_messages").insert({
-      user_id: selectedChatUser,
-      sender: "admin",
-      message: chatReply.trim(),
-    });
+    const replyText = chatReply.trim();
+
+    const { data, error } = await supabase
+      .from("support_messages")
+      .insert({
+        user_id: selectedChatUser,
+        sender: "admin",
+        message: replyText,
+      })
+      .select()
+      .single();
 
     if (error) {
       toast.error(error.message);
       return;
     }
 
+    if (data) {
+      upsertChatMessage(data as ChatMessage);
+      scrollChatToBottom();
+    }
+
     setChatReply("");
+    queryClient.invalidateQueries({ queryKey: ["admin-chat-users"] });
   };
 
   const exportData = (format: "pdf" | "excel", range: string) => {
@@ -930,7 +1078,6 @@ export function useAdminHooks({
     const filteredPayments = payments.filter(
       (p: any) => range === "all" || new Date(p.created_at) >= since
     );
-
     const filteredUsers = profiles.filter(
       (p: any) => range === "all" || new Date(p.created_at) >= since
     );
@@ -1013,10 +1160,11 @@ export function useAdminHooks({
     propFirms,
     announcements,
     contactMessages,
-    chatUsers,
 
+    chatUsers,
     selectedChatUser,
     setSelectedChatUser,
+    selectedChatUserDetails,
     chatMessages,
     chatReply,
     setChatReply,
@@ -1089,7 +1237,10 @@ export function useAdminHooks({
 
     updateUserPlan: useMutation({
       mutationFn: async ({ userId, plan }: { userId: string; plan: string }) => {
-        const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId);
+        const { error } = await supabase
+          .from("profiles")
+          .update({ plan })
+          .eq("id", userId);
         if (error) throw error;
       },
       onSuccess: () => {
@@ -1125,6 +1276,7 @@ export function useAdminHooks({
           .from("contact_messages")
           .update({ status: "resolved" })
           .eq("id", id);
+
         if (error) throw error;
       },
       onSuccess: () => {

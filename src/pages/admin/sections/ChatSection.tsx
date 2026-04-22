@@ -1,340 +1,263 @@
-import { useState, useEffect } from "react";
-import {
-  Send,
-  MessageSquare,
-  Search,
-  Trash2,
-  Phone,
-  Video,
-  MessageCircle,
-  User,
-  Check,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { MessageSquare, Search, Send, Mail, UserCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-export default function ChatSection({
+type ChatUser = {
+  id: string;
+  email: string;
+  full_name?: string;
+  latest_message_at?: string;
+};
+
+type ChatMessage = {
+  id: string;
+  sender: "user" | "admin" | "bot";
+  message: string;
+  created_at: string;
+};
+
+type Props = {
+  chatUsers: ChatUser[];
+  selectedChatUser: string | null;
+  setSelectedChatUser: (id: string) => void;
+  selectedChatUserDetails?: ChatUser | null;
+  chatMessages: ChatMessage[];
+  chatReply: string;
+  setChatReply: (value: string) => void;
+  sendAdminReply: () => void;
+  chatEndRef: React.RefObject<HTMLDivElement>;
+};
+
+export default function AdminChatSection({
   chatUsers,
   selectedChatUser,
   setSelectedChatUser,
+  selectedChatUserDetails,
   chatMessages,
   chatReply,
   setChatReply,
   sendAdminReply,
   chatEndRef,
-  deleteChatUser,
-}: any) {
+}: Props) {
   const [search, setSearch] = useState("");
-  const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
 
-  // Get selected user data or null
-  const selectedUserData = chatUsers.find((user: any) => user.id === selectedChatUser);
-  
-  // Filter users for search
-  const filteredUsers = chatUsers.filter((user: any) =>
-    user.id.toLowerCase().includes(search.toLowerCase()) ||
-    (user.name || "").toLowerCase().includes(search.toLowerCase()) ||
-    (user.email || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
 
-  const stats = {
-    total: chatUsers.length,
-    unread: chatUsers.filter((user: any) => user.unreadCount > 0).length || 0,
-    online: chatUsers.filter((user: any) => user.isOnline).length || 0,
-  };
+    return chatUsers.filter((user) => {
+      if (!q) return true;
 
-  const getUserInitials = (name: string) => {
-    if (!name) return "ID";
-    return name
-      .split(" ")
-      .map((n: string) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
+      return (
+        user.full_name?.toLowerCase().includes(q) ||
+        user.email?.toLowerCase().includes(q) ||
+        user.id.toLowerCase().includes(q)
+      );
+    });
+  }, [chatUsers, search]);
 
-  const copyUserId = async (userId: string) => {
-    await navigator.clipboard.writeText(userId);
-    setCopiedUserId(userId);
-    setTimeout(() => setCopiedUserId(null), 2000);
-  };
+  const unreadCount = 0;
+  const activeCount = selectedChatUser ? 1 : 0;
 
   return (
-    <div className="space-y-5 h-full flex flex-col">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-semibold text-foreground">Chat</h2>
+        <p className="text-sm text-muted-foreground">
+          Manage platform conversations and reply to users.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Conversations
           </p>
-          <p className="mt-2 text-xl font-semibold tabular-nums">{stats.total}</p>
+          <p className="mt-2 text-2xl font-semibold tabular-nums">{chatUsers.length}</p>
         </div>
+
         <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Unread
           </p>
-          <p className="mt-2 text-xl font-semibold text-amber-400 tabular-nums">
-            {stats.unread}
+          <p className="mt-2 text-2xl font-semibold tabular-nums text-amber-400">
+            {unreadCount}
           </p>
         </div>
+
         <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Active
           </p>
-          <p className="mt-2 text-xl font-semibold text-emerald-400 tabular-nums">
-            {stats.online}
+          <p className="mt-2 text-2xl font-semibold tabular-nums text-emerald-400">
+            {activeCount}
           </p>
         </div>
       </div>
 
-      {/* Main Chat Layout */}
-      <div className="flex-1 grid lg:grid-cols-[340px_1fr] gap-5 h-[600px]">
-        {/* Left: Users Sidebar */}
-        <div className="space-y-3 flex flex-col h-full">
-          <div className="rounded-2xl bg-card/75 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <MessageSquare className="h-3.5 w-3.5" />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="space-y-3">
+          <div className="rounded-2xl bg-card/70 p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <MessageSquare className="h-4 w-4" />
               </div>
-              <h3 className="text-sm font-semibold">Chat Users ({chatUsers.length})</h3>
+              <div>
+                <h3 className="text-sm font-semibold">Chat Users ({chatUsers.length})</h3>
+              </div>
             </div>
-            
+
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search users by ID, name or email"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-10 rounded-xl border-0 bg-background/70 pl-10 shadow-none focus-visible:ring-1"
+                className="h-11 rounded-xl border-0 bg-background/70 pl-10 shadow-none focus-visible:ring-1"
               />
             </div>
           </div>
 
-          <div className="flex-1 rounded-2xl bg-card/70 shadow-sm overflow-hidden flex flex-col min-h-0">
-            <div className="p-3 border-b border-border/50 bg-card/80">
-              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground font-medium">
+          <div className="rounded-2xl bg-card/70 shadow-sm">
+            <div className="border-b border-border/50 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 Recent Conversations
               </p>
             </div>
-            
-            <div className="flex-1 overflow-y-auto px-2 py-3 space-y-2">
-              {filteredUsers.length === 0 ? (
-                <div className="text-center py-12 text-sm text-muted-foreground">
-                  <User className="mx-auto h-12 w-12 mb-4 text-muted-foreground/50" />
-                  <p className="mb-2">No users found</p>
-                  <p className="text-xs text-muted-foreground/70">Try a different search</p>
-                </div>
-              ) : (
-                filteredUsers.map((user: any) => (
+
+            <div className="space-y-3 p-3">
+              {filteredUsers.map((user) => {
+                const isActive = selectedChatUser === user.id;
+
+                return (
                   <button
                     key={user.id}
+                    type="button"
                     onClick={() => setSelectedChatUser(user.id)}
-                    className={`group w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
-                      selectedChatUser === user.id
-                        ? "bg-primary/10 text-primary border-2 border-primary/20 ring-2 ring-primary/10"
-                        : "hover:bg-background/50 text-foreground"
+                    className={`w-full rounded-2xl border p-4 text-left transition ${
+                      isActive
+                        ? "border-primary bg-primary/10"
+                        : "border-border/40 bg-background/40 hover:bg-background/60"
                     }`}
                   >
-                    <Avatar className="h-11 w-11 flex-shrink-0">
-                      <AvatarFallback className="bg-gradient-to-br from-primary/20 to-secondary/20 text-primary font-semibold text-sm">
-                        {getUserInitials(user.name || user.id)}
-                      </AvatarFallback>
-                    </Avatar>
-                    
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-sm truncate pr-2">
-                            {user.name || user.id}
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold">
+                        {(user.full_name?.[0] || user.email?.[0] || "U").toUpperCase()}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {user.full_name || "User"}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {user.email || user.id}
+                        </p>
+                        {user.latest_message_at && (
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            {new Date(user.latest_message_at).toLocaleString("en-IN")}
                           </p>
-                          {user.email && (
-                            <p className="text-xs text-muted-foreground truncate pr-2">
-                              {user.email}
-                            </p>
-                          )}
-                        </div>
-                        {user.isOnline && (
-                          <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full ring-2 ring-background ml-auto" />
                         )}
                       </div>
-                      
-                      {user.unreadCount > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground truncate max-w-[180px]">
-                            {user.previewMessage || "New messages"}
-                          </span>
-                          <span className="ml-auto bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-medium tabular-nums min-w-[20px] h-5 flex items-center justify-center">
-                            {user.unreadCount}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="text-xs text-muted-foreground tabular-nums ml-auto text-right min-w-[50px]">
-                      {user.lastMessageTime && new Date(user.lastMessageTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </div>
                   </button>
-                ))
+                );
+              })}
+
+              {filteredUsers.length === 0 && (
+                <div className="rounded-2xl bg-background/40 px-4 py-10 text-center text-sm text-muted-foreground">
+                  No chat users found.
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Right: Chat Area */}
-        <div className="space-y-3 flex flex-col h-full">
+        <div className="rounded-2xl bg-card/70 shadow-sm min-h-[560px]">
           {selectedChatUser ? (
-            <>
-              {/* User Header */}
-              <div className="rounded-2xl bg-card/75 p-4 shadow-sm">
+            <div className="flex h-full flex-col">
+              <div className="border-b border-border/50 p-4">
                 <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-gradient-to-br from-primary/20 to-secondary/20 text-primary font-semibold text-lg">
-                      {getUserInitials(selectedUserData?.name || selectedChatUser)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-sm truncate">
-                        {selectedUserData?.name || selectedChatUser}
-                      </h3>
-                      {selectedUserData?.isOnline && (
-                        <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full ring-2 ring-background" />
-                      )}
-                    </div>
-                    {selectedUserData?.email && (
-                      <p className="text-xs text-muted-foreground truncate">{selectedUserData.email}</p>
-                    )}
-                    <button
-                      onClick={() => copyUserId(selectedChatUser)}
-                      className="mt-2 inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium"
-                      title="Copy user ID"
-                    >
-                      <span className="font-mono truncate max-w-[200px]">{selectedChatUser}</span>
-                      {copiedUserId === selectedChatUser ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                      )}
-                    </button>
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <UserCircle2 className="h-5 w-5" />
                   </div>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-xl">
-                      <Phone className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-xl">
-                      <Video className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-9 w-9 p-0 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => {
-                        if (confirm(`Delete chat with ${selectedUserData?.name || selectedChatUser}?`)) {
-                          deleteChatUser(selectedChatUser);
-                          setSelectedChatUser(null);
-                        }
-                      }}
-                      title="Delete chat"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-foreground">
+                      {selectedChatUserDetails?.full_name || "User"}
+                    </h3>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Mail className="h-3.5 w-3.5" />
+                      <span className="truncate">
+                        {selectedChatUserDetails?.email || selectedChatUser}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Messages */}
-              <div className="flex-1 rounded-2xl bg-card/70 shadow-sm overflow-hidden flex flex-col min-h-0">
-                <div className="p-4 border-b border-border/50 bg-card/80 flex items-center gap-2">
-                  <MessageCircle className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground font-medium">
-                    Messages ({chatMessages.length})
-                  </p>
-                </div>
-                
-                <div ref={chatEndRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-background/30">
-                  {chatMessages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground py-12">
-                      <MessageCircle className="h-16 w-16 mb-6 text-muted-foreground/50" />
-                      <p className="mb-2 font-medium">No messages yet</p>
-                      <p className="text-xs text-muted-foreground/70 max-w-sm text-center">
-                        Start the conversation by sending your first reply.
-                      </p>
-                    </div>
-                  ) : (
-                    chatMessages.map((msg: any) => (
+              <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                {chatMessages.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
+                    No messages yet for this user.
+                  </div>
+                ) : (
+                  chatMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex ${
+                        msg.sender === "admin" ? "justify-end" : "justify-start"
+                      }`}
+                    >
                       <div
-                        key={msg.id}
-                        className={`flex ${msg.sender === "admin" ? "justify-end" : "justify-start"}`}
+                        className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
+                          msg.sender === "admin"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background/70 text-foreground border border-border/40"
+                        }`}
                       >
-                        <div
-                          className={`max-w-[70%] p-3 rounded-2xl text-sm whitespace-pre-wrap shadow-sm ${
-                            msg.sender === "admin"
-                              ? "bg-primary text-primary-foreground rounded-br-sm"
-                              : "bg-secondary/80 text-foreground rounded-bl-sm border"
-                          }`}
-                        >
-                          <div className="text-xs opacity-75 mb-1 uppercase font-medium tracking-wide">
-                            {msg.sender === "admin" ? "You" : "User"}
-                          </div>
-                          <div>{msg.message}</div>
-                          <div className="text-xs opacity-75 mt-2 font-mono tabular-nums">
-                            {new Date(msg.created_at).toLocaleString("en-IN", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </div>
-                        </div>
+                        <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+                        <p className="mt-1 text-[10px] opacity-70">
+                          {new Date(msg.created_at).toLocaleString("en-IN")}
+                        </p>
                       </div>
-                    ))
-                  )}
-                </div>
+                    </div>
+                  ))
+                )}
+                <div ref={chatEndRef} />
+              </div>
 
-                {/* Reply Composer */}
-                <div className="p-4 border-t border-border/50 bg-card/80">
-                  <div className="flex items-end gap-2">
-                    <Textarea
-                      value={chatReply}
-                      onChange={(e) => setChatReply(e.target.value)}
-                      placeholder="Type your reply..."
-                      className="flex-1 min-h-[44px] max-h-24 rounded-xl border-0 bg-background/70 focus-visible:ring-1 resize-none"
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          sendAdminReply();
-                        }
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      onClick={sendAdminReply}
-                      disabled={!chatReply.trim()}
-                      className="h-11 w-11 rounded-xl p-0 shrink-0"
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
+              <div className="border-t border-border/50 p-4">
+                <div className="flex gap-2">
+                  <Input
+                    value={chatReply}
+                    onChange={(e) => setChatReply(e.target.value)}
+                    placeholder="Type your reply..."
+                    className="h-11 rounded-xl border-0 bg-background/70 shadow-none focus-visible:ring-1"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendAdminReply();
+                      }
+                    }}
+                  />
+                  <Button onClick={sendAdminReply} className="h-11 rounded-xl px-4">
+                    <Send className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-            </>
+            </div>
           ) : (
-            <div className="flex-1 rounded-2xl bg-card/70 p-12 shadow-sm flex flex-col items-center justify-center text-center">
-              <MessageSquare className="h-16 w-16 text-muted-foreground/50 mb-6" />
-              <h3 className="text-sm font-semibold mb-2 text-muted-foreground">
-                No chat selected
-              </h3>
-              <p className="text-xs text-muted-foreground mb-8 max-w-sm mx-auto">
-                Choose a user from the left sidebar to view their messages and start chatting.
+            <div className="flex h-full min-h-[560px] flex-col items-center justify-center px-6 text-center">
+              <MessageSquare className="mb-4 h-12 w-12 text-muted-foreground/40" />
+              <h3 className="text-lg font-semibold text-foreground">No chat selected</h3>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                Choose a user from the left sidebar to view their messages and start replying.
               </p>
-              <div className="text-xs text-muted-foreground/70 space-y-1">
-                <p>• Click any user to open conversation</p>
-                <p>• Reply instantly with Enter key</p>
-                <p>• Delete chats with trash icon</p>
+
+              <div className="mt-6 space-y-1 text-xs text-muted-foreground">
+                <p>- Click any user to open conversation</p>
+                <p>- Reply instantly with Enter key</p>
+                <p>- User email is shown in the chat header</p>
               </div>
             </div>
           )}
