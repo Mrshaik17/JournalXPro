@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Save,
   DollarSign,
   ToggleRight,
-  Link2,
   Settings,
   Bot,
   BarChart3,
@@ -21,67 +20,124 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
+type PlanKey = "free" | "pro" | "pro_plus" | "elite";
+
+type PlanValue = {
+  price_1m: string;
+  price_3m: string;
+  price_6m: string;
+  price_1y: string;
+  maxAccounts: string;
+  maxTrades: string;
+};
+
+type PlansState = Record<PlanKey, PlanValue>;
+
+type FeaturesState = {
+  ai_enabled: boolean;
+  mt5_enabled: boolean;
+  referral_enabled: boolean;
+  news_enabled: boolean;
+  prop_firms_enabled: boolean;
+  contact_enabled: boolean;
+};
+
+type PlatformState = {
+  support_email: string;
+  telegram_link: string;
+  discord_link: string;
+  youtube_link: string;
+  maintenance_mode: boolean;
+  registration_enabled: boolean;
+};
+
+type SiteSettingRow = {
+  id?: string;
+  key: string;
+  value: any;
+};
+
+type Props = {
+  siteSettings: SiteSettingRow[];
+  upsertSetting: {
+    mutate: (payload: { key: string; value: any }) => void;
+    isPending?: boolean;
+    isLoading?: boolean;
+  };
+};
+
+const defaultPlans: PlansState = {
+  free: {
+    price_1m: "",
+    price_3m: "",
+    price_6m: "",
+    price_1y: "",
+    maxAccounts: "",
+    maxTrades: "",
+  },
+  pro: {
+    price_1m: "",
+    price_3m: "",
+    price_6m: "",
+    price_1y: "",
+    maxAccounts: "",
+    maxTrades: "",
+  },
+  pro_plus: {
+    price_1m: "",
+    price_3m: "",
+    price_6m: "",
+    price_1y: "",
+    maxAccounts: "",
+    maxTrades: "",
+  },
+  elite: {
+    price_1m: "",
+    price_3m: "",
+    price_6m: "",
+    price_1y: "",
+    maxAccounts: "",
+    maxTrades: "",
+  },
+};
+
+const defaultFeatures: FeaturesState = {
+  ai_enabled: false,
+  mt5_enabled: false,
+  referral_enabled: true,
+  news_enabled: true,
+  prop_firms_enabled: true,
+  contact_enabled: true,
+};
+
+const defaultPlatform: PlatformState = {
+  support_email: "",
+  telegram_link: "",
+  discord_link: "",
+  youtube_link: "",
+  maintenance_mode: false,
+  registration_enabled: true,
+};
+
 export default function SettingsSection({
-  getSetting,
+  siteSettings = [],
   upsertSetting,
-}: any) {
-  const [plans, setPlans] = useState({
-    free: {
-      price_1m: "",
-      price_3m: "",
-      price_6m: "",
-      price_1y: "",
-      maxAccounts: "",
-      maxTrades: "",
-    },
-    pro: {
-      price_1m: "",
-      price_3m: "",
-      price_6m: "",
-      price_1y: "",
-      maxAccounts: "",
-      maxTrades: "",
-    },
-    pro_plus: {
-      price_1m: "",
-      price_3m: "",
-      price_6m: "",
-      price_1y: "",
-      maxAccounts: "",
-      maxTrades: "",
-    },
-    elite: {
-      price_1m: "",
-      price_3m: "",
-      price_6m: "",
-      price_1y: "",
-      maxAccounts: "",
-      maxTrades: "",
-    },
-  });
+}: Props) {
+  const [plans, setPlans] = useState<PlansState>(defaultPlans);
+  const [features, setFeatures] = useState<FeaturesState>(defaultFeatures);
+  const [platform, setPlatform] = useState<PlatformState>(defaultPlatform);
 
-  const [features, setFeatures] = useState({
-    ai_enabled: false,
-    mt5_enabled: false,
-    referral_enabled: true,
-    news_enabled: true,
-    prop_firms_enabled: true,
-    contact_enabled: true,
-  });
-
-  const [platform, setPlatform] = useState({
-    support_email: "",
-    telegram_link: "",
-    discord_link: "",
-    youtube_link: "",
-    maintenance_mode: false,
-    registration_enabled: true,
-  });
+  const settingsMap = useMemo(() => {
+    return (siteSettings || []).reduce((acc, item) => {
+      acc[item.key] = item.value;
+      return acc;
+    }, {} as Record<string, any>);
+  }, [siteSettings]);
 
   useEffect(() => {
-    const pricing = getSetting("pricing");
-    const featureFlags = getSetting("feature_flags");
-    const platformSettings = getSetting("platform_settings");
+    const pricing = settingsMap.pricing || {};
+    const featureFlags = settingsMap.feature_flags || {};
+    const platformSettings = settingsMap.platform_settings || {};
 
     setPlans({
       free: {
@@ -135,11 +191,11 @@ export default function SettingsSection({
       maintenance_mode: platformSettings?.maintenance_mode ?? false,
       registration_enabled: platformSettings?.registration_enabled ?? true,
     });
-  }, [getSetting]);
+  }, [settingsMap]);
 
   const handlePlanChange = (
-    planKey: keyof typeof plans,
-    field: keyof (typeof plans)[keyof typeof plans],
+    planKey: PlanKey,
+    field: keyof PlanValue,
     value: string
   ) => {
     setPlans((prev) => ({
@@ -225,7 +281,6 @@ export default function SettingsSection({
 
   return (
     <div className="space-y-6">
-      {/* Pricing */}
       <div className="rounded-2xl bg-card/70 p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
@@ -274,7 +329,7 @@ export default function SettingsSection({
                         value={planValue[period.key]}
                         onChange={(e) =>
                           handlePlanChange(
-                            planKey as keyof typeof plans,
+                            planKey as PlanKey,
                             period.key,
                             e.target.value
                           )
@@ -295,7 +350,7 @@ export default function SettingsSection({
                       value={planValue.maxAccounts}
                       onChange={(e) =>
                         handlePlanChange(
-                          planKey as keyof typeof plans,
+                          planKey as PlanKey,
                           "maxAccounts",
                           e.target.value
                         )
@@ -313,7 +368,7 @@ export default function SettingsSection({
                       value={planValue.maxTrades}
                       onChange={(e) =>
                         handlePlanChange(
-                          planKey as keyof typeof plans,
+                          planKey as PlanKey,
                           "maxTrades",
                           e.target.value
                         )
@@ -328,17 +383,13 @@ export default function SettingsSection({
         </div>
 
         <div className="mt-6">
-          <Button
-            onClick={savePricing}
-            className="h-11 rounded-xl px-6"
-          >
+          <Button onClick={savePricing} className="h-11 rounded-xl px-6">
             <Save className="mr-2 h-4 w-4" />
             Save Pricing
           </Button>
         </div>
       </div>
 
-      {/* Features */}
       <div className="rounded-2xl bg-card/70 p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-500/10">
@@ -395,17 +446,13 @@ export default function SettingsSection({
         </div>
 
         <div className="mt-6">
-          <Button
-            onClick={saveFeatures}
-            className="h-11 rounded-xl px-6"
-          >
+          <Button onClick={saveFeatures} className="h-11 rounded-xl px-6">
             <Save className="mr-2 h-4 w-4" />
             Save Features
           </Button>
         </div>
       </div>
 
-      {/* Platform */}
       <div className="rounded-2xl bg-card/70 p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10">
@@ -552,10 +599,7 @@ export default function SettingsSection({
         </div>
 
         <div className="mt-6">
-          <Button
-            onClick={savePlatform}
-            className="h-11 rounded-xl px-6"
-          >
+          <Button onClick={savePlatform} className="h-11 rounded-xl px-6">
             <Save className="mr-2 h-4 w-4" />
             Save Platform Settings
           </Button>

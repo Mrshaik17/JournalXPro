@@ -16,17 +16,25 @@ export const ContactSection = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name || !email || !message) {
-      toast.error("All fields required");
+    const cleanName = name.trim();
+    const cleanEmail = email.trim();
+    const cleanMessage = message.trim();
+
+    if (!cleanName || !cleanEmail || !cleanMessage) {
+      toast.error("All fields are required");
       return;
     }
 
     setSending(true);
 
     try {
-      const { error } = await supabase
-        .from("contact_messages" as any)
-        .insert({ name, email, message } as any);
+      const { error } = await supabase.from("contact_messages").insert({
+        name: cleanName,
+        email: cleanEmail,
+        subject: "Website Contact",
+        message: cleanMessage,
+        status: "unread",
+      });
 
       if (error) throw error;
 
@@ -34,8 +42,8 @@ export const ContactSection = () => {
       setName("");
       setEmail("");
       setMessage("");
-    } catch {
-      toast.error("Failed to send message. Try again.");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to send message. Try again.");
     } finally {
       setSending(false);
     }
