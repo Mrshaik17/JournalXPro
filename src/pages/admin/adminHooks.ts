@@ -80,6 +80,16 @@ type PropFirm = {
   created_at: string;
 };
 
+type NewsItem = {
+  id: string;
+  title: string;
+  content: string;
+  source?: string | null;
+  category?: string | null;
+  asset_name?: string | null;
+  created_at: string;
+};
+
 export function useAdminHooks({
   queryClient,
   setPendingNotif,
@@ -100,6 +110,7 @@ export function useAdminHooks({
   const [newsSource, setNewsSource] = useState("");
   const [newsCategory, setNewsCategory] = useState("forex");
   const [newsAsset, setNewsAsset] = useState("");
+  const [editingNews, setEditingNews] = useState<NewsItem | null>(null);
 
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementContent, setAnnouncementContent] = useState("");
@@ -121,6 +132,12 @@ export function useAdminHooks({
   const invalidateAnnouncementQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-announcements"] });
     queryClient.invalidateQueries({ queryKey: ["announcements"] });
+  };
+
+  const invalidateNewsQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-news"] });
+    queryClient.invalidateQueries({ queryKey: ["news"] });
+    queryClient.invalidateQueries({ queryKey: ["user-news"] });
   };
 
   const invalidatePropFirmQueries = () => {
@@ -268,7 +285,7 @@ export function useAdminHooks({
     },
   });
 
-  const { data: newsList = [] } = useQuery({
+  const { data: newsList = [] } = useQuery<NewsItem[]>({
     queryKey: ["admin-news"],
     queryFn: async () => {
       const { data = [], error } = await supabase
@@ -299,7 +316,6 @@ export function useAdminHooks({
         .from("announcements")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       return data;
     },
@@ -331,10 +347,7 @@ export function useAdminHooks({
 
   const updateReferral = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("referrals")
-        .update({ is_active })
-        .eq("id", id);
+      const { error } = await supabase.from("referrals").update({ is_active }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -495,6 +508,106 @@ export function useAdminHooks({
     onError: (err: any) => toast.error(err.message),
   });
 
+  const createNews = useMutation({
+    mutationFn: async () => {
+      if (!newsTitle.trim() || !newsContent.trim()) throw new Error("Title and content are required.");
+
+      const { error } = await supabase.from("news").insert({
+        title: newsTitle.trim(),
+        content: newsContent.trim(),
+        source: newsSource.trim() || null,
+        category: newsCategory,
+        asset_name: newsAsset.trim() || null,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateNewsQueries();
+      toast.success("News published.");
+      setNewsTitle("");
+      setNewsContent("");
+      setNewsSource("");
+      setNewsCategory("forex");
+      setNewsAsset("");
+      setEditingNews(null);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const updateNews = useMutation({
+    mutationFn: async ({
+      id,
+      title,
+      content,
+      source,
+      category,
+      asset_name,
+    }: {
+      id: string;
+      title: string;
+      content: string;
+      source?: string | null;
+      category: string;
+      asset_name?: string | null;
+    }) => {
+      const { error } = await supabase
+        .from("news")
+        .update({
+          title: title.trim(),
+          content: content.trim(),
+          source: source?.trim() || null,
+          category,
+          asset_name: asset_name?.trim() || null,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateNewsQueries();
+      toast.success("News updated.");
+      setNewsTitle("");
+      setNewsContent("");
+      setNewsSource("");
+      setNewsCategory("forex");
+      setNewsAsset("");
+      setEditingNews(null);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteNews = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("news").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateNewsQueries();
+      toast.success("News deleted.");
+      setEditingNews(null);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const startEditNews = (item: NewsItem) => {
+    setEditingNews(item);
+    setNewsTitle(item.title || "");
+    setNewsContent(item.content || "");
+    setNewsSource(item.source || "");
+    setNewsCategory(item.category || "forex");
+    setNewsAsset(item.asset_name || "");
+  };
+
+  const cancelEditNews = () => {
+    setEditingNews(null);
+    setNewsTitle("");
+    setNewsContent("");
+    setNewsSource("");
+    setNewsCategory("forex");
+    setNewsAsset("");
+  };
+
   const createAnnouncement = useMutation({
     mutationFn: async () => {
       if (!announcementTitle.trim() || !announcementContent.trim()) {
@@ -566,11 +679,7 @@ export function useAdminHooks({
 
   const toggleAnnouncementStatus = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("announcements")
-        .update({ is_active })
-        .eq("id", id);
-
+      const { error } = await supabase.from("announcements").update({ is_active }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -632,11 +741,7 @@ export function useAdminHooks({
       };
 
       if (editingPropFirm?.id) {
-        const { error } = await supabase
-          .from("prop_firms")
-          .update(payload)
-          .eq("id", editingPropFirm.id);
-
+        const { error } = await supabase.from("prop_firms").update(payload).eq("id", editingPropFirm.id);
         if (error) throw error;
         return;
       }
@@ -667,10 +772,7 @@ export function useAdminHooks({
 
   const togglePropFirmActive = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("prop_firms")
-        .update({ is_active })
-        .eq("id", id);
+      const { error } = await supabase.from("prop_firms").update({ is_active }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -682,10 +784,7 @@ export function useAdminHooks({
 
   const togglePropFirmFeatured = useMutation({
     mutationFn: async ({ id, is_featured }: { id: string; is_featured: boolean }) => {
-      const { error } = await supabase
-        .from("prop_firms")
-        .update({ is_featured })
-        .eq("id", id);
+      const { error } = await supabase.from("prop_firms").update({ is_featured }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -742,24 +841,15 @@ export function useAdminHooks({
         queryClient.invalidateQueries({ queryKey: ["admin-referrals"] });
         toast.info("🔗 New referral created!");
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements" }, () => {
-        invalidateAnnouncementQueries();
-      })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "announcements" }, () => {
-        invalidateAnnouncementQueries();
-      })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "announcements" }, () => {
-        invalidateAnnouncementQueries();
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "prop_firms" }, () => {
-        invalidatePropFirmQueries();
-      })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "prop_firms" }, () => {
-        invalidatePropFirmQueries();
-      })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "prop_firms" }, () => {
-        invalidatePropFirmQueries();
-      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements" }, invalidateAnnouncementQueries)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "announcements" }, invalidateAnnouncementQueries)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "announcements" }, invalidateAnnouncementQueries)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "news" }, invalidateNewsQueries)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "news" }, invalidateNewsQueries)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "news" }, invalidateNewsQueries)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "prop_firms" }, invalidatePropFirmQueries)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "prop_firms" }, invalidatePropFirmQueries)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "prop_firms" }, invalidatePropFirmQueries)
       .subscribe();
 
     return () => {
@@ -952,6 +1042,10 @@ export function useAdminHooks({
     setNewsCategory,
     newsAsset,
     setNewsAsset,
+    editingNews,
+    setEditingNews,
+    startEditNews,
+    cancelEditNews,
 
     announcementTitle,
     setAnnouncementTitle,
@@ -1011,31 +1105,9 @@ export function useAdminHooks({
     updateReferral,
     markReferralPaid,
 
-    createNews: useMutation({
-      mutationFn: async () => {
-        if (!newsTitle || !newsContent) throw new Error("Title and content are required.");
-
-        const { error } = await supabase.from("news").insert({
-          title: newsTitle,
-          content: newsContent,
-          source: newsSource || null,
-          category: newsCategory,
-          asset_name: newsAsset || null,
-        });
-
-        if (error) throw error;
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["admin-news"] });
-        toast.success("News published.");
-        setNewsTitle("");
-        setNewsContent("");
-        setNewsSource("");
-        setNewsCategory("forex");
-        setNewsAsset("");
-      },
-      onError: (err: any) => toast.error(err.message),
-    }),
+    createNews,
+    updateNews,
+    deleteNews,
 
     createAnnouncement,
     updateAnnouncement,
@@ -1046,8 +1118,6 @@ export function useAdminHooks({
     deletePropFirm,
     togglePropFirmActive,
     togglePropFirmFeatured,
-
-    createAnnouncementFormReset: cancelEditAnnouncement,
 
     markContactResolved: useMutation({
       mutationFn: async (id: string) => {

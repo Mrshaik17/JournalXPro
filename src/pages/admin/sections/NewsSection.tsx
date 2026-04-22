@@ -1,4 +1,13 @@
-import { Trash2, Newspaper, Eye, Copy } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Trash2,
+  Newspaper,
+  Copy,
+  Pencil,
+  X,
+  Search,
+  Filter,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +18,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+type NewsItem = {
+  id: string;
+  title: string;
+  content: string;
+  source?: string | null;
+  asset_name?: string | null;
+  category?: string | null;
+  created_at: string;
+};
+
+type NewsSectionProps = {
+  newsList: NewsItem[];
+  newsTitle: string;
+  setNewsTitle: React.Dispatch<React.SetStateAction<string>>;
+  newsContent: string;
+  setNewsContent: React.Dispatch<React.SetStateAction<string>>;
+  newsSource: string;
+  setNewsSource: React.Dispatch<React.SetStateAction<string>>;
+  newsCategory: string;
+  setNewsCategory: React.Dispatch<React.SetStateAction<string>>;
+  newsAsset: string;
+  setNewsAsset: React.Dispatch<React.SetStateAction<string>>;
+  createNews: { mutate: () => void };
+  updateNews?: { mutate: (payload: any) => void };
+  deleteNews: { mutate: (id: string) => void };
+  editingNews?: NewsItem | null;
+  startEditNews?: (item: NewsItem) => void;
+  cancelEditNews?: () => void;
+};
 
 export default function NewsSection({
   newsList,
@@ -23,19 +62,124 @@ export default function NewsSection({
   newsAsset,
   setNewsAsset,
   createNews,
+  updateNews,
   deleteNews,
-}: any) {
+  editingNews,
+  startEditNews,
+  cancelEditNews,
+}: NewsSectionProps) {
+  const [search, setSearch] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
+
+  const filteredNews = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return newsList.filter((item) => {
+      const matchesSearch =
+        !q ||
+        (item.title || "").toLowerCase().includes(q) ||
+        (item.content || "").toLowerCase().includes(q) ||
+        (item.source || "").toLowerCase().includes(q) ||
+        (item.asset_name || "").toLowerCase().includes(q);
+
+      const matchesCategory =
+        filterCategory === "all" ||
+        (item.category || "forex").toLowerCase() === filterCategory;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [newsList, search, filterCategory]);
+
+  const stats = useMemo(() => {
+    return {
+      total: newsList.length,
+      forex: newsList.filter((n) => n.category === "forex").length,
+      crypto: newsList.filter((n) => n.category === "crypto").length,
+      stocks: newsList.filter((n) => n.category === "stocks").length,
+      economy: newsList.filter((n) => n.category === "economy").length,
+    };
+  }, [newsList]);
+
+  const handleSubmit = () => {
+    if (editingNews?.id && updateNews) {
+      updateNews.mutate({
+        id: editingNews.id,
+        title: newsTitle,
+        content: newsContent,
+        source: newsSource || null,
+        category: newsCategory,
+        asset_name: newsAsset || null,
+      });
+      return;
+    }
+
+    createNews.mutate();
+  };
+
+  const handleCopy = async (item: NewsItem) => {
+    const text = `${item.title}\n\n${item.content}\n\nSource: ${item.source || "—"}\nAsset: ${
+      item.asset_name || "—"
+    }`;
+
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Publish Form - Borderless */}
-      <div className="rounded-2xl bg-card/70 shadow-sm hover:shadow-md transition-all p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Total News
+          </p>
+          <p className="mt-2 text-xl font-semibold tabular-nums">{stats.total}</p>
+        </div>
+        <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Forex
+          </p>
+          <p className="mt-2 text-xl font-semibold tabular-nums">{stats.forex}</p>
+        </div>
+        <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Crypto
+          </p>
+          <p className="mt-2 text-xl font-semibold tabular-nums">{stats.crypto}</p>
+        </div>
+        <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Stocks
+          </p>
+          <p className="mt-2 text-xl font-semibold tabular-nums">{stats.stocks}</p>
+        </div>
+        <div className="rounded-2xl bg-card/70 px-4 py-4 shadow-sm">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            Economy
+          </p>
+          <p className="mt-2 text-xl font-semibold tabular-nums">{stats.economy}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-card/70 p-6 shadow-sm">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
             <Newspaper className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold">Publish News</h3>
-            <p className="text-sm text-muted-foreground">Create new market updates</p>
+            <h3 className="text-lg font-semibold">
+              {editingNews ? "Edit News" : "Publish News"}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Create market updates that reflect instantly on the user side.
+            </p>
           </div>
         </div>
 
@@ -51,10 +195,10 @@ export default function NewsSection({
             placeholder="News content"
             value={newsContent}
             onChange={(e) => setNewsContent(e.target.value)}
-            className="min-h-[160px] rounded-xl bg-background/70 shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 resize-vertical"
+            className="min-h-[160px] resize-y rounded-xl bg-background/70 shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50"
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Source
@@ -98,48 +242,113 @@ export default function NewsSection({
             </div>
           </div>
 
-          <Button 
-            onClick={() => createNews.mutate()}
-            className="h-12 rounded-xl px-8 text-sm font-medium w-full md:w-auto bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all"
-            size="lg"
-          >
-            Publish News
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {editingNews && cancelEditNews && (
+              <Button
+                variant="outline"
+                onClick={cancelEditNews}
+                className="h-12 rounded-xl px-6"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Cancel
+              </Button>
+            )}
+
+            <Button
+              onClick={handleSubmit}
+              className="h-12 rounded-xl px-8 text-sm font-medium"
+              size="lg"
+            >
+              {editingNews ? "Update News" : "Publish News"}
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* News List - COMPLETELY BORDERLESS */}
+      <div className="rounded-2xl bg-card/70 p-4 shadow-sm">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">News Feed</h3>
+            <p className="text-xs text-muted-foreground">
+              Review, copy, edit, and delete market updates.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative w-full sm:w-[320px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search title, content, source, asset"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-10 rounded-xl border-0 bg-background/70 pl-10 shadow-none focus-visible:ring-1"
+              />
+            </div>
+
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="h-10 w-full rounded-xl border-0 bg-background/70 shadow-none sm:w-44">
+                <SelectValue placeholder="Filter category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                <SelectItem value="forex">Forex</SelectItem>
+                <SelectItem value="crypto">Crypto</SelectItem>
+                <SelectItem value="stocks">Stocks</SelectItem>
+                <SelectItem value="commodities">Commodities</SelectItem>
+                <SelectItem value="economy">Economy</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-3">
-        {newsList.map((item: any) => (
+        {filteredNews.map((item) => (
           <div
             key={item.id}
-            className="group rounded-2xl bg-card/70 hover:bg-card/80 shadow-sm hover:shadow-md transition-all overflow-hidden hover:-translate-y-1"
+            className={`group overflow-hidden rounded-2xl bg-card/70 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-card/80 hover:shadow-md ${
+              editingNews?.id === item.id ? "ring-1 ring-primary/40" : ""
+            }`}
           >
             <div className="p-6">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-2 h-2 rounded-full bg-primary/60 animate-pulse" />
-                  <h4 className="font-semibold text-base line-clamp-1 flex-1 min-w-0 pr-2">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-primary/60" />
+                  <h4 className="min-w-0 flex-1 truncate pr-2 text-base font-semibold">
                     {item.title}
                   </h4>
-                  <span className="px-3 py-1.5 text-[11px] font-medium rounded-full bg-primary/10 text-primary uppercase tracking-wider">
-                    {item.category?.toUpperCase() || "NEWS"}
+                  <span className="rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-primary">
+                    {(item.category || "news").toUpperCase()}
                   </span>
                 </div>
-                
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+
+                <div className="flex items-center gap-2 opacity-100 transition-all sm:opacity-0 sm:group-hover:opacity-100">
+                  {startEditNews && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 rounded-lg p-0 hover:bg-primary/10"
+                      title="Edit"
+                      onClick={() => startEditNews(item)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 rounded-lg p-0 hover:bg-primary/10"
-                    title="Copy link"
+                    title="Copy content"
+                    onClick={() => handleCopy(item)}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
+
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 rounded-lg p-0 hover:bg-destructive/10 text-destructive hover:text-destructive"
+                    className="h-8 w-8 rounded-lg p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => deleteNews.mutate(item.id)}
                     title="Delete"
                   >
@@ -148,21 +357,23 @@ export default function NewsSection({
                 </div>
               </div>
 
-              <div className="text-sm leading-relaxed text-muted-foreground mb-5 line-clamp-3">
+              <div className="mb-5 text-sm leading-relaxed text-muted-foreground line-clamp-3">
                 {item.content}
               </div>
 
               <div className="flex flex-wrap gap-6 text-xs text-muted-foreground/80">
                 <span className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 bg-muted rounded-full" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-muted" />
                   Source: <span className="font-medium">{item.source || "—"}</span>
                 </span>
+
                 <span className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 bg-muted rounded-full" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-muted" />
                   Asset: <span className="font-medium">{item.asset_name || "—"}</span>
                 </span>
+
                 <span className="flex items-center gap-1 font-mono tabular-nums">
-                  <div className="w-1.5 h-1.5 bg-muted rounded-full" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-muted" />
                   {new Date(item.created_at).toLocaleString("en-IN")}
                 </span>
               </div>
@@ -170,23 +381,25 @@ export default function NewsSection({
           </div>
         ))}
 
-        {newsList.length === 0 && (
-          <div className="rounded-2xl bg-card/50 shadow-sm p-12 text-center group hover:shadow-md transition-all">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-muted/30 flex items-center justify-center group-hover:bg-muted/50 transition-all">
+        {filteredNews.length === 0 && (
+          <div className="rounded-2xl bg-card/50 p-12 text-center shadow-sm transition-all hover:shadow-md">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-muted/30">
               <Newspaper className="h-8 w-8 text-muted-foreground/50" />
             </div>
-            <h3 className="text-lg font-semibold text-muted-foreground mb-2">
-              No news published yet
+            <h3 className="mb-2 text-lg font-semibold text-muted-foreground">
+              No news found
             </h3>
-            <p className="text-sm text-muted-foreground/70 mb-6 max-w-md mx-auto">
-              Publish your first market update to get started. Your news will appear here.
+            <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground/70">
+              {search || filterCategory !== "all"
+                ? "Try changing your search or category filter."
+                : "Publish your first market update to get started. Your news will appear here."}
             </p>
-            <Button 
-              className="h-11 rounded-xl px-8 bg-primary/90 hover:bg-primary shadow-lg hover:shadow-xl"
+
+            <Button
+              className="h-11 rounded-xl px-8"
               size="lg"
               onClick={() => {
-                // Focus title input or scroll to form
-                const titleInput = document.querySelector('input[placeholder*="title"]');
+                const titleInput = document.querySelector('input[placeholder*="title"]') as HTMLInputElement | null;
                 titleInput?.focus();
               }}
             >
