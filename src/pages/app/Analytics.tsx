@@ -236,26 +236,45 @@ const Analytics = () => {
   });
 
   const { data: profile = null } = useQuery<ProfileRow | null>({
-    queryKey: ["profile", user?.uid],
-    queryFn: async () => {
-      if (!user?.uid) return null;
+  queryKey: ["profile", user?.id],
+  queryFn: async () => {
+    if (!user?.id) return null;
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("firebase_uid", user.uid)
-        .maybeSingle();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id) // ✅ FIXED HERE
+      .maybeSingle();
 
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.uid,
-  });
+    if (error) throw error;
 
-  const plan = profile?.plan_name || "elite";
+    console.log("USER PLAN FROM DB:", data);
+    return data;
+  },
+  enabled: !!user?.id,
+});
+
+  const plan = (profile?.plan || profile?.plan_name || "free")?.toLowerCase();
+  console.log("USER PLAN FROM DB:", profile);
+  console.log("FINAL PLAN:", plan);
   const isFree = plan === "free";
-  const isPro = plan === "pro" || plan === "pro_plus" || plan === "elite";
-  const isElite = plan === "elite";
+
+// basic plan
+const isBasic = plan === "pro";
+
+// standard / pro+
+const isStandard =
+  plan === "pro+" ||
+  plan === "standard" ||
+  plan === "pro_plus"; // ✅ ADD THIS
+
+// elite
+const isElite = plan === "elite";
+
+// combined access
+const canAccessPerformance = isBasic || isStandard || isElite;
+const canAccessDiscipline = isStandard || isElite;
+const canAccessAI = isElite;
 
   const analytics = useMemo(() => {
     const totalTrades = trades.length;
@@ -723,9 +742,30 @@ const Analytics = () => {
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="h-auto w-full flex-wrap justify-start gap-2 border border-border bg-card p-2">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="discipline">Discipline</TabsTrigger>
-          <TabsTrigger value="ai">AI Insights</TabsTrigger>
+
+{isFree ? (
+  <TabsTrigger value="performance" disabled className="opacity-50">
+    Performance 🔒
+  </TabsTrigger>
+) : (
+  <TabsTrigger value="performance">Performance</TabsTrigger>
+)}
+
+{canAccessDiscipline ? (
+  <TabsTrigger value="discipline">Discipline</TabsTrigger>
+) : (
+  <TabsTrigger value="discipline" disabled className="opacity-50">
+    Discipline 🔒
+  </TabsTrigger>
+)}
+
+{isElite ? (
+  <TabsTrigger value="ai">AI Insights</TabsTrigger>
+) : (
+  <TabsTrigger value="ai" disabled className="opacity-50">
+    AI Insights 🔒
+  </TabsTrigger>
+)}
         </TabsList>
 
         <TabsContent value="overview" className="mt-5 space-y-6">
@@ -923,9 +963,9 @@ const Analytics = () => {
 
         <TabsContent value="performance" className="mt-5 space-y-6">
           <div className="relative">
-            {!isPro ? <LockedOverlay tier="Pro" /> : null}
+            {!canAccessPerformance ? <LockedOverlay tier="Pro" /> : null}
 
-            <div className={!isPro ? "pointer-events-none blur-sm" : ""}>
+            <div className={!canAccessPerformance ? "pointer-events-none blur-sm" : ""}>
               <SectionCard
                 title="Pair Performance"
                 subtitle="Which markets are helping or hurting your edge"
@@ -1135,9 +1175,9 @@ const Analytics = () => {
 
         <TabsContent value="discipline" className="mt-5 space-y-6">
           <div className="relative">
-            {!isPro ? <LockedOverlay tier="Pro" /> : null}
+            {!canAccessDiscipline ? <LockedOverlay tier="Pro+" /> : null}
 
-            <div className={!isPro ? "pointer-events-none blur-sm" : ""}>
+            <div className={!canAccessDiscipline ? "pointer-events-none blur-sm" : ""}>
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <SectionCard
                   title="Follow Plan Rate"
@@ -1165,9 +1205,9 @@ const Analytics = () => {
                 </SectionCard>
 
                 <div className="relative">
-                  {!isElite ? <LockedOverlay tier="Elite" /> : null}
+                  {!canAccessDiscipline ? <LockedOverlay tier="Pro+" /> : null}
 
-                  <div className={!isElite ? "blur-sm" : ""}>
+                  <div className={!canAccessDiscipline ? "blur-sm" : ""}>
                     <SectionCard
                       title="JournalX Score"
                       subtitle="Consistency score based on rule-following, RR, and results"
@@ -1216,9 +1256,9 @@ const Analytics = () => {
               </div>
 
               <div className="relative mt-6">
-                {!isElite ? <LockedOverlay tier="Elite" /> : null}
+                {!canAccessDiscipline ? <LockedOverlay tier="Pro+" /> : null}
 
-                <div className={!isElite ? "blur-sm" : ""}>
+                <div className={!canAccessDiscipline ? "blur-sm" : ""}>
                   <SectionCard
                     title="Expectancy & Core Stats"
                     subtitle="Your edge per trade based on win probability and payoff"
