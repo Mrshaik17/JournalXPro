@@ -21,7 +21,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit2, Trash2, X, Image } from "lucide-react";
 import { useState, useMemo } from "react";
-import { getPlanAccess, normalizeUserPlan } from "@/lib/planAccess";
+import { getPlanAccess, normalizeUserPlan, isPlanExpired } from "@/lib/planAccess";
+
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { compressImage } from "@/lib/compress";
@@ -364,14 +365,27 @@ const deleteTrade = useMutation({
   // 🔥 GET USER PLAN
 const { data: freshProfile, error: profileError } = await supabase
   .from("profiles")
-  .select("plan")
+  .select("plan, plan_expiry")
   .eq("id", user.id)
   .maybeSingle();
 
 if (profileError) throw profileError;
-
+// 🔥 NORMALIZE PLAN
 const normalizedPlan = normalizeUserPlan(freshProfile?.plan);
-const planAccess = getPlanAccess(normalizedPlan);
+
+// 🔥 CHECK EXPIRY
+const expired = isPlanExpired(freshProfile?.plan_expiry);
+
+// 🔥 FORCE FREE IF EXPIRED
+const effectivePlan = expired ? "free" : normalizedPlan;
+
+// 🔥 GET ACCESS
+const planAccess = getPlanAccess(effectivePlan);
+
+// 🔥 STRICT BLOCK IF EXPIRED
+if (expired) {
+  throw new Error("PLAN_EXPIRED");
+}
 
 // 🔥 COUNT USER TRADES
 const { count, error: countError } = await supabase
@@ -544,6 +558,11 @@ if (count >= planAccess.maxTrades) {
 
   if (err.message === "TRADE_LIMIT_REACHED") {
     toast.error("Trade limit reached. Upgrade your plan 🚀");
+    return;
+  }
+
+  if (err.message === "PLAN_EXPIRED") {
+    toast.error("Your plan has expired. Please upgrade to continue 🚀");
     return;
   }
 

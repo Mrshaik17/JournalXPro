@@ -33,10 +33,12 @@ import {
   Loader2,
   Percent,
   Copy,
+  ShieldCheck,
+  Wallet,
 } from "lucide-react";
 
 type PlanId = "basic" | "standard" | "elite";
-type BillingCycle = "1m" | "3m" | "6m" | "1y";
+type BillingCycle = "1m";
 type PaymentMethod = "upi" | "bank" | "crypto";
 
 const basePlans = [
@@ -91,40 +93,24 @@ const basePlans = [
 
 const billingMultiplier: Record<BillingCycle, number> = {
   "1m": 1,
-  "3m": 3,
-  "6m": 6,
-  "1y": 12,
 };
 
 const billingDiscount: Record<BillingCycle, number> = {
   "1m": 0,
-  "3m": 5,
-  "6m": 10,
-  "1y": 15,
 };
 
-const inrRate = 83;
+const inrRate = 100;
 
 const paymentConfig = {
-  upiId: import.meta.env.VITE_PAYMENT_UPI_ID || "9885522948@ybl",
-
-  bankName: import.meta.env.VITE_PAYMENT_BANK_NAME || "State Bank of India",
-  bankAccount: import.meta.env.VITE_PAYMENT_BANK_ACCOUNT || "87762653127112",
-  bankIfsc: import.meta.env.VITE_PAYMENT_BANK_IFSC || "3187236dqjsghad1783",
-
-  walletName: import.meta.env.VITE_PAYMENT_WALLET_NAME || "Trust Wallet",
-  eth:
-    import.meta.env.VITE_PAYMENT_CRYPTO_ETH ||
-    "0x7A12bC45D98Ef1234567890AbCdEf1234567890",
-  btc:
-    import.meta.env.VITE_PAYMENT_CRYPTO_BTC ||
-    "bc1q8x7k2n0dummyaddress4w9h2s8l0v3p5t6y7u",
-  ltc:
-    import.meta.env.VITE_PAYMENT_CRYPTO_LTC ||
-    "ltc1q4n8dummyaddress9x2w5r7t1m3k6p8z0a2b",
-  usdt:
-    import.meta.env.VITE_PAYMENT_CRYPTO_USDT ||
-    "TK9DummyUsdtAddressAllNetworks123456789",
+  upiId: import.meta.env.VITE_PAYMENT_UPI_ID,
+  bankName: import.meta.env.VITE_PAYMENT_BANK_NAME,
+  bankAccount: import.meta.env.VITE_PAYMENT_BANK_ACCOUNT,
+  bankIfsc: import.meta.env.VITE_PAYMENT_BANK_IFSC,
+  walletName: import.meta.env.VITE_PAYMENT_WALLET_NAME,
+  eth: import.meta.env.VITE_PAYMENT_CRYPTO_ETH,
+  btc: import.meta.env.VITE_PAYMENT_CRYPTO_BTC,
+  ltc: import.meta.env.VITE_PAYMENT_CRYPTO_LTC,
+  usdt: import.meta.env.VITE_PAYMENT_CRYPTO_USDT,
 };
 
 const envCoupons = [
@@ -151,7 +137,7 @@ const UpgradePage = () => {
   const queryClient = useQueryClient();
 
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("standard");
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("1m");
+  const [billingCycle] = useState<BillingCycle>("1m");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("upi");
   const [transactionId, setTransactionId] = useState("");
   const [usePoints, setUsePoints] = useState(false);
@@ -378,483 +364,535 @@ const UpgradePage = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <button
-            onClick={() => navigate("/app/settings")}
-            className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-2 mb-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to settings
-          </button>
-          <h1 className="text-3xl font-bold">Upgrade Plan</h1>
-          <p className="text-muted-foreground mt-1">
-            Choose a plan and unlock more trading power.
-          </p>
-        </div>
+    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+      <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-background via-background to-muted/40 p-6 md:p-8">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_right,rgba(120,119,198,0.08),transparent_35%)]" />
+        <div className="relative flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <button
+              onClick={() => navigate("/app/settings")}
+              className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-2 mb-3 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to settings
+            </button>
 
-        <div className="rounded-lg border border-border bg-card px-4 py-3">
-          <p className="text-xs text-muted-foreground">Current plan</p>
-          <p className="font-semibold capitalize">{currentPlan}</p>
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+              Upgrade Your Plan
+            </h1>
+            <p className="text-muted-foreground mt-2 max-w-2xl">
+              Pick the plan that fits your trading style. Monthly billing only,
+              simple checkout, same backend flow.
+            </p>
+
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm text-primary">
+              <ShieldCheck className="h-4 w-4" />
+              1 month billing only
+            </div>
+          </div>
+
+          <div className="min-w-[180px] rounded-2xl border border-border bg-card/80 backdrop-blur px-4 py-4 shadow-sm">
+            <p className="text-xs text-muted-foreground">Current plan</p>
+            <p className="font-semibold capitalize text-lg">{currentPlan}</p>
+          </div>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
-        {basePlans.map((plan) => {
-          const Icon = plan.icon;
-          const active = selectedPlan === plan.id;
+      <div className="grid xl:grid-cols-[1.3fr_0.9fr] gap-6 items-start">
+        <div className="space-y-6">
+          <div>
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold">Choose your plan</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                All plans are billed for 1 month only.
+              </p>
+            </div>
 
-          return (
-            <motion.div
-              key={plan.id}
-              whileHover={{ y: -4 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Card
-                className={`h-full cursor-pointer transition-all ${
-                  active ? "border-primary shadow-md" : "border-border"
-                } ${plan.highlight ? "ring-1 ring-primary/30" : ""}`}
-                onClick={() => setSelectedPlan(plan.id)}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    {plan.highlight && (
-                      <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
-                        Popular
-                      </span>
-                    )}
+            <div className="grid md:grid-cols-3 gap-4">
+              {basePlans.map((plan) => {
+                const Icon = plan.icon;
+                const active = selectedPlan === plan.id;
+
+                return (
+                  <motion.div
+                    key={plan.id}
+                    whileHover={{ y: -4 }}
+                    transition={{ duration: 0.2 }}
+                    className="h-full"
+                  >
+                    <Card
+                      className={`h-full cursor-pointer transition-all rounded-2xl overflow-hidden ${
+                        active
+                          ? "border-primary shadow-lg ring-2 ring-primary/20"
+                          : "border-border hover:border-primary/30"
+                      } ${plan.highlight ? "bg-primary/[0.03]" : "bg-card"}`}
+                      onClick={() => setSelectedPlan(plan.id)}
+                    >
+                      <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
+                          <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          {plan.highlight && (
+                            <span className="text-xs px-2.5 py-1 rounded-full bg-primary text-primary-foreground">
+                              Popular
+                            </span>
+                          )}
+                        </div>
+
+                        <CardTitle className="mt-4 text-xl">{plan.name}</CardTitle>
+                        <CardDescription>{plan.tagline}</CardDescription>
+
+                        <div className="pt-3 flex items-end gap-2">
+                          <span className="text-4xl font-bold">
+                            ${plan.monthlyUsd}
+                          </span>
+                          <span className="text-sm text-muted-foreground mb-1">
+                            / month
+                          </span>
+                        </div>
+                      </CardHeader>
+
+                      <CardContent className="space-y-3">
+                        {plan.features.map((feature) => (
+                          <div
+                            key={feature}
+                            className="flex items-start gap-2.5 text-sm text-muted-foreground"
+                          >
+                            <BadgeCheck className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                            <span>{feature}</span>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+
+          <Card className="border-border rounded-2xl">
+            <CardHeader>
+              <CardTitle>Payment details</CardTitle>
+              <CardDescription>
+                Select your payment method and submit payment proof.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-5">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-border bg-muted/40 p-4">
+                  <p className="text-sm text-muted-foreground mb-1">Billing cycle</p>
+                  <p className="font-semibold text-foreground">1 month only</p>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-muted/40 p-4">
+                  <p className="text-sm text-muted-foreground mb-1">Selected plan</p>
+                  <p className="font-semibold text-foreground">
+                    {selectedPlanData.name}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm text-muted-foreground block mb-2">
+                  Payment method
+                </label>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+                >
+                  <SelectTrigger className="bg-background border-border h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="upi">UPI</SelectItem>
+                    <SelectItem value="bank">Bank transfer</SelectItem>
+                    <SelectItem value="crypto">Crypto wallet</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {paymentMethod === "upi" && (
+                <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-primary" />
+                    <p className="text-sm font-medium">UPI payment</p>
                   </div>
 
-                  <CardTitle className="mt-3">{plan.name}</CardTitle>
-                  <CardDescription>{plan.tagline}</CardDescription>
-                  <div className="pt-2">
-                    <span className="text-3xl font-bold">${plan.monthlyUsd}</span>
-                    <span className="text-sm text-muted-foreground"> / month</span>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="text-sm text-muted-foreground break-all">
+                      {paymentConfig.upiId}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyText(paymentConfig.upiId, "UPI ID")}
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {paymentMethod === "bank" && (
+                <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-3">
+                  <p className="text-sm font-medium">Bank transfer details</p>
+
+                  <div className="space-y-3 text-sm text-muted-foreground">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Bank</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground">{paymentConfig.bankName}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            copyText(paymentConfig.bankName, "Bank name")
+                          }
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Account no.</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground">
+                          {paymentConfig.bankAccount}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            copyText(paymentConfig.bankAccount, "Account number")
+                          }
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span>IFSC</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground">{paymentConfig.bankIfsc}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyText(paymentConfig.bankIfsc, "IFSC")}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {paymentMethod === "crypto" && (
+                <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-3">
+                  <p className="text-sm font-medium">
+                    Crypto payment details ({paymentConfig.walletName})
+                  </p>
+
+                  <div className="space-y-3 text-sm text-muted-foreground">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>ETH</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground break-all text-right">
+                          {paymentConfig.eth}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyText(paymentConfig.eth, "ETH address")}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span>BTC</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground break-all text-right">
+                          {paymentConfig.btc}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyText(paymentConfig.btc, "BTC address")}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span>LTC</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground break-all text-right">
+                          {paymentConfig.ltc}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyText(paymentConfig.ltc, "LTC address")}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span>USDT</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground break-all text-right">
+                          {paymentConfig.usdt}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyText(paymentConfig.usdt, "USDT address")}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground pt-1">
+                      USDT supports all networks for now. Replace with exact network
+                      addresses later.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm text-muted-foreground block mb-2">
+                  Transaction ID / Reference
+                </label>
+                <Input
+                  value={transactionId}
+                  onChange={(e) => setTransactionId(e.target.value)}
+                  placeholder="Enter payment reference"
+                  className="bg-background border-border h-11"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-muted-foreground block mb-2">
+                  Payment screenshot{" "}
+                  {finalAmount > 0 && <span className="text-destructive">*</span>}
+                </label>
+                <label className="flex items-center gap-3 rounded-2xl border border-dashed border-border p-4 cursor-pointer hover:bg-accent/40 transition-colors">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                    <Upload className="h-4 w-4" />
+                  </div>
+                  <span className="text-sm text-muted-foreground truncate">
+                    {screenshotFile ? screenshotFile.name : "Upload screenshot"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={usePoints}
+                    onChange={(e) => setUsePoints(e.target.checked)}
+                  />
+                  Use reward points (${pointsBalance.toFixed(2)} available)
+                </label>
+              </div>
+
+              <Card className="bg-muted/40 border border-border rounded-2xl">
+                <CardHeader className="p-4">
+                  <div
+                    className="flex items-center gap-2 cursor-pointer"
+                    onClick={() => setShowCouponBox((b) => !b)}
+                  >
+                    <Percent className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">
+                      Coupons
+                    </span>
                   </div>
                 </CardHeader>
 
-                <CardContent className="space-y-2">
-                  {plan.features.map((feature) => (
-                    <div
-                      key={feature}
-                      className="flex items-start gap-2 text-sm text-muted-foreground"
-                    >
-                      <BadgeCheck className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <span>{feature}</span>
+                {showCouponBox && (
+                  <CardContent className="p-4 pt-0 space-y-3">
+                    <Input
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      placeholder="Enter coupon code"
+                    />
+
+                    <div className="flex gap-2 items-center flex-wrap">
+                      {!couponApplied ? (
+                        <Button size="sm" variant="outline" onClick={applyCoupon}>
+                          Apply
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={removeCoupon}
+                        >
+                          Remove
+                        </Button>
+                      )}
+
+                      {couponError && (
+                        <p className="text-xs text-destructive">{couponError}</p>
+                      )}
                     </div>
-                  ))}
-                </CardContent>
+                  </CardContent>
+                )}
+
+                <CardFooter className="p-4 pt-0">
+                  <p className="text-xs text-muted-foreground">
+                    {couponApplied && appliedCoupon
+                      ? `Coupon ${appliedCoupon.code} applied (${appliedCoupon.discount}% off).`
+                      : "Click to open coupon box and apply a discount code."}
+                  </p>
+                </CardFooter>
               </Card>
-            </motion.div>
-          );
-        })}
-      </div>
+            </CardContent>
+          </Card>
+        </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle>Billing options</CardTitle>
-            <CardDescription>
-              Select duration, payment method, and coupon.
-            </CardDescription>
-          </CardHeader>
+        <div className="xl:sticky xl:top-6">
+          <Card className="border-border rounded-2xl shadow-sm">
+            <CardHeader>
+              <CardTitle>Order summary</CardTitle>
+              <CardDescription>
+                Review your final amount before submitting.
+              </CardDescription>
+            </CardHeader>
 
-          <CardContent className="space-y-4">
-            <div>
-              <label className="text-sm text-muted-foreground block mb-2">
-                Duration
-              </label>
-              <Select
-                value={billingCycle}
-                onValueChange={(v) => setBillingCycle(v as BillingCycle)}
-              >
-                <SelectTrigger className="bg-background border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1m">1 month</SelectItem>
-                  <SelectItem value="3m">3 months</SelectItem>
-                  <SelectItem value="6m">6 months</SelectItem>
-                  <SelectItem value="1y">1 year</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm text-muted-foreground block mb-2">
-                Payment method
-              </label>
-              <Select
-                value={paymentMethod}
-                onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
-              >
-                <SelectTrigger className="bg-background border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="upi">UPI</SelectItem>
-                  <SelectItem value="bank">Bank transfer</SelectItem>
-                  <SelectItem value="crypto">Crypto wallet</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {paymentMethod === "upi" && (
-              <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-2">
-                <p className="text-sm font-medium">UPI payment</p>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-muted-foreground break-all">
-                    {paymentConfig.upiId}
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => copyText(paymentConfig.upiId, "UPI ID")}
-                  >
-                    <Copy className="h-4 w-4 mr-1" />
-                    Copy
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {paymentMethod === "bank" && (
-              <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-3">
-                <p className="text-sm font-medium">Bank transfer details</p>
-
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Bank</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground">{paymentConfig.bankName}</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyText(paymentConfig.bankName, "Bank name")}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Account no.</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground">{paymentConfig.bankAccount}</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          copyText(paymentConfig.bankAccount, "Account number")
-                        }
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <span>IFSC</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground">{paymentConfig.bankIfsc}</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyText(paymentConfig.bankIfsc, "IFSC")}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {paymentMethod === "crypto" && (
-              <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-3">
-                <p className="text-sm font-medium">
-                  Crypto payment details ({paymentConfig.walletName})
-                </p>
-
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>ETH</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground break-all text-right">
-                        {paymentConfig.eth}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyText(paymentConfig.eth, "ETH address")}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <span>BTC</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground break-all text-right">
-                        {paymentConfig.btc}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyText(paymentConfig.btc, "BTC address")}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <span>LTC</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground break-all text-right">
-                        {paymentConfig.ltc}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyText(paymentConfig.ltc, "LTC address")}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <span>USDT</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground break-all text-right">
-                        {paymentConfig.usdt}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyText(paymentConfig.usdt, "USDT address")}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground pt-1">
-                    USDT supports all networks for now. Replace with exact network addresses later.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="text-sm text-muted-foreground block mb-2">
-                Transaction ID / Reference
-              </label>
-              <Input
-                value={transactionId}
-                onChange={(e) => setTransactionId(e.target.value)}
-                placeholder="Enter payment reference"
-                className="bg-background border-border"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-muted-foreground block mb-2">
-                Payment screenshot {finalAmount > 0 && <span className="text-destructive">*</span>}
-              </label>
-              <label className="flex items-center gap-3 rounded-lg border border-dashed border-border p-4 cursor-pointer hover:bg-accent/40 transition-colors">
-                <Upload className="h-4 w-4 text-primary" />
-                <span className="text-sm text-muted-foreground">
-                  {screenshotFile ? screenshotFile.name : "Upload screenshot"}
-                </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
-                />
-              </label>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={usePoints}
-                onChange={(e) => setUsePoints(e.target.checked)}
-              />
-              Use reward points (${pointsBalance.toFixed(2)} available)
-            </label>
-
-            <Card className="bg-muted/50 border border-border mt-4">
-              <CardHeader className="p-3">
-                <div
-                  className="flex items-center gap-2 cursor-pointer"
-                  onClick={() => setShowCouponBox((b) => !b)}
-                >
-                  <Percent className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium text-foreground">
-                    Coupons
-                  </span>
-                </div>
-              </CardHeader>
-
-              {showCouponBox && (
-                <CardContent className="p-3 pt-0 space-y-3">
-                  <Input
-                    value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value)}
-                    placeholder="Enter coupon code"
-                  />
-
-                  <div className="flex gap-2 items-center flex-wrap">
-                    {!couponApplied ? (
-                      <Button size="sm" variant="outline" onClick={applyCoupon}>
-                        Apply
-                      </Button>
-                    ) : (
-                      <Button size="sm" variant="secondary" onClick={removeCoupon}>
-                        Remove
-                      </Button>
-                    )}
-
-                    {couponError && (
-                      <p className="text-xs text-destructive">{couponError}</p>
-                    )}
-                  </div>
-                </CardContent>
-              )}
-
-              <CardFooter className="p-3 pt-0">
-                <p className="text-xs text-muted-foreground">
-                  {couponApplied && appliedCoupon
-                    ? `Coupon ${appliedCoupon.code} applied (${appliedCoupon.discount}% off).`
-                    : "Click to open coupon box and apply a discount code."}
-                </p>
-              </CardFooter>
-            </Card>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle>Order summary</CardTitle>
-            <CardDescription>
-              Review your final amount before submitting.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Selected plan</span>
-              <span className="font-medium">{selectedPlanData.name}</span>
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Duration</span>
-              <span className="font-medium">
-                {billingCycle === "1m" && "1 month"}
-                {billingCycle === "3m" && "3 months"}
-                {billingCycle === "6m" && "6 months"}
-                {billingCycle === "1y" && "1 year"}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Payment method</span>
-              <span className="font-medium capitalize">{paymentMethod}</span>
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Base amount</span>
-              <span>${baseAmount.toFixed(2)}</span>
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Plan discount</span>
-              <span>{discountPercent}%</span>
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">After plan discount</span>
-              <span>${discountedAmountRaw.toFixed(2)}</span>
-            </div>
-
-            {couponApplied && appliedCoupon && (
-              <>
+            <CardContent className="space-y-4">
+              <div className="rounded-2xl border border-border bg-muted/30 p-4 space-y-3">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Coupon ({appliedCoupon.code})
-                  </span>
-                  <span>{appliedCoupon.discount}%</span>
+                  <span className="text-muted-foreground">Selected plan</span>
+                  <span className="font-medium">{selectedPlanData.name}</span>
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">After coupon</span>
-                  <span>${amountAfterCoupon.toFixed(2)}</span>
+                  <span className="text-muted-foreground">Duration</span>
+                  <span className="font-medium">1 month</span>
                 </div>
-              </>
-            )}
 
-            {usePoints && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Points applied</span>
-                <span>- ${Math.min(pointsBalance, amountAfterCoupon).toFixed(2)}</span>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Payment method</span>
+                  <span className="font-medium capitalize">{paymentMethod}</span>
+                </div>
               </div>
-            )}
 
-            <div className="border-t border-border pt-4 flex items-center justify-between">
-              <span className="font-semibold">Final amount</span>
-              <div className="text-right">
-                <p className="text-xl font-bold">${finalAmount.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">
-                  ₹{Math.round(finalAmount * inrRate)}
-                </p>
+              <div className="space-y-3 rounded-2xl border border-border p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Base amount</span>
+                  <span>${baseAmount.toFixed(2)}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Plan discount</span>
+                  <span>{discountPercent}%</span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">After plan discount</span>
+                  <span>${discountedAmountRaw.toFixed(2)}</span>
+                </div>
+
+                {couponApplied && appliedCoupon && (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Coupon ({appliedCoupon.code})
+                      </span>
+                      <span>{appliedCoupon.discount}%</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">After coupon</span>
+                      <span>${amountAfterCoupon.toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
+
+                {usePoints && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Points applied</span>
+                    <span>
+                      - ${Math.min(pointsBalance, amountAfterCoupon).toFixed(2)}
+                    </span>
+                  </div>
+                )}
               </div>
-            </div>
 
-            <div className="rounded-lg bg-primary/5 border border-primary/10 p-4 text-sm text-muted-foreground">
-              {selectedPlan === "basic" && (
-                <p>
-                  Basic unlocks tools, prop firms, news, 80 trades, 3 accounts, and analytics up to the last 100 trades.
-                </p>
-              )}
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Final amount</span>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold">${finalAmount.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      ₹{Math.round(finalAmount * inrRate)}
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-              {selectedPlan === "standard" && (
-                <p>
-                  Standard unlocks payout tracker, downloads, advanced analytics, 170 trades, and up to 7 accounts.
-                </p>
-              )}
+              <div className="rounded-2xl bg-muted/50 border border-border p-4 text-sm text-muted-foreground">
+                {selectedPlan === "basic" && (
+                  <p>
+                    Basic unlocks tools, prop firms, news, 80 trades, 3 accounts,
+                    and analytics up to the last 100 trades.
+                  </p>
+                )}
 
-              {selectedPlan === "elite" && (
-                <p>
-                  Elite removes limits and unlocks unlimited accounts, unlimited trades, full analytics, payout tools, downloads, and AI insights.
-                </p>
-              )}
-            </div>
+                {selectedPlan === "standard" && (
+                  <p>
+                    Standard unlocks payout tracker, downloads, advanced analytics,
+                    170 trades, and up to 7 accounts.
+                  </p>
+                )}
 
-            <Button
-              onClick={() => submitPayment.mutate()}
-              disabled={submitPayment.isPending}
-              className="w-full bg-primary text-primary-foreground"
-            >
-              {submitPayment.isPending ? "Submitting..." : "Submit Upgrade Request"}
-            </Button>
-          </CardContent>
-        </Card>
+                {selectedPlan === "elite" && (
+                  <p>
+                    Elite removes limits and unlocks unlimited accounts,
+                    unlimited trades, full analytics, payout tools, downloads,
+                    and AI insights.
+                  </p>
+                )}
+              </div>
+
+              <Button
+                onClick={() => submitPayment.mutate()}
+                disabled={submitPayment.isPending}
+                className="w-full h-12 bg-primary text-primary-foreground rounded-xl"
+              >
+                {submitPayment.isPending ? "Submitting..." : "Submit Upgrade Request"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

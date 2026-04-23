@@ -187,7 +187,7 @@ const Accounts = () => {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("plan")
+      .select("plan,plan_expiry")
       .eq("id", user.id)
       .single();
       const normalizedPlan = normalizeUserPlan(data?.plan);
@@ -357,74 +357,79 @@ const Accounts = () => {
 
   const createAccount = useMutation({
   mutationFn: async () => {
-    if (!user?.id) throw new Error("Not authenticated");
-    if (!name.trim()) throw new Error("Account name is required");
+  if (!user?.id) throw new Error("Not authenticated");
+  if (!name.trim()) throw new Error("Account name is required");
 
-    // 🔥 GET FRESH PLAN FROM DB
-const { data: freshProfile, error: profileError } = await supabase
-  .from("profiles")
-  .select("plan, plan_expiry")
-  .eq("id", user.id)
-  .maybeSingle();
+  // ✅ GET FRESH PROFILE
+  const { data: freshProfile, error: profileError } = await supabase
+    .from("profiles")
+    .select("plan, plan_expiry")
+    .eq("id", user.id)
+    .maybeSingle();
 
-if (profileError) throw profileError;
+  if (profileError) throw profileError;
 
-const normalizedPlan = normalizeUserPlan(freshProfile?.plan);
-const expired = isPlanExpired(freshProfile?.plan_expiry);
+  const normalizedPlan = normalizeUserPlan(freshProfile?.plan);
 
-// 🔥 FORCE FREE IF EXPIRED
-const effectivePlan = expired ? "free" : normalizedPlan;
+  const expired =
+    normalizedPlan !== "free" &&
+    isPlanExpired(freshProfile?.plan_expiry);
 
-const planAccess = getPlanAccess(effectivePlan);
-const currentAccounts = accounts?.length || 0;
+  const effectivePlan = expired ? "free" : normalizedPlan;
 
-// 🔒 FIRST: block expired users
-if (expired) {
-  throw new Error("PLAN_EXPIRED");
-}
+  const planAccess = getPlanAccess(effectivePlan);
 
-// 🚫 SECOND: check account limit
-if (currentAccounts >= planAccess.maxAccounts) {
-  throw new Error("ACCOUNT_LIMIT_REACHED");
-}
-    
+  // ✅ REAL ACCOUNT COUNT FROM DB
+  const { count, error: countError } = await supabase
+    .from("accounts")
+    .select("*", { count: "exact", head: true })
+    .eq("firebase_uid", user.id);
 
-    console.log("Create account check:", {
-      rawPlan: freshProfile?.plan,
-      normalizedPlan,
-      maxAccounts: planAccess.maxAccounts,
-      currentAccounts,
-    });
+  if (countError) throw countError;
 
-    if (currentAccounts >= planAccess.maxAccounts) {
-      throw new Error("ACCOUNT_LIMIT_REACHED");
-    }
+  const currentAccounts = count || 0;
 
-    const bal = parseFloat(initialBalance || "0");
+  // 🔒 BLOCK IF EXPIRED
+  if (expired) {
+    throw new Error("PLAN_EXPIRED");
+  }
 
-    const typeStr =
-      accountCategory === "propfirm"
-        ? `Prop Firm${dailyDrawdown ? ` DD${dailyDrawdown}` : ""}${
-            maxDrawdown ? ` MaxDD${maxDrawdown}` : ""
-          }${hasConsistency && consistencyValue ? ` CS${consistencyValue}` : ""}`
-        : "Broker";
+  // 🚫 CHECK LIMIT
+  if (currentAccounts >= planAccess.maxAccounts) {
+    throw new Error("ACCOUNT_LIMIT_REACHED");
+  }
 
-    const brokerValue = accountCategory === "propfirm" ? "Prop Firm" : "Broker";
+  console.log("Create account check:", {
+    plan: effectivePlan,
+    maxAccounts: planAccess.maxAccounts,
+    currentAccounts,
+  });
 
-    const { error } = await supabase.from("accounts").insert({
-  firebase_uid: user.id,
-  name: name.trim(),
-  broker: brokerValue,
-  account_type: typeStr,
-  starting_balance: bal,
-  current_balance: bal,
-  daily_drawdown: parseFloat(dailyDrawdown || "0"),
-  max_drawdown: parseFloat(maxDrawdown || "0"),
-  status: "active",
-});
+  const bal = parseFloat(initialBalance || "0");
 
-    if (error) throw error;
-  },
+  const typeStr =
+    accountCategory === "propfirm"
+      ? `Prop Firm${dailyDrawdown ? ` DD${dailyDrawdown}` : ""}${
+          maxDrawdown ? ` MaxDD${maxDrawdown}` : ""
+        }${hasConsistency && consistencyValue ? ` CS${consistencyValue}` : ""}`
+      : "Broker";
+
+  const brokerValue = accountCategory === "propfirm" ? "Prop Firm" : "Broker";
+
+  const { error } = await supabase.from("accounts").insert({
+    firebase_uid: user.id,
+    name: name.trim(),
+    broker: brokerValue,
+    account_type: typeStr,
+    starting_balance: bal,
+    current_balance: bal,
+    daily_drawdown: parseFloat(dailyDrawdown || "0"),
+    max_drawdown: parseFloat(maxDrawdown || "0"),
+    status: "active",
+  });
+
+  if (error) throw error;
+},
 
   onSuccess: async () => {
     await queryClient.invalidateQueries({ queryKey: ["accounts", user?.id] });
