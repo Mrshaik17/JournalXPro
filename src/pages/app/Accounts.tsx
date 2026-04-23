@@ -1,3 +1,4 @@
+import { getPlanAccess, normalizeUserPlan } from "@/lib/planAccess";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -77,6 +78,7 @@ type AccountRow = {
   created_at: string;
   updated_at?: string | null;
   share_token?: string | null;
+  is_shared?: boolean | null;
 };
 
 type TradeRow = {
@@ -98,6 +100,50 @@ type TradeRow = {
 type ViewMode = "grid" | "table";
 type FilterMode = "all" | "broker" | "propfirm" | "atrisk" | "profitable";
 
+type EnhancedAccount = AccountRow & {
+  accTrades: TradeRow[];
+  initialBalanceValue: number;
+  currentBalanceValue: number;
+  peakEquity: number;
+  currentEquity: number;
+  pnl: number;
+  pnlPercent: number;
+  wins: number;
+  losses: number;
+  breakeven: number;
+  winRate: number;
+  totalLots: number;
+  avgProfit: number;
+  avgLoss: number;
+  avgRR: number;
+  lastTrade: TradeRow | null;
+  recentPnls: { index: number; value: number }[];
+  equitySeries: { date: string; equity: number }[];
+  isProp: boolean;
+  dailyDD: number | null;
+  maxDD: number | null;
+  consistency: number | null;
+  dailyLimit: number;
+  maxLimit: number;
+  dailyDrawdownUsed: number;
+  maxDrawdownUsed: number;
+  dailyRiskPct: number;
+  maxRiskPct: number;
+  riskPct: number;
+  isAtRisk: boolean;
+  breachedDaily: boolean;
+  breachedMax: boolean;
+  isBreached: boolean;
+  health: {
+    status: "healthy" | "warning" | "danger" | "breached";
+    label: string;
+    badgeClass: string;
+    cardClass: string;
+    barClass: string;
+    reason: string;
+  };
+};
+
 const currency = (value: number) => `$${value.toFixed(2)}`;
 
 const shortCurrency = (value: number) => {
@@ -116,9 +162,7 @@ const Accounts = () => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [initialBalance, setInitialBalance] = useState("");
-  const [accountCategory, setAccountCategory] = useState<"broker" | "propfirm">(
-    "broker"
-  );
+  const [accountCategory, setAccountCategory] = useState<"broker" | "propfirm">("broker");
   const [dailyDrawdown, setDailyDrawdown] = useState("");
   const [maxDrawdown, setMaxDrawdown] = useState("");
   const [hasConsistency, setHasConsistency] = useState(false);
@@ -126,20 +170,36 @@ const Accounts = () => {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
-  const [sortBy, setSortBy] = useState<
-    "balance" | "pnl" | "winRate" | "trades" | "recent"
-  >("recent");
+  const [sortBy, setSortBy] = useState<"balance" | "pnl" | "winRate" | "trades" | "recent">(
+    "recent"
+  );
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [accountToDelete, setAccountToDelete] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
+  const [accountToDelete, setAccountToDelete] = useState<{ id: string; name: string } | null>(
+    null
+  );
 
   const { user, loading } = useAuth();
+  const { data: profile } = useQuery({
+  queryKey: ["profile", user?.id],
+  queryFn: async () => {
+    if (!user?.id) return {};
 
-  const parseNumber = (value: number | string | null | undefined) =>
-    Number(value || 0);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("plan")
+      .eq("id", user.id)
+      .single();
+      const normalizedPlan = normalizeUserPlan(data?.plan);
+    const planAccess = getPlanAccess(normalizedPlan);
+
+    if (error) throw error;
+    return data || {};
+  },
+  enabled: !!user?.id,
+});
+
+  const parseNumber = (value: number | string | null | undefined) => Number(value || 0);
 
   const getAccountBaseType = (accountType?: string | null) => {
     if (!accountType) return "Broker";
@@ -180,6 +240,7 @@ const Accounts = () => {
     const dailyLimit = currentEquity * ((dailyDD || 0) / 100);
     const maxLimit = peakEquity * ((maxDD || 0) / 100);
     const usedPct = Math.max(dailyRiskPct, maxRiskPct);
+
     const leadingMetric =
       dailyRiskPct >= maxRiskPct
         ? `Daily DD ${Math.min(dailyRiskPct, 999).toFixed(0)}% used`
@@ -187,31 +248,35 @@ const Accounts = () => {
 
     if (breachedDaily && breachedMax) {
       return {
-        status: "breached",
+        status: "breached" as const,
         label: "Breached",
         badgeClass: "border-red-500/30 bg-red-500/15 text-red-400",
         cardClass:
           "border-red-500/40 bg-red-500/[0.04] shadow-[0_0_0_1px_rgba(239,68,68,0.12),0_0_30px_rgba(239,68,68,0.06)]",
         barClass: "bg-red-500",
-        reason: `Daily and max drawdown exceeded (${Math.round(dailyLimit).toLocaleString()} / ${Math.round(maxLimit).toLocaleString()})`,
+        reason: `Daily and max drawdown exceeded (${Math.round(dailyLimit).toLocaleString()} / ${Math.round(
+          maxLimit
+        ).toLocaleString()})`,
       };
     }
 
     if (breachedDaily) {
       return {
-        status: "breached",
+        status: "breached" as const,
         label: "Breached",
         badgeClass: "border-red-500/30 bg-red-500/15 text-red-400",
         cardClass:
           "border-red-500/40 bg-red-500/[0.04] shadow-[0_0_0_1px_rgba(239,68,68,0.12),0_0_30px_rgba(239,68,68,0.06)]",
         barClass: "bg-red-500",
-        reason: `Daily drawdown exceeded (${Math.round(currentEquity * ((dailyDD || 0) / 100)).toLocaleString()} limit)`,
+        reason: `Daily drawdown exceeded (${Math.round(
+          currentEquity * ((dailyDD || 0) / 100)
+        ).toLocaleString()} limit)`,
       };
     }
 
     if (breachedMax) {
       return {
-        status: "breached",
+        status: "breached" as const,
         label: "Breached",
         badgeClass: "border-red-500/30 bg-red-500/15 text-red-400",
         cardClass:
@@ -223,7 +288,7 @@ const Accounts = () => {
 
     if (usedPct >= 80) {
       return {
-        status: "danger",
+        status: "danger" as const,
         label: "Danger",
         badgeClass: "border-red-500/20 bg-red-500/10 text-red-400",
         cardClass: "border-red-500/20 bg-red-500/[0.02]",
@@ -234,7 +299,7 @@ const Accounts = () => {
 
     if (usedPct >= 50) {
       return {
-        status: "warning",
+        status: "warning" as const,
         label: "Warning",
         badgeClass: "border-yellow-500/20 bg-yellow-500/10 text-yellow-400",
         cardClass: "border-yellow-500/20 bg-yellow-500/[0.02]",
@@ -244,7 +309,7 @@ const Accounts = () => {
     }
 
     return {
-      status: "healthy",
+      status: "healthy" as const,
       label: "Healthy",
       badgeClass: "border-green-500/20 bg-green-500/10 text-green-400",
       cardClass: "border-green-500/10 bg-green-500/[0.015]",
@@ -252,14 +317,6 @@ const Accounts = () => {
       reason: leadingMetric,
     };
   };
-
-  if (loading) {
-    return <div className="p-10 text-center">Loading...</div>;
-  }
-
-  if (!user) {
-    return <div className="p-10 text-center">Please login</div>;
-  }
 
   const { data: accounts = [], isLoading: accountsLoading } = useQuery<AccountRow[]>({
     queryKey: ["accounts", user?.id],
@@ -273,7 +330,7 @@ const Accounts = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      return (data || []) as AccountRow[];
     },
     enabled: !!user?.id,
   });
@@ -290,60 +347,90 @@ const Accounts = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      return (data || []) as TradeRow[];
     },
     enabled: !!user?.id,
   });
 
   const createAccount = useMutation({
-    mutationFn: async () => {
-      if (!user?.id) throw new Error("Not authenticated");
-      if (!name.trim()) throw new Error("Account name is required");
+  mutationFn: async () => {
+    if (!user?.id) throw new Error("Not authenticated");
+    if (!name.trim()) throw new Error("Account name is required");
 
-      const bal = parseFloat(initialBalance) || 0;
+    // 🔥 GET FRESH PLAN FROM DB
+const { data: freshProfile, error: profileError } = await supabase
+  .from("profiles")
+  .select("plan")
+  .eq("id", user.id)
+  .maybeSingle();
 
-      const typeStr =
-        accountCategory === "propfirm"
-          ? `Prop Firm${dailyDrawdown ? ` | DD:${dailyDrawdown}%` : ""}${
-              maxDrawdown ? ` | MaxDD:${maxDrawdown}%` : ""
-            }${
-              hasConsistency && consistencyValue
-                ? ` | CS:${consistencyValue}%`
-                : ""
-            }`
-          : "Broker";
+if (profileError) throw profileError;
 
-      const brokerValue = accountCategory === "propfirm" ? "Prop Firm" : "Broker";
+const normalizedPlan = normalizeUserPlan(freshProfile?.plan);
+    const planAccess = getPlanAccess(normalizedPlan);
+    const currentAccounts = accounts?.length || 0;
 
-      const { error } = await supabase.from("accounts").insert({
-        firebase_uid: user.id,
-        name: name.trim(),
-        broker: brokerValue,
-        account_type: typeStr,
-        starting_balance: bal,
-        current_balance: bal,
-        daily_drawdown: parseFloat(dailyDrawdown) || 0,
-        max_drawdown: parseFloat(maxDrawdown) || 0,
-        status: "active",
-      });
+    console.log("Create account check:", {
+      rawPlan: profile?.plan,
+      normalizedPlan,
+      maxAccounts: planAccess.maxAccounts,
+      currentAccounts,
+    });
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success("Account created successfully");
+    if (currentAccounts >= planAccess.maxAccounts) {
+      throw new Error("ACCOUNT_LIMIT_REACHED");
+    }
 
-      setName("");
-      setInitialBalance("");
-      setAccountCategory("broker");
-      setDailyDrawdown("");
-      setMaxDrawdown("");
-      setHasConsistency(false);
-      setConsistencyValue("");
-      setOpen(false);
-    },
-    onError: (err: any) => toast.error(err.message || "Failed to create account"),
-  });
+    const bal = parseFloat(initialBalance || "0");
+
+    const typeStr =
+      accountCategory === "propfirm"
+        ? `Prop Firm${dailyDrawdown ? ` DD${dailyDrawdown}` : ""}${
+            maxDrawdown ? ` MaxDD${maxDrawdown}` : ""
+          }${hasConsistency && consistencyValue ? ` CS${consistencyValue}` : ""}`
+        : "Broker";
+
+    const brokerValue = accountCategory === "propfirm" ? "Prop Firm" : "Broker";
+
+    const { error } = await supabase.from("accounts").insert({
+  firebase_uid: user.id,
+  name: name.trim(),
+  broker: brokerValue,
+  account_type: typeStr,
+  starting_balance: bal,
+  current_balance: bal,
+  daily_drawdown: parseFloat(dailyDrawdown || "0"),
+  max_drawdown: parseFloat(maxDrawdown || "0"),
+  status: "active",
+});
+
+    if (error) throw error;
+  },
+
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: ["accounts", user?.id] });
+
+    toast.success("Account created successfully");
+
+    setName("");
+    setInitialBalance("");
+    setAccountCategory("broker");
+    setDailyDrawdown("");
+    setMaxDrawdown("");
+    setHasConsistency(false);
+    setConsistencyValue("");
+    setOpen(false);
+  },
+
+  onError: (err: any) => {
+  if (err.message === "ACCOUNT_LIMIT_REACHED") {
+    toast.error("Upgrade your plan to create more accounts 🚀");
+    return;
+  }
+
+  toast.error(err.message || "Failed to create account");
+},
+});
 
   const selectedAccount = useMemo(() => {
     return accounts.find((a) => a.id === viewId);
@@ -355,7 +442,6 @@ const Accounts = () => {
       if (error) throw error;
       return id;
     },
-
     onSuccess: async (deletedId) => {
       if (selectedAccount?.id === deletedId) {
         setSearchParams({});
@@ -366,13 +452,12 @@ const Accounts = () => {
       setAccountToDelete(null);
 
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
-        queryClient.invalidateQueries({ queryKey: ["trades"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts",user?.id] }),
+        queryClient.invalidateQueries({ queryKey: ["trades",user?.id] }),
       ]);
 
       toast.success("Account deleted permanently");
     },
-
     onError: (err: any) => {
       toast.error(err.message || "Failed to delete account");
     },
@@ -388,30 +473,25 @@ const Accounts = () => {
     deleteAccount.mutate(accountToDelete.id);
   };
 
-  const enhancedAccounts = useMemo(() => {
+  const enhancedAccounts = useMemo<EnhancedAccount[]>(() => {
     return accounts.map((acc) => {
       const accTrades = trades
         .filter((t) => t.account_id === acc.id)
         .sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
 
       const initialBalanceValue = Number(acc.starting_balance || 0);
       const currentBalanceValue = Number(acc.current_balance || 0);
       const pnl = currentBalanceValue - initialBalanceValue;
-      const pnlPercent =
-        initialBalanceValue > 0 ? (pnl / initialBalanceValue) * 100 : 0;
+      const pnlPercent = initialBalanceValue > 0 ? (pnl / initialBalanceValue) * 100 : 0;
 
       const wins = accTrades.filter((t) => t.result === "win").length;
       const losses = accTrades.filter((t) => t.result === "loss").length;
       const breakeven = accTrades.filter((t) => t.result === "breakeven").length;
       const winRate = accTrades.length > 0 ? (wins / accTrades.length) * 100 : 0;
 
-      const totalLots = accTrades.reduce(
-        (sum, t) => sum + parseNumber(t.lot_size),
-        0
-      );
+      const totalLots = accTrades.reduce((sum, t) => sum + parseNumber(t.lot_size), 0);
 
       const profitTrades = accTrades.filter((t) => parseNumber(t.pnl_amount) > 0);
       const lossTrades = accTrades.filter((t) => parseNumber(t.pnl_amount) < 0);
@@ -437,12 +517,8 @@ const Accounts = () => {
       const avgRR =
         tradesWithRR.length > 0
           ? tradesWithRR.reduce((sum, t) => {
-              const risk = Math.abs(
-                parseNumber(t.entry_price) - parseNumber(t.stop_loss)
-              );
-              const reward = Math.abs(
-                parseNumber(t.take_profit) - parseNumber(t.entry_price)
-              );
+              const risk = Math.abs(parseNumber(t.entry_price) - parseNumber(t.stop_loss));
+              const reward = Math.abs(parseNumber(t.take_profit) - parseNumber(t.entry_price));
               return sum + (risk > 0 ? reward / risk : 0);
             }, 0) / tradesWithRR.length
           : 0;
@@ -451,8 +527,7 @@ const Accounts = () => {
 
       const recentPnls = [...accTrades]
         .sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
         .slice(-8)
         .map((t, index) => ({
@@ -463,8 +538,7 @@ const Accounts = () => {
       let runningEquity = initialBalanceValue;
       const equitySeries = [...accTrades]
         .sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
         .map((t) => {
           runningEquity += parseNumber(t.pnl_amount);
@@ -473,109 +547,65 @@ const Accounts = () => {
             equity: runningEquity,
           };
         });
-        const peakEquity = Math.max(
-  initialBalanceValue || 0,
-  ...(equitySeries || []).map((h) => h.equity || 0),
-  currentBalanceValue || 0
-);
 
-const currentEquity = currentBalanceValue || 0;
+      const peakEquity = Math.max(
+        initialBalanceValue || 0,
+        ...equitySeries.map((h) => h.equity || 0),
+        currentBalanceValue || 0
+      );
+
+      const currentEquity = currentBalanceValue || 0;
 
       const { dailyDD, maxDD, consistency } = getDDValues(acc);
 
-      // ✅ NEW PROP FIRM DD LOGIC
+      const today = new Date().toDateString();
 
-const today = new Date().toDateString();
+      const todayTrades = [...accTrades]
+        .filter((t) => new Date(t.created_at).toDateString() === today)
+        .sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
 
-// today's trades sorted
-const todayTrades = accTrades
-  .filter((t) => new Date(t.created_at).toDateString() === today)
-  .sort(
-    (a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
+      const chronologicalTrades = [...accTrades].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
 
-// 🔹 find start of day balance
-let startOfDayBalance = initialBalanceValue;
+      let startOfDayBalance = initialBalanceValue;
 
-if (todayTrades.length > 0) {
-  const firstTradeIndex = accTrades.findIndex(
-    (t) => t.id === todayTrades[0].id
-  );
+      if (todayTrades.length > 0) {
+        const firstTradeIndex = chronologicalTrades.findIndex((t) => t.id === todayTrades[0].id);
+        startOfDayBalance = initialBalanceValue;
 
-  startOfDayBalance = initialBalanceValue;
+        for (let i = 0; i < firstTradeIndex; i++) {
+          startOfDayBalance += parseNumber(chronologicalTrades[i].pnl_amount);
+        }
+      }
 
-  for (let i = 0; i < firstTradeIndex; i++) {
-    startOfDayBalance += parseNumber(accTrades[i].pnl_amount);
-  }
-}
+      let runningBalance = startOfDayBalance;
+      todayTrades.forEach((t) => {
+        runningBalance += parseNumber(t.pnl_amount);
+      });
 
-// 🔹 current running balance (today)
-let runningBalance = startOfDayBalance;
+      const todayNetPnL = todayTrades.reduce((sum, t) => sum + parseNumber(t.pnl_amount), 0);
 
-todayTrades.forEach((t) => {
-  runningBalance += parseNumber(t.pnl_amount);
-});
+      const baseDailyLimit = initialBalanceValue * ((dailyDD || 0) / 100);
+      const dynamicDailyLimit = baseDailyLimit + Math.max(todayNetPnL, 0);
+      const dailyDrawdownUsed = Math.abs(Math.min(todayNetPnL, 0));
+      const dailyLimit = dynamicDailyLimit;
+      const dailyRiskPct = dynamicDailyLimit > 0 ? (dailyDrawdownUsed / dynamicDailyLimit) * 100 : 0;
 
-// ✅ DAILY DD
-// ✅ NEW PROP FIRM DAILY DD (CORRECT)
+      const maxLimit = maxDD ? initialBalanceValue * (maxDD / 100) : 0;
+      const totalLossFromStart =
+        initialBalanceValue > currentEquity ? initialBalanceValue - currentEquity : 0;
+      const maxDrawdownUsed = totalLossFromStart;
+      const maxRiskPct = maxLimit > 0 ? (maxDrawdownUsed / maxLimit) * 100 : 0;
 
-const todayNetPnL = todayTrades.reduce(
-  (sum, t) => sum + parseNumber(t.pnl_amount),
-  0
-);
-
-// Base DD (example: 5% of initial balance)
-const baseDailyLimit = initialBalanceValue * ((dailyDD || 0) / 100);
-
-// Add profit buffer
-const dynamicDailyLimit = baseDailyLimit + Math.max(todayNetPnL, 0);
-
-// Used DD (only when negative)
-const dailyDrawdownUsed = Math.abs(Math.min(todayNetPnL, 0));
-
-// Remaining
-const dailyRemaining = dynamicDailyLimit - dailyDrawdownUsed;
-
-// % used
-const dailyRiskPct =
-  dynamicDailyLimit > 0
-    ? (dailyDrawdownUsed / dynamicDailyLimit) * 100
-    : 0;
-
-// FINAL LIMIT (for UI)
-const dailyLimit = dynamicDailyLimit;
-
-
-
-// ✅ MAX DD
-// ✅ STATIC MAX DD (NO TRAILING)
-
-const maxLimit = maxDD
-  ? initialBalanceValue * (maxDD / 100)
-  : 0;
-
-// total loss from initial balance
-const totalLossFromStart =
-  initialBalanceValue > currentEquity
-    ? initialBalanceValue - currentEquity
-    : 0;
-
-const maxDrawdownUsed = totalLossFromStart;
-
-const maxRemaining = maxLimit - maxDrawdownUsed;
-
-const maxRiskPct =
-  maxLimit > 0 ? (maxDrawdownUsed / maxLimit) * 100 : 0;
-
-// FINAL RISK %
-const riskPct = Math.max(dailyRiskPct, maxRiskPct);
-
+      const riskPct = Math.max(dailyRiskPct, maxRiskPct);
       const breachedDaily = dailyLimit > 0 && dailyDrawdownUsed >= dailyLimit;
       const breachedMax = maxLimit > 0 && maxDrawdownUsed >= maxLimit;
       const isBreached = breachedDaily || breachedMax;
 
-      const isProp = acc.account_type?.startsWith("Prop Firm");
+      const isProp = acc.account_type?.startsWith("Prop Firm") || false;
       const isAtRisk = isProp && riskPct >= 50 && riskPct < 100;
 
       const health = getHealthMeta({
@@ -629,19 +659,13 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
     });
   }, [accounts, trades]);
 
-  const totalBalance = enhancedAccounts.reduce(
-    (sum, acc) => sum + acc.currentBalanceValue,
-    0
-  );
-
+  const totalBalance = enhancedAccounts.reduce((sum, acc) => sum + acc.currentBalanceValue, 0);
   const totalStartingBalance = enhancedAccounts.reduce(
     (sum, acc) => sum + acc.initialBalanceValue,
     0
   );
-
   const totalPnl = totalBalance - totalStartingBalance;
-  const totalPnlPercent =
-    totalStartingBalance > 0 ? (totalPnl / totalStartingBalance) * 100 : 0;
+  const totalPnlPercent = totalStartingBalance > 0 ? (totalPnl / totalStartingBalance) * 100 : 0;
 
   const profitableAccounts = enhancedAccounts.filter((acc) => acc.pnl >= 0).length;
   const atRiskAccounts = enhancedAccounts.filter(
@@ -678,23 +702,14 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
       );
     }
 
-    if (filterMode === "broker") {
-      result = result.filter((acc) => !acc.isProp);
-    }
-
-    if (filterMode === "propfirm") {
-      result = result.filter((acc) => acc.isProp);
-    }
-
+    if (filterMode === "broker") result = result.filter((acc) => !acc.isProp);
+    if (filterMode === "propfirm") result = result.filter((acc) => acc.isProp);
     if (filterMode === "atrisk") {
       result = result.filter(
         (acc) => acc.health.status === "warning" || acc.health.status === "danger"
       );
     }
-
-    if (filterMode === "profitable") {
-      result = result.filter((acc) => acc.pnl >= 0);
-    }
+    if (filterMode === "profitable") result = result.filter((acc) => acc.pnl >= 0);
 
     result.sort((a, b) => {
       if (sortBy === "balance") return b.currentBalanceValue - a.currentBalanceValue;
@@ -713,40 +728,45 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
     balance: Number(acc.currentBalanceValue.toFixed(2)),
   }));
 
-  const hasActiveFilters = search.trim() || filterMode !== "all";
+  const hasActiveFilters = !!search.trim() || filterMode !== "all";
+
+  const handleShareAccount = async (account: EnhancedAccount) => {
+    try {
+      if (!account?.id) {
+        toast.error("Account not found");
+        return;
+      }
+
+      const token = crypto.randomUUID();
+
+      const { error } = await supabase
+        .from("accounts")
+        .update({
+          share_token: token,
+          is_shared: true,
+        })
+        .eq("id", account.id);
+
+      if (error) throw error;
+
+      const url = `${window.location.origin}/shared/${token}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to generate share link");
+    }
+  };
+
+  if (loading) {
+    return <div className="p-10 text-center">Loading...</div>;
+  }
+
+  if (!user) {
+    return <div className="p-10 text-center">Please login</div>;
+  }
 
   if (selectedEnhancedAccount) {
-    const handleShareAccount = async (account) => {
-  try {
-    if (!account?.id) {
-      console.error("Account ID missing:", account);
-      alert("❌ Account not found");
-      return;
-    }
-
-    const token = crypto.randomUUID();
-
-    const { error } = await supabase
-      .from("accounts")
-      .update({
-        share_token: token,
-        is_shared: true,
-      })
-      .eq("id", account.id);
-
-    if (error) throw error;
-
-    const url = `${window.location.origin}/shared/${token}`;
-    await navigator.clipboard.writeText(url);
-
-    alert("✅ Share link copied!");
-
-  } catch (err) {
-    console.error(err);
-    alert("❌ Failed to generate share link");
-  }
-};
-
     return (
       <>
         <motion.div
@@ -802,7 +822,11 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <Button variant="outline" size="sm" onClick={() => handleShareAccount(selectedEnhancedAccount)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleShareAccount(selectedEnhancedAccount)}
+              >
                 <Share2 className="h-4 w-4 mr-1" />
                 Share
               </Button>
@@ -826,12 +850,10 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
             <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-red-400">
-                  Account breached
-                </p>
+                <p className="text-sm font-semibold text-red-400">Account breached</p>
                 <p className="text-xs text-red-200/80 mt-1">
-                  {selectedEnhancedAccount.health.reason}. This account has exceeded its
-                  allowed risk parameters.
+                  {selectedEnhancedAccount.health.reason}. This account has exceeded its allowed
+                  risk parameters.
                 </p>
               </div>
             </div>
@@ -848,8 +870,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
               {
                 label: "Net P&L",
                 value: percent(selectedEnhancedAccount.pnlPercent),
-                icon:
-                  selectedEnhancedAccount.pnl >= 0 ? TrendingUp : TrendingDown,
+                icon: selectedEnhancedAccount.pnl >= 0 ? TrendingUp : TrendingDown,
                 color: selectedEnhancedAccount.pnl >= 0 ? "text-green-500" : "text-red-500",
               },
               {
@@ -905,9 +926,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                   </span>
                   <stat.icon className={`h-4 w-4 ${stat.color}`} />
                 </div>
-                <div className="font-mono text-base sm:text-lg font-bold">
-                  {stat.value}
-                </div>
+                <div className="font-mono text-base sm:text-lg font-bold">{stat.value}</div>
               </motion.div>
             ))}
           </div>
@@ -934,8 +953,16 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                     <AreaChart data={selectedEnhancedAccount.equitySeries}>
                       <defs>
                         <linearGradient id="accountEquityFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.28} />
-                          <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.03} />
+                          <stop
+                            offset="0%"
+                            stopColor="hsl(var(--primary))"
+                            stopOpacity={0.28}
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="hsl(var(--primary))"
+                            stopOpacity={0.03}
+                          />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -943,9 +970,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                         dataKey="date"
                         tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
                       />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                      />
+                      <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
                       <Tooltip
                         contentStyle={{
                           background: "hsl(var(--card))",
@@ -1104,9 +1129,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                 {!selectedEnhancedAccount.isProp && (
                   <div className="rounded-lg bg-background/50 border border-border p-3">
                     <p className="text-xs text-muted-foreground mb-1">Account Type</p>
-                    <p className="text-sm font-medium">
-                      Broker account with standard tracking
-                    </p>
+                    <p className="text-sm font-medium">Broker account with standard tracking</p>
                   </div>
                 )}
 
@@ -1159,9 +1182,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                           <td className="py-3 pr-3 font-mono text-xs">
                             {format(new Date(trade.created_at), "MMM dd, HH:mm")}
                           </td>
-                          <td className="py-3 pr-3 font-mono text-xs">
-                            {trade.pair || "—"}
-                          </td>
+                          <td className="py-3 pr-3 font-mono text-xs">{trade.pair || "—"}</td>
                           <td className="py-3 pr-3">
                             <span
                               className={`text-xs font-medium px-2 py-1 rounded-full ${
@@ -1186,9 +1207,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                           <td className="py-3 pr-3 text-right font-mono">
                             {parseNumber(trade.lot_size).toFixed(2)}
                           </td>
-                          <td className="py-3 text-center">
-                            {trade.follow_plan ? "✓" : "✗"}
-                          </td>
+                          <td className="py-3 text-center">{trade.follow_plan ? "✓" : "✗"}</td>
                         </tr>
                       );
                     })}
@@ -1197,9 +1216,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border p-8 text-center">
-                <p className="text-muted-foreground text-sm">
-                  No trades for this account yet.
-                </p>
+                <p className="text-muted-foreground text-sm">No trades for this account yet.</p>
               </div>
             )}
           </div>
@@ -1216,8 +1233,8 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                     <span className="font-semibold text-foreground">
                       "{accountToDelete.name}"
                     </span>
-                    . This action cannot be undone. Once deleted, this account will
-                    not come back again and there is no backup or recovery available.
+                    . This action cannot be undone. Once deleted, this account will not come back
+                    again and there is no backup or recovery available.
                   </>
                 ) : (
                   "This action cannot be undone."
@@ -1268,8 +1285,8 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
             <Button
               variant="outline"
               onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ["accounts"] });
-                queryClient.invalidateQueries({ queryKey: ["trades"] });
+                queryClient.invalidateQueries({ queryKey: ["accounts",user?.id] });
+                queryClient.invalidateQueries({ queryKey: ["trades",user?.id] });
               }}
             >
               <RefreshCcw className="h-4 w-4 mr-2" />
@@ -1375,9 +1392,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                         <div className="flex items-center gap-2">
                           <Checkbox
                             checked={hasConsistency}
-                            onCheckedChange={(checked) =>
-                              setHasConsistency(checked === true)
-                            }
+                            onCheckedChange={(checked) => setHasConsistency(checked === true)}
                             id="consistency"
                           />
                           <label
@@ -1408,12 +1423,12 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                   </AnimatePresence>
 
                   <Button
-                    onClick={() => createAccount.mutate()}
-                    disabled={!user || createAccount.isPending}
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    {createAccount.isPending ? "Creating..." : "Create Account"}
-                  </Button>
+  onClick={() => createAccount.mutate()}
+  disabled={!user || !profile || createAccount.isPending}
+  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+>
+  {createAccount.isPending ? "Creating..." : "Create Account"}
+</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -1447,12 +1462,8 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                   </span>
                   <Wallet className="h-3.5 w-3.5 text-primary" />
                 </div>
-                <div className="font-mono text-xl font-bold">
-                  {shortCurrency(totalBalance)}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Across all accounts
-                </p>
+                <div className="font-mono text-xl font-bold">{shortCurrency(totalBalance)}</div>
+                <p className="text-xs text-muted-foreground mt-1">Across all accounts</p>
               </div>
 
               <div className="rounded-xl border border-border bg-card p-4 card-glow">
@@ -1473,9 +1484,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                 >
                   {percent(totalPnlPercent)}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {currency(totalPnl)}
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">{currency(totalPnl)}</p>
               </div>
 
               <div className="rounded-xl border border-border bg-card p-4 card-glow">
@@ -1486,9 +1495,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                   <Award className="h-3.5 w-3.5 text-green-500" />
                 </div>
                 <div className="font-mono text-xl font-bold">{profitableAccounts}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Positive P&L accounts
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">Positive P&L accounts</p>
               </div>
 
               <div className="rounded-xl border border-border bg-card p-4 card-glow">
@@ -1499,9 +1506,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                   <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
                 </div>
                 <div className="font-mono text-xl font-bold">{atRiskAccounts}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Warning / danger
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">Warning / danger</p>
               </div>
 
               <div className="rounded-xl border border-border bg-card p-4 card-glow">
@@ -1512,9 +1517,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                   <Shield className="h-3.5 w-3.5 text-red-500" />
                 </div>
                 <div className="font-mono text-xl font-bold">{breachedAccounts}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Risk violated
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">Risk violated</p>
               </div>
             </div>
 
@@ -1643,11 +1646,9 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h3 className="text-lg sm:text-xl font-semibold truncate">
-                          {account.name}
-                        </h3>
+                        <h3 className="text-lg sm:text-xl font-semibold truncate">{account.name}</h3>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {account.broker || "—"} • {getAccountBaseType(account.account_type)}
+                          {account.broker} • {getAccountBaseType(account.account_type)}
                         </p>
                       </div>
 
@@ -1657,7 +1658,6 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                         >
                           {account.health.label}
                         </span>
-
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1699,9 +1699,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                       </div>
                       <div>
                         <p className="text-muted-foreground">Trades</p>
-                        <p className="font-mono font-medium mt-1">
-                          {account.accTrades.length}
-                        </p>
+                        <p className="font-mono font-medium mt-1">{account.accTrades.length}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Lots</p>
@@ -1760,10 +1758,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                     <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between">
                       <p className="text-[11px] text-muted-foreground">
                         {account.lastTrade
-                          ? `Last trade ${format(
-                              new Date(account.lastTrade.created_at),
-                              "MMM dd, HH:mm"
-                            )}`
+                          ? `Last trade ${format(new Date(account.lastTrade.created_at), "MMM dd, HH:mm")}`
                           : "No trades yet"}
                       </p>
                       <div className="flex items-center gap-2">
@@ -1802,14 +1797,10 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                           >
                             <div>
                               <p className="font-semibold">{account.name}</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {account.broker || "—"}
-                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">{account.broker}</p>
                             </div>
                           </td>
-                          <td className="py-4 px-4">
-                            {getAccountBaseType(account.account_type)}
-                          </td>
+                          <td className="py-4 px-4">{getAccountBaseType(account.account_type)}</td>
                           <td className="py-4 px-4 text-right font-mono">
                             {currency(account.currentBalanceValue)}
                           </td>
@@ -1823,9 +1814,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                           <td className="py-4 px-4 text-right font-mono">
                             {account.winRate.toFixed(0)}%
                           </td>
-                          <td className="py-4 px-4 text-right font-mono">
-                            {account.accTrades.length}
-                          </td>
+                          <td className="py-4 px-4 text-right font-mono">{account.accTrades.length}</td>
                           <td className="py-4 px-4">
                             <span
                               className={`text-[10px] px-2.5 py-1 rounded-full border font-medium ${account.health.badgeClass}`}
@@ -1882,9 +1871,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                         dataKey="name"
                         tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
                       />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                      />
+                      <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
                       <Tooltip
                         contentStyle={{
                           background: "hsl(var(--card))",
@@ -1893,11 +1880,7 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                           fontSize: "12px",
                         }}
                       />
-                      <Bar
-                        dataKey="pnl"
-                        radius={[8, 8, 0, 0]}
-                        fill="hsl(var(--primary))"
-                      />
+                      <Bar dataKey="pnl" radius={[8, 8, 0, 0]} fill="hsl(var(--primary))" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1928,8 +1911,8 @@ const riskPct = Math.max(dailyRiskPct, maxRiskPct);
                   <span className="font-semibold text-foreground">
                     "{accountToDelete.name}"
                   </span>
-                  . This action cannot be undone. Once deleted, this account will
-                  not come back again and there is no backup or recovery available.
+                  . This action cannot be undone. Once deleted, this account will not come back
+                  again and there is no backup or recovery available.
                 </>
               ) : (
                 "This action cannot be undone."

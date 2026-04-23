@@ -1,54 +1,79 @@
-// src/lib/planAccess.ts
 export type UserPlan = "free" | "basic" | "standard" | "elite";
 
 export const PLAN_ACCESS = {
   free: {
     maxAccounts: 1,
-    maxTrades: 20,
-    analyticsTrades: 10,
-    tools: false,
-    propFirms: false,
-    news: false,
-    payout: false,
-    download: false,
-    aiInsights: false,
+    maxTrades: 50,
+    analyticsTradesLimit: 50,
+    payouts: false,
+    analytics: {
+      overview: true,
+      performance: true,
+      discipline: false,
+      aiInsights: false,
+    },
+    autoDeleteMonths: 6,
   },
   basic: {
-    maxAccounts: 3,
-    maxTrades: 80,
-    analyticsTrades: 100,
-    tools: true,
-    propFirms: true,
-    news: true,
-    payout: false,
-    download: false,
-    aiInsights: false,
+    maxAccounts: 4,
+    maxTrades: 100,
+    analyticsTradesLimit: 100,
+    payouts: false,
+    analytics: {
+      overview: true,
+      performance: true,
+      discipline: false,
+      aiInsights: false,
+    },
+    autoDeleteMonths: 6,
   },
   standard: {
-    maxAccounts: 7,
+    maxAccounts: 9,
     maxTrades: 170,
-    analyticsTrades: 250,
-    tools: true,
-    propFirms: true,
-    news: true,
-    payout: true,
-    download: true,
-    aiInsights: false,
+    analyticsTradesLimit: 170,
+    payouts: true,
+    analytics: {
+      overview: true,
+      performance: true,
+      discipline: true,
+      aiInsights: false,
+    },
+    autoDeleteMonths: 12,
   },
   elite: {
-    maxAccounts: Infinity,
-    maxTrades: Infinity,
-    analyticsTrades: Infinity,
-    tools: true,
-    propFirms: true,
-    news: true,
-    payout: true,
-    download: true,
-    aiInsights: true,
+    maxAccounts: Number.MAX_SAFE_INTEGER,
+    maxTrades: Number.MAX_SAFE_INTEGER,
+    analyticsTradesLimit: Number.MAX_SAFE_INTEGER,
+    payouts: true,
+    analytics: {
+      overview: true,
+      performance: true,
+      discipline: true,
+      aiInsights: true,
+    },
+    autoDeleteMonths: 36,
   },
 } as const;
 
+export const normalizeUserPlan = (plan?: string | null): UserPlan => {
+  if (!plan) return "free";
+
+  const p = plan.toLowerCase().trim();
+
+  // 🔥 MAP YOUR OLD PLANS → NEW PLANS
+  if (p === "pro_plus") return "standard";
+  if (p === "pro") return "basic";
+
+  // existing plans
+  if (p === "basic") return "basic";
+  if (p === "standard") return "standard";
+  if (p === "elite") return "elite";
+  if (p === "free") return "free";
+
+  return "free";
+};
+
 export const getPlanAccess = (plan?: string) => {
-  const normalized = (plan || "free") as UserPlan;
-  return PLAN_ACCESS[normalized] || PLAN_ACCESS.free;
+  const normalized = normalizeUserPlan(plan);
+  return PLAN_ACCESS[normalized];
 };
