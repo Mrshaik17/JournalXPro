@@ -3,8 +3,8 @@ export type UserPlan = "free" | "basic" | "standard" | "elite";
 export const PLAN_ACCESS = {
   free: {
     maxAccounts: 1,
-    maxTrades: 50,
-    analyticsTradesLimit: 50,
+    maxTrades: 10,
+    analyticsTradesLimit: 10,
     payouts: false,
     analytics: {
       overview: true,
@@ -76,4 +76,23 @@ export const normalizeUserPlan = (plan?: string | null): UserPlan => {
 export const getPlanAccess = (plan?: string) => {
   const normalized = normalizeUserPlan(plan);
   return PLAN_ACCESS[normalized];
+};
+export const isPlanExpired = (planExpiry?: string | null) => {
+  if (!planExpiry) return true; // no expiry = treat as expired
+
+  const now = new Date();
+  const expiry = new Date(planExpiry);
+
+  return expiry < now;
+};
+
+export const getEffectivePlan = (
+  plan?: string | null,
+  planExpiry?: string | null
+) => {
+  const expired = isPlanExpired(planExpiry);
+
+  if (expired) return "free";
+
+  return normalizeUserPlan(plan);
 };

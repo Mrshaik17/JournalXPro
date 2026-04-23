@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit2, Trash2, X, Image } from "lucide-react";
 import { useState, useMemo } from "react";
+import { getPlanAccess, normalizeUserPlan } from "@/lib/planAccess";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { compressImage } from "@/lib/compress";
@@ -360,6 +361,36 @@ const deleteTrade = useMutation({
   const saveTrade = useMutation({
  mutationFn: async () => {
   if (!user) throw new Error("Not authenticated");
+  // 🔥 GET USER PLAN
+const { data: freshProfile, error: profileError } = await supabase
+  .from("profiles")
+  .select("plan")
+  .eq("id", user.id)
+  .maybeSingle();
+
+if (profileError) throw profileError;
+
+const normalizedPlan = normalizeUserPlan(freshProfile?.plan);
+const planAccess = getPlanAccess(normalizedPlan);
+
+// 🔥 COUNT USER TRADES
+const { count, error: countError } = await supabase
+  .from("trades")
+  .select("*", { count: "exact", head: true })
+  .eq("user_id", user.id);
+
+if (countError) throw countError;
+
+console.log("Trade limit check:", {
+  plan: normalizedPlan,
+  maxTrades: planAccess.maxTrades,
+  currentTrades: count,
+});
+
+// 🔥 LIMIT CHECK
+if (count >= planAccess.maxTrades) {
+  throw new Error("TRADE_LIMIT_REACHED");
+}
 
   const pnl =
     form.result === "loss"
@@ -509,9 +540,15 @@ const deleteTrade = useMutation({
   },
 
   onError: (err: any) => {
-    console.error(err);
-    toast.error(err.message || "Error saving trade");
-  },
+  console.error(err);
+
+  if (err.message === "TRADE_LIMIT_REACHED") {
+    toast.error("Trade limit reached. Upgrade your plan 🚀");
+    return;
+  }
+
+  toast.error(err.message || "Error saving trade");
+},
 });
 
   const resetForm = () => {

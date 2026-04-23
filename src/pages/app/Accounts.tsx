@@ -1,4 +1,4 @@
-import { getPlanAccess, normalizeUserPlan } from "@/lib/planAccess";
+import { getPlanAccess, normalizeUserPlan, isPlanExpired } from "@/lib/planAccess";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -191,7 +191,10 @@ const Accounts = () => {
       .eq("id", user.id)
       .single();
       const normalizedPlan = normalizeUserPlan(data?.plan);
-    const planAccess = getPlanAccess(normalizedPlan);
+      const expired = isPlanExpired(data?.plan_expiry);
+      const effectivePlan = expired ? "free" : normalizedPlan;
+      const planAccess = getPlanAccess(effectivePlan);
+  
 
     if (error) throw error;
     return data || {};
@@ -360,18 +363,34 @@ const Accounts = () => {
     // 🔥 GET FRESH PLAN FROM DB
 const { data: freshProfile, error: profileError } = await supabase
   .from("profiles")
-  .select("plan")
+  .select("plan, plan_expiry")
   .eq("id", user.id)
   .maybeSingle();
 
 if (profileError) throw profileError;
 
 const normalizedPlan = normalizeUserPlan(freshProfile?.plan);
-    const planAccess = getPlanAccess(normalizedPlan);
-    const currentAccounts = accounts?.length || 0;
+const expired = isPlanExpired(freshProfile?.plan_expiry);
+
+// 🔥 FORCE FREE IF EXPIRED
+const effectivePlan = expired ? "free" : normalizedPlan;
+
+const planAccess = getPlanAccess(effectivePlan);
+const currentAccounts = accounts?.length || 0;
+
+// 🔒 FIRST: block expired users
+if (expired) {
+  throw new Error("PLAN_EXPIRED");
+}
+
+// 🚫 SECOND: check account limit
+if (currentAccounts >= planAccess.maxAccounts) {
+  throw new Error("ACCOUNT_LIMIT_REACHED");
+}
+    
 
     console.log("Create account check:", {
-      rawPlan: profile?.plan,
+      rawPlan: freshProfile?.plan,
       normalizedPlan,
       maxAccounts: planAccess.maxAccounts,
       currentAccounts,
@@ -423,6 +442,10 @@ const normalizedPlan = normalizeUserPlan(freshProfile?.plan);
   },
 
   onError: (err: any) => {
+    if (err.message === "PLAN_EXPIRED") {
+  toast.error("Your plan has expired. Please upgrade to continue 🚀");
+  return;
+}
   if (err.message === "ACCOUNT_LIMIT_REACHED") {
     toast.error("Upgrade your plan to create more accounts 🚀");
     return;
