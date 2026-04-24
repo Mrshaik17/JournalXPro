@@ -50,8 +50,8 @@ const basePlans = [
     monthlyUsd: 4,
     highlight: false,
     features: [
-      "80 trades limit",
-      "3 accounts",
+      "100 trades limit",
+      "4 accounts",
       "Unlock tools + prop firms + news",
       "Analytics (last 100 trades)",
       "Auto delete after 6 months",
@@ -66,7 +66,7 @@ const basePlans = [
     highlight: true,
     features: [
       "170 trades limit",
-      "7 accounts",
+      "9 accounts",
       "Payout tracker unlocked",
       "Advanced analytics",
       "Download enabled",
@@ -862,7 +862,7 @@ const UpgradePage = () => {
               <div className="rounded-2xl bg-muted/50 border border-border p-4 text-sm text-muted-foreground">
                 {selectedPlan === "basic" && (
                   <p>
-                    Basic unlocks tools, prop firms, news, 80 trades, 3 accounts,
+                    Basic unlocks tools, prop firms, news, 100 trades, 4 accounts,
                     and analytics up to the last 100 trades.
                   </p>
                 )}

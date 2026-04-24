@@ -58,7 +58,7 @@ const coreFeatures = [
     icon: Link2,
     title: "MT5 Auto Sync",
     desc: "Connect your MT5 account and auto-sync trades instantly.",
-    badge: "Pro+",
+    badge: "Coming Soon",
   },
   {
     icon: History,
@@ -241,7 +241,7 @@ export const FeaturesSection = () => {
         >
           <h3 className="text-2xl md:text-3xl font-bold text-center mb-3">Why Choose Us?</h3>
           <p className="text-center text-muted-foreground mb-8">
-            Starting at just <span className="text-primary font-bold">₹350/$3.5</span>/month vs Others charging{" "}
+            Starting at just <span className="text-primary font-bold">₹400/$4</span>/month vs Others charging{" "}
             <span className="text-destructive line-through font-bold">₹2000+</span>
           </p>
 
@@ -286,7 +286,7 @@ export const FeaturesSection = () => {
 
                 <tr className="bg-primary/5">
                   <td className="p-4 font-bold text-foreground">Monthly Price</td>
-                  <td className="p-4 text-center font-bold text-primary">₹350</td>
+                  <td className="p-4 text-center font-bold text-primary">₹400</td>
                   <td className="p-4 text-center text-muted-foreground">₹2000+</td>
                 </tr>
               </tbody>

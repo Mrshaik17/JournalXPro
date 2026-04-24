@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-type BillingKey = "1m" | "3m" | "6m" | "12m";
+type BillingKey = "1m";
 
 const billingOptions: {
   key: BillingKey;
@@ -16,9 +16,6 @@ const billingOptions: {
   badge?: string;
 }[] = [
   { key: "1m", label: "1 Month", months: 1, discount: 0 },
-  { key: "3m", label: "3 Months", months: 3, discount: 5 },
-  { key: "6m", label: "6 Months", months: 6, discount: 10 },
-  { key: "12m", label: "12 Months", months: 12, discount: 20, badge: "Best Value" },
 ];
 
 export const PricingSection = () => {
@@ -33,15 +30,25 @@ export const PricingSection = () => {
     },
   });
 
-  const getSetting = (key: string): any => {
-    const s = siteSettings.find((s: any) => s.key === key);
-    return s?.value || {};
+  const getSetting = (key: string) => {
+    const setting = siteSettings?.find((s: any) => s.key === key);
+    return setting ? Number(setting.value) : null;
   };
 
-  const pricing = getSetting("pricing");
-  const inrRate = getSetting("inr_rate")?.rate || 83.5;
+  const usdBasic = getSetting("usd_basic");
+  const usdStandard = getSetting("usd_standard");
+  const usdElite = getSetting("usd_elite");
+  const rate = getSetting("usd_rate");
 
-  const selectedBilling = billingOptions.find((b) => b.key === billing) || billingOptions[0];
+  const basicINR = usdBasic && rate ? usdBasic * rate : null;
+  const standardINR = usdStandard && rate ? usdStandard * rate : null;
+  const eliteINR = usdElite && rate ? usdElite * rate : null;
+
+  const pricing = getSetting("pricing");
+  const inrRate = getSetting("inr_rate")?.rate || 100;
+
+  const selectedBilling =
+    billingOptions.find((b) => b.key === billing) || billingOptions[0];
 
   const calculatePrice = (monthlyUsd: number) => {
     const grossUsd = monthlyUsd * selectedBilling.months;
@@ -57,9 +64,13 @@ export const PricingSection = () => {
   };
 
   const plans = useMemo(() => {
-    const basicMonthlyUsd = pricing.pro || 4;
-    const standardMonthlyUsd = pricing.pro_plus || 7;
-    const eliteMonthlyUsd = pricing.elite || 10;
+    const usdBasic = getSetting("usd_basic") || 4;
+    const usdStandard = getSetting("usd_standard") || 7;
+    const usdElite = getSetting("usd_elite") || 10;
+
+    const basicMonthlyUsd = usdBasic;
+    const standardMonthlyUsd = usdStandard;
+    const eliteMonthlyUsd = usdElite;
 
     const basicPrice = calculatePrice(basicMonthlyUsd);
     const standardPrice = calculatePrice(standardMonthlyUsd);
@@ -96,9 +107,9 @@ export const PricingSection = () => {
         originalInr: basicPrice.originalInr,
         originalUsd: basicPrice.originalUsd,
         period: periodLabel,
-        trades: "70 trades/month",
+        trades: "100 trades/month",
         features: [
-          "3 Accounts",
+          "4 Accounts",
           "JournalX Score",
           "Tag Insights",
           "Export to Excel",
@@ -138,7 +149,7 @@ export const PricingSection = () => {
         period: periodLabel,
         trades: "Unlimited + AI",
         features: [
-          "10 Accounts",
+          "Unlimted Accounts",
           "Everything in Standard",
           "Unlimited MT5 Sync",
           "AI Trade Analysis",
@@ -237,10 +248,19 @@ export const PricingSection = () => {
               <p className="text-xs text-muted-foreground mb-4">{plan.subtext}</p>
 
               <div className="mb-1">
-                {plan.priceInr > 0 ? (
+                {plan.priceUsd > 0 ? (
                   <>
-                    <span className="font-mono text-3xl font-bold">₹{plan.priceInr}</span>
-                    <span className="text-sm text-muted-foreground">{plan.period}</span>
+                    {/* USD TOP */}
+                    <div className="font-mono text-3xl font-bold">
+                      ${plan.priceUsd}
+                      <span className="text-sm text-muted-foreground">{plan.period}</span>
+                    </div>
+
+                    {/* INR BELOW */}
+                    <p className="text-xs text-muted-foreground font-mono">
+                      ₹{plan.priceInr}
+                      {plan.period}
+                    </p>
                   </>
                 ) : (
                   <>
@@ -249,13 +269,6 @@ export const PricingSection = () => {
                   </>
                 )}
               </div>
-
-              {plan.priceUsd > 0 && (
-                <p className="text-xs text-muted-foreground font-mono mb-1">
-                  ≈ ${plan.priceUsd}
-                  {plan.period}
-                </p>
-              )}
 
               {plan.priceUsd > 0 && selectedBilling.discount > 0 && (
                 <p className="text-xs text-muted-foreground font-mono line-through mb-1">
