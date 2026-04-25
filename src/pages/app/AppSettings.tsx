@@ -63,21 +63,30 @@ const AppSettings = () => {
   const { theme, setTheme } = useTheme();
 
   const { data: profile, isLoading: profileLoading } = useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
+  
+  queryKey: ["profile", user?.id],
+  queryFn: async () => {
+    if (!user?.id) return null;
 
-      const { data, error } = await supabase
+    const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("firebase_uid", user.id)
-        .single();
+        .single()
 
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
-  });
+    if (error) {
+      console.error(error);
+      return null;
+    }
+
+    return data;
+  },
+  enabled: !!user?.id,
+});
+const currentPlan = profile?.plan || "free";
+const normalizedPlan = currentPlan?.toLowerCase();
+
+const canExport = ["standard", "pro+", "pro plus", "elite"].includes(normalizedPlan);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1215,13 +1224,38 @@ const AppSettings = () => {
               </Select>
 
               <div className="flex gap-2">
-                <Button onClick={() => exportUserData("pdf")}>
-                  Export PDF
-                </Button>
+                <Button
+  onClick={() => {
+    if (!canExport) {
+      toast.error("Upgrade to Standard or Elite to unlock export");
+      return;
+    }
+    exportUserData("pdf");
+  }}
+  disabled={!canExport}
+  className={!canExport ? "opacity-50 cursor-not-allowed" : ""}
+>
+  {canExport ? "Download PDF" : "🔒 Locked (Upgrade Required)"}
+</Button>
 
-                <Button onClick={() => exportUserData("excel")}>
-                  Export Excel
-                </Button>
+                <Button
+  onClick={() => {
+    if (!canExport) {
+      toast.error("Upgrade to Standard or Elite to unlock export");
+      return;
+    }
+    exportUserData("excel");
+  }}
+  disabled={!canExport}
+  className={!canExport ? "opacity-50 cursor-not-allowed" : ""}
+>
+  {canExport ? "Download Excel" : "🔒 Locked (Upgrade Required)"}
+</Button>
+{!canExport && (
+  <p className="text-xs text-muted-foreground mt-2">
+    Upgrade to Standard or Elite to unlock data export feature.
+  </p>
+)}
               </div>
             </div>
           </motion.div>
