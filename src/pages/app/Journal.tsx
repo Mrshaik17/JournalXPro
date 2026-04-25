@@ -374,7 +374,9 @@ if (profileError) throw profileError;
 const normalizedPlan = normalizeUserPlan(freshProfile?.plan);
 
 // 🔥 CHECK EXPIRY
-const expired = isPlanExpired(freshProfile?.plan_expiry);
+const isFreePlan = normalizedPlan === "free";
+
+const expired = !isFreePlan && isPlanExpired(freshProfile?.plan_expiry);
 
 // 🔥 FORCE FREE IF EXPIRED
 const effectivePlan = expired ? "free" : normalizedPlan;
