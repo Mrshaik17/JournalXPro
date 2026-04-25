@@ -7,18 +7,18 @@ import { AlertTriangle, PanelLeft, Sparkles } from "lucide-react";
 
 export function AppLayout() {
   const { data: maintenance } = useQuery({
-    queryKey: ["maintenance-check"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("site_settings")
-        .select("*")
-        .eq("key", "maintenance")
-        .single();
+  queryKey: ["maintenance"],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("*")
+      .eq("key", "maintenance")
+      .maybeSingle(); // ✅ fix
 
-      return data?.value as { enabled: boolean; message: string } | null;
-    },
-    refetchInterval: 30000,
-  });
+    if (error) throw error;
+    return data || {}; // ✅ fix
+  },
+});
 
   if (maintenance?.enabled) {
     return (

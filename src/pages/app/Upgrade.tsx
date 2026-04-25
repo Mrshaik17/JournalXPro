@@ -140,35 +140,35 @@ const UpgradePage = () => {
   } | null>(null);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
+  queryKey: ["profile", user?.id],
+  queryFn: async () => {
+    if (!user?.id) return {};
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("firebase_uid", user.id) // ✅ FIXED COLUMN
+      .maybeSingle(); // ✅ PREVENTS 406 ERROR
 
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
-  });
+    if (error) throw error;
+    return data || {}; // ✅ PREVENTS undefined error
+  },
+  enabled: !!user?.id,
+});
 
-  const { data: paymentMethods = [] } = useQuery({
-    queryKey: ["payment-methods"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payment_methods")
-        .select("*")
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true });
+const { data: paymentMethods = [] } = useQuery({
+  queryKey: ["payment-methods"],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("payment_methods")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
 
-      if (error) throw error;
-      return data || [];
-    },
-  });
+    if (error) throw error;
+    return data || [];
+  },
+});
 
   const currentPlan = profile?.plan || "free";
   const pointsBalance = Number(profile?.points || 0);
@@ -300,7 +300,7 @@ const UpgradePage = () => {
             plan: selectedPlan,
             plan_expires_at: expiryDate.toISOString(),
           })
-          .eq("id", user.id);
+          .eq("user_id", user.id);
 
         if (profileError) throw profileError;
       }
