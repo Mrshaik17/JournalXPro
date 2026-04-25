@@ -34,7 +34,6 @@ import {
   Percent,
   Copy,
   ShieldCheck,
-  Wallet,
 } from "lucide-react";
 
 type PlanId = "basic" | "standard" | "elite";
@@ -101,18 +100,6 @@ const billingDiscount: Record<BillingCycle, number> = {
 
 const inrRate = 100;
 
-const paymentConfig = {
-  upiId: import.meta.env.VITE_PAYMENT_UPI_ID,
-  bankName: import.meta.env.VITE_PAYMENT_BANK_NAME,
-  bankAccount: import.meta.env.VITE_PAYMENT_BANK_ACCOUNT,
-  bankIfsc: import.meta.env.VITE_PAYMENT_BANK_IFSC,
-  walletName: import.meta.env.VITE_PAYMENT_WALLET_NAME,
-  eth: import.meta.env.VITE_PAYMENT_CRYPTO_ETH,
-  btc: import.meta.env.VITE_PAYMENT_CRYPTO_BTC,
-  ltc: import.meta.env.VITE_PAYMENT_CRYPTO_LTC,
-  usdt: import.meta.env.VITE_PAYMENT_CRYPTO_USDT,
-};
-
 const envCoupons = [
   {
     code: import.meta.env.VITE_COUPON_1_CODE || "",
@@ -167,6 +154,20 @@ const UpgradePage = () => {
       return data;
     },
     enabled: !!user?.id,
+  });
+
+  const { data: paymentMethods = [] } = useQuery({
+    queryKey: ["payment-methods"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_methods")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
   });
 
   const currentPlan = profile?.plan || "free";
@@ -515,167 +516,88 @@ const UpgradePage = () => {
 
               {paymentMethod === "upi" && (
                 <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-primary" />
-                    <p className="text-sm font-medium">UPI payment</p>
-                  </div>
+                  {paymentMethods
+                    .filter((m) => m.type === "upi")
+                    .map((method) => (
+                      <div key={method.id} className="space-y-2">
+                        <p className="text-sm font-medium">{method.name}</p>
 
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <p className="text-sm text-muted-foreground break-all">
-                      {paymentConfig.upiId}
-                    </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyText(paymentConfig.upiId, "UPI ID")}
-                    >
-                      <Copy className="h-4 w-4 mr-1" />
-                      Copy
-                    </Button>
-                  </div>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <p className="text-sm text-muted-foreground break-all">
+                            {method.value}
+                          </p>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyText(method.value, "UPI ID")}
+                          >
+                            <Copy className="h-4 w-4 mr-1" />
+                            Copy
+                          </Button>
+                        </div>
+
+                        {method.instructions && (
+                          <p className="text-xs text-muted-foreground">
+                            {method.instructions}
+                          </p>
+                        )}
+                      </div>
+                    ))}
                 </div>
               )}
 
               {paymentMethod === "bank" && (
                 <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-3">
-                  <p className="text-sm font-medium">Bank transfer details</p>
+                  {paymentMethods
+                    .filter((m) => m.type === "bank")
+                    .map((method) => (
+                      <div key={method.id} className="space-y-2">
+                        <p className="text-sm font-medium">{method.name}</p>
 
-                  <div className="space-y-3 text-sm text-muted-foreground">
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Bank</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground">{paymentConfig.bankName}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            copyText(paymentConfig.bankName, "Bank name")
-                          }
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+                        <p className="text-sm text-muted-foreground break-all">
+                          {method.value}
+                        </p>
 
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Account no.</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground">
-                          {paymentConfig.bankAccount}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            copyText(paymentConfig.bankAccount, "Account number")
-                          }
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
+                        {method.instructions && (
+                          <p className="text-xs text-muted-foreground">
+                            {method.instructions}
+                          </p>
+                        )}
                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <span>IFSC</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground">{paymentConfig.bankIfsc}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyText(paymentConfig.bankIfsc, "IFSC")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                    ))}
                 </div>
               )}
 
               {paymentMethod === "crypto" && (
                 <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-3">
-                  <p className="text-sm font-medium">
-                    Crypto payment details ({paymentConfig.walletName})
-                  </p>
+                  {paymentMethods
+                    .filter((m) => m.type === "crypto")
+                    .map((method) => (
+                      <div key={method.id} className="space-y-2">
+                        <p className="text-sm font-medium">
+                          {method.name} {method.network && `(${method.network})`}
+                        </p>
 
-                  <div className="space-y-3 text-sm text-muted-foreground">
-                    <div className="flex items-center justify-between gap-3">
-                      <span>ETH</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground break-all text-right">
-                          {paymentConfig.eth}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyText(paymentConfig.eth, "ETH address")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm break-all">{method.value}</span>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyText(method.value, method.name)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        {method.instructions && (
+                          <p className="text-xs text-muted-foreground">
+                            {method.instructions}
+                          </p>
+                        )}
                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <span>BTC</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground break-all text-right">
-                          {paymentConfig.btc}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyText(paymentConfig.btc, "BTC address")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <span>LTC</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground break-all text-right">
-                          {paymentConfig.ltc}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyText(paymentConfig.ltc, "LTC address")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <span>USDT</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground break-all text-right">
-                          {paymentConfig.usdt}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyText(paymentConfig.usdt, "USDT address")}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground pt-1">
-                      USDT supports all networks for now. Replace with exact network
-                      addresses later.
-                    </p>
-                  </div>
+                    ))}
                 </div>
               )}
 
