@@ -31,8 +31,6 @@ import {
   MapPin,
   Clock,
   Rocket,
-  Eye,
-  EyeOff,
   Download,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -136,23 +134,21 @@ const AppSettings = () => {
   });
 
   const { data: trades = [] } = useQuery({
-  queryKey: ["trades", user?.id],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("trades")
-      .select("*")
-      
-      .order("created_at", { ascending: false });
+    queryKey: ["trades", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("trades")
+        .select("*")
+        .eq("firebase_uid", user!.id)
+        .order("created_at", { ascending: false });
 
-    if (error) throw error;
-    return data || [];
-  },
-  enabled: !!user?.id,
-});
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
   const [fullName, setFullName] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showNewPw, setShowNewPw] = useState(false);
   const [deleteAccountId, setDeleteAccountId] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [timezone, setTimezone] = useState("UTC");
@@ -185,46 +181,33 @@ const AppSettings = () => {
   }, [profile]);
 
   const updateProfile = useMutation({
-  mutationFn: async () => {
-    if (!user?.id) throw new Error("User not found");
+    mutationFn: async () => {
+      if (!user?.id) throw new Error("User not found");
 
-    const { error } = await supabase
-      .from("profiles")
-      .upsert(
-        {
-          id: user.id,              // ✅🔥 ADD THIS (VERY IMPORTANT)
-          firebase_uid: user.id,
-          email: user.email,
-          full_name: fullName,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "firebase_uid" }
-      );
+      const { error } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            firebase_uid: user.id,
+            email: user.email,
+            full_name: fullName,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "firebase_uid" }
+        );
 
-    if (error) throw error;
-  },
-
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
-    toast.success("Profile updated successfully.");
-  },
-
-  onError: (err: any) => {
-    toast.error(err.message || "Failed to update profile.");
-  },
-});
-
-  const updatePassword = useMutation({
-    mutationFn: async (pw: string) => {
-      const { error } = await supabase.auth.updateUser({ password: pw });
       if (error) throw error;
     },
+
     onSuccess: () => {
-      toast.success("Password updated!");
-      setNewPassword("");
-      setConfirmPassword("");
+      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
+      toast.success("Profile updated successfully.");
     },
-    onError: (err: any) => toast.error(err.message),
+
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update profile.");
+    },
   });
 
   const deleteAccountMutation = useMutation({
@@ -248,106 +231,83 @@ const AppSettings = () => {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const handlePasswordChange = () => {
-    if (newPassword.length < 6) {
-      toast.error("Min 6 characters");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords don't match");
-      return;
-    }
-
-    updatePassword.mutate(newPassword);
-  };
   const storedReferralCode = localStorage.getItem("referral_code");
-const cleanReferralCode = storedReferralCode?.trim().toUpperCase() || null;
+  const cleanReferralCode = storedReferralCode?.trim().toUpperCase() || null;
 
   const saveBilling = async () => {
-  if (!user?.id) {
-    toast.error("User not found.");
-    return;
-  }
+    if (!user?.id) {
+      toast.error("User not found.");
+      return;
+    }
 
-  if (
-    !billingName.trim() ||
-    !billingEmail.trim() ||
-    !billingPhone.trim() ||
-    !billingStreet.trim() ||
-    !billingCity.trim() ||
-    !billingState.trim() ||
-    !billingCountry.trim() ||
-    !billingPincode.trim()
-  ) {
-    toast.error("All billing fields are required.");
-    return;
-  }
+    if (
+      !billingName.trim() ||
+      !billingEmail.trim() ||
+      !billingPhone.trim() ||
+      !billingStreet.trim() ||
+      !billingCity.trim() ||
+      !billingState.trim() ||
+      !billingCountry.trim() ||
+      !billingPincode.trim()
+    ) {
+      toast.error("All billing fields are required.");
+      return;
+    }
 
-  try {
-    // 🔥 GET REFERRAL FROM LOCAL STORAGE
-    
+    try {
+      let referredBy: string | null = null;
 
-let referredBy: string | null = null;
+      if (cleanReferralCode) {
+        const { data: referral } = await supabase
+          .from("referrals")
+          .select("id, code")
+          .ilike("code", cleanReferralCode)
+          .maybeSingle();
 
-// 🔥 FIND referral id
-if (cleanReferralCode) {
-  const { data: referral } = await supabase
-  .from("referrals")
-  .select("id, code")
-  .ilike("code", cleanReferralCode) // 🔥 case-insensitive
-  .maybeSingle();
+        console.log("Entered Code:", cleanReferralCode);
+        console.log("Matched Referral:", referral);
 
-console.log("Entered Code:", cleanReferralCode);
-console.log("Matched Referral:", referral);
+        if (referral) {
+          referredBy = referral.id;
+        }
+      }
 
-  if (referral) {
-    referredBy = referral.id;
-  }
-}
+      const { error } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            firebase_uid: user.id,
+            email: user.email,
+            billing_name: billingName.trim(),
+            billing_email: billingEmail.trim(),
+            billing_phone: billingPhone.trim(),
+            billing_street: billingStreet.trim(),
+            billing_city: billingCity.trim(),
+            billing_district: billingDistrict.trim(),
+            billing_state: billingState.trim(),
+            billing_country: billingCountry.trim(),
+            billing_pincode: billingPincode.trim(),
+            referral_code: cleanReferralCode,
+            referred_by: referredBy,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "firebase_uid" }
+        );
 
-// 🔥 UPDATE PROFILE WITH REFERRAL + BILLING
-const { error } = await supabase
-  .from("profiles")
-  .upsert(
-    {
-      id: user.id,
-      firebase_uid: user.id,
-      email: user.email,
+      if (error) throw error;
 
-      billing_name: billingName.trim(),
-      billing_email: billingEmail.trim(),
-      billing_phone: billingPhone.trim(),
-      billing_street: billingStreet.trim(),
-      billing_city: billingCity.trim(),
-      billing_district: billingDistrict.trim(),
-      billing_state: billingState.trim(),
-      billing_country: billingCountry.trim(),
-      billing_pincode: billingPincode.trim(),
+      if (cleanReferralCode) {
+        localStorage.removeItem("referral_code");
+      }
 
-      referral_code: cleanReferralCode,
-      referred_by: referredBy,
-
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "firebase_uid" }
-  );
-
-if (error) throw error;
-
-// 🔥 CLEAR AFTER USE
-if (cleanReferralCode) {
-  localStorage.removeItem("referral_code");
-}
-
-    queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
-
-    toast.success("Billing + referral saved successfully!");
-  } catch (err: any) {
-    console.error("Billing save error:", err);
-    toast.error(err.message || "Failed to save billing.");
-  }
-};
+      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
+      toast.success("Billing + referral saved successfully!");
+    } catch (err: any) {
+      console.error("Billing save error:", err);
+      toast.error(err.message || "Failed to save billing.");
+    }
+  };
 
   const saveTimezone = async () => {
     if (!user?.id) {
@@ -373,305 +333,465 @@ if (cleanReferralCode) {
       toast.error(err.message || "Failed to save timezone.");
     }
   };
-  
-
-  
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
   };
+
   const generatePnLChart = (trades: any[]) => {
-  return new Promise<string>((resolve) => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 600;
-    canvas.height = 300;
+    return new Promise<string>((resolve) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 600;
+      canvas.height = 300;
 
-    const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve("");
 
-    if (!ctx) return resolve("");
+      const sorted = [...trades].sort(
+        (a, b) =>
+          new Date(a.trade_date || a.created_at).getTime() -
+          new Date(b.trade_date || b.created_at).getTime()
+      );
 
-    // SORT BY DATE
-    const sorted = [...trades].sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() -
-        new Date(b.created_at).getTime()
-    );
+      let cumulative = 0;
+      const labels: string[] = [];
+      const data: number[] = [];
 
-    // CUMULATIVE PNL
-    let cumulative = 0;
-    const labels: string[] = [];
-    const data: number[] = [];
+      sorted.forEach((t) => {
+        cumulative += Number(t.pnl_amount || 0);
+        labels.push(
+          new Date(t.trade_date || t.created_at).toLocaleDateString()
+        );
+        data.push(cumulative);
+      });
 
-    sorted.forEach((t) => {
-      cumulative += Number(t.pnl_amount || 0);
-      labels.push(new Date(t.created_at).toLocaleDateString());
-      data.push(cumulative);
+      new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "PnL",
+              data,
+              borderWidth: 2,
+              tension: 0.3,
+            },
+          ],
+        },
+        options: {
+          responsive: false,
+          plugins: { legend: { display: false } },
+        },
+      });
+
+      setTimeout(() => {
+        resolve(canvas.toDataURL("image/png"));
+      }, 500);
     });
+  };
 
-    new Chart(ctx, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [
-          {
-            label: "PnL",
-            data,
-            borderWidth: 2,
-            tension: 0.3,
-          },
-        ],
-      },
-      options: {
-        responsive: false,
-        plugins: { legend: { display: false } },
-      },
-    });
-
-    setTimeout(() => {
-      resolve(canvas.toDataURL("image/png"));
-    }, 500);
+  const normalizeTrade = (t: any) => ({
+    id: t.id || "",
+    accountId: t.account_id || t.accountId || "",
+    pair: t.pair || "",
+    direction: t.direction || "",
+    went: t.went || "",
+    lotSize: t.lot_size ?? t.lotSize ?? "",
+    bias: t.bias || "",
+    pips: t.pips ?? "",
+    entryPrice: t.entry_price ?? t.entryPrice ?? "",
+    stopLoss: t.stop_loss ?? t.stopLoss ?? "",
+    takeProfit: t.take_profit ?? t.takeProfit ?? "",
+    result: t.result || "",
+    pnlAmount: Number(t.pnl_amount || t.pnlAmount || 0),
+    tradeDate: t.trade_date || t.tradeDate || t.created_at || "",
+    entryTime: t.entry_time || t.entryTime || "",
+    exitTime: t.exit_time || t.exitTime || "",
+    followPlan:
+      typeof t.follow_plan === "boolean"
+        ? t.follow_plan
+        : typeof t.followPlan === "boolean"
+        ? t.followPlan
+        : "",
+    notes: t.note || t.notes || "",
+    tags: Array.isArray(t.tags) ? t.tags.join(", ") : t.tags || "",
+    customFields: Array.isArray(t.custom_fields)
+      ? JSON.stringify(t.custom_fields)
+      : Array.isArray(t.customFields)
+      ? JSON.stringify(t.customFields)
+      : t.custom_fields || t.customFields || "",
+    screenshotUrl: t.screenshot_url || "",
+    createdAt: t.created_at || "",
   });
-};
+
+  const getTradeStats = (tradeList: any[]) => {
+    const normalized = tradeList.map(normalizeTrade);
+
+    const totalTrades = normalized.length;
+    const totalPnL = normalized.reduce((sum, t) => sum + Number(t.pnlAmount || 0), 0);
+
+    const wins = normalized.filter(
+      (t) =>
+        Number(t.pnlAmount) > 0 ||
+        String(t.result).toLowerCase() === "win"
+    ).length;
+
+    const losses = normalized.filter(
+      (t) =>
+        Number(t.pnlAmount) < 0 ||
+        String(t.result).toLowerCase() === "loss"
+    ).length;
+
+    const breakeven = normalized.filter(
+      (t) =>
+        Number(t.pnlAmount) === 0 ||
+        String(t.result).toLowerCase() === "breakeven"
+    ).length;
+
+    const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
+
+    return {
+      normalized,
+      totalTrades,
+      totalPnL,
+      wins,
+      losses,
+      breakeven,
+      winRate,
+    };
+  };
 
   const exportUserData = async (format: "pdf" | "excel") => {
-    // 🔥 CAPTURE CHART FROM SCREEN
-const chartElement = document.getElementById("report-chart");
+  if (!user?.id) {
+    toast.error("User not found.");
+    return;
+  }
 
-let chartImage = null;
+  const filteredAccounts =
+    selectedAccountId === "all"
+      ? accounts
+      : accounts.filter((a: any) => a.id === selectedAccountId);
 
-if (chartElement) {
-  const canvas = await html2canvas(chartElement);
-  chartImage = canvas.toDataURL("image/png");
-}
-    const filteredAccounts =
-  selectedAccountId === "all"
-    ? accounts
-    : accounts.filter((a) => a.id === selectedAccountId);
+  if (!filteredAccounts.length) {
+    toast.error("No accounts found for export.");
+    return;
+  }
 
-// 🔥 ALWAYS FETCH LATEST TRADES FROM DB
-const { data: latestTrades, error } = await supabase
-  .from("trades")
-  .select("*")
-  
+  const accountIds = filteredAccounts.map((a: any) => a.id);
 
-if (error) {
-  toast.error("Failed to fetch latest trades");
-  return;
-}
+  const { data: latestTrades, error } = await supabase
+    .from("trades")
+    .select("*")
+    .in("account_id", accountIds)
+    .order("created_at", { ascending: false });
 
-// 🔥 FILTER BASED ON ACCOUNT
-const filteredTrades =
-  selectedAccountId === "all"
-    ? latestTrades
-    : latestTrades.filter((t: any) => t.account_id === selectedAccountId);
-    const totalPnL = filteredTrades.reduce(
-  (sum, t) => sum + Number(t.pnl_amount || 0),
-  0
-);
+  if (error) {
+    console.error("Trade export fetch error:", error);
+    toast.error(error.message || "Failed to fetch latest trades");
+    return;
+  }
 
-const totalTrades = filteredTrades.length;
+  const normalizedTrades = (latestTrades || []).map((t: any) => ({
+    id: t.id || "",
+    accountId: t.account_id || "",
+    pair: t.pair || "",
+    direction: t.direction || "",
+    went: t.went || "",
+    lotSize: t.lot_size ?? "",
+    bias: t.bias || "",
+    pips: t.pips ?? "",
+    entryPrice: t.entry_price ?? "",
+    stopLoss: t.stop_loss ?? "",
+    takeProfit: t.take_profit ?? "",
+    result: t.result || "",
+    pnlAmount: Number(t.pnl_amount || 0),
+    tradeDate: t.trade_date || t.created_at || "",
+    entryTime: t.entry_time || "",
+    exitTime: t.exit_time || "",
+    followPlan:
+      typeof t.follow_plan === "boolean" ? t.follow_plan : "",
+    notes: t.note || t.notes || "",
+    tags: Array.isArray(t.tags) ? t.tags.join(", ") : t.tags || "",
+    customFields: Array.isArray(t.custom_fields)
+      ? JSON.stringify(t.custom_fields)
+      : t.custom_fields || "",
+    screenshotUrl: t.screenshot_url || "",
+    createdAt: t.created_at || "",
+  }));
 
-const wins = filteredTrades.filter(
-  (t) => t.result === "win"
-).length;
+  const totalTrades = normalizedTrades.length;
 
-const losses = filteredTrades.filter(
-  (t) => t.result === "loss"
-).length;
+  const wins = normalizedTrades.filter(
+    (t: any) =>
+      Number(t.pnlAmount) > 0 || String(t.result).toLowerCase() === "win"
+  ).length;
 
-const winRate = totalTrades
-  ? ((wins / totalTrades) * 100).toFixed(1)
-  : 0;
+  const losses = normalizedTrades.filter(
+    (t: any) =>
+      Number(t.pnlAmount) < 0 || String(t.result).toLowerCase() === "loss"
+  ).length;
+
+  const breakeven = normalizedTrades.filter(
+    (t: any) =>
+      Number(t.pnlAmount) === 0 ||
+      String(t.result).toLowerCase() === "breakeven"
+  ).length;
+
+  const totalPnL = normalizedTrades.reduce(
+    (sum: number, t: any) => sum + Number(t.pnlAmount || 0),
+    0
+  );
+
+  const winRate =
+    totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
+
   if (format === "pdf") {
-    const chartImage = await generatePnLChart(filteredTrades);
-    const doc = new jsPDF();
+    const chartImage = await generatePnLChart(latestTrades || []);
+    const doc = new jsPDF("l", "mm", "a4");
 
-    // 🔥 HEADER DESIGN
-doc.setFillColor(15, 23, 42); // dark bg
-doc.rect(0, 0, 210, 25, "F");
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, 297, 25, "F");
 
-doc.setTextColor(255, 255, 255);
-doc.setFontSize(16);
-doc.text("JournalXPro Trading Report", 14, 15);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.text("JournalXPro Trading Report", 14, 15);
 
-doc.setFontSize(9);
-doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 21);
+    doc.setFontSize(9);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 21);
 
-// reset color
-doc.setTextColor(0, 0, 0);
+    doc.setTextColor(0, 0, 0);
 
-   
+    let currentY = 32;
 
-    let currentY = 30;
-    // 🔥 ANALYTICS CALCULATION
-const totalTrades = filteredTrades.length;
-const totalPnL = filteredTrades.reduce(
-  (sum, t) => sum + Number(t.pnl_amount || 0),
-  0
-);
+    doc.setFillColor(240, 240, 240);
+    doc.roundedRect(14, currentY, 269, 28, 3, 3, "F");
 
-const wins = filteredTrades.filter(
-  (t) => Number(t.pnl_amount) > 0
-).length;
+    doc.setFontSize(11);
+    doc.text(`Total Trades: ${totalTrades}`, 18, currentY + 8);
+    doc.text(`Accuracy: ${winRate}%`, 18, currentY + 16);
+    doc.text(`Breakeven: ${breakeven}`, 18, currentY + 24);
 
-const losses = filteredTrades.filter(
-  (t) => Number(t.pnl_amount) < 0
-).length;
+    doc.text(`Total PnL: $${totalPnL.toFixed(2)}`, 120, currentY + 8);
+    doc.text(`Wins: ${wins}`, 120, currentY + 16);
+    doc.text(`Losses: ${losses}`, 120, currentY + 24);
 
-const winRate = totalTrades
-  ? ((wins / totalTrades) * 100).toFixed(1)
-  : 0;
+    doc.text(
+      `Scope: ${
+        selectedAccountId === "all"
+          ? "All Accounts"
+          : filteredAccounts[0]?.name || "Selected Account"
+      }`,
+      210,
+      currentY + 8
+    );
+    doc.text(`Accounts: ${filteredAccounts.length}`, 210, currentY + 16);
+    doc.text(`Rows Exported: ${normalizedTrades.length}`, 210, currentY + 24);
 
-// 🔥 ANALYTICS BOX DESIGN
-doc.setFillColor(240, 240, 240);
-doc.roundedRect(14, currentY, 180, 25, 3, 3, "F");
+    currentY += 38;
 
-doc.setFontSize(11);
-doc.text(`Total Trades: ${totalTrades}`, 18, currentY + 8);
-doc.text(`Win Rate: ${winRate}%`, 18, currentY + 14);
+    if (chartImage && normalizedTrades.length > 0) {
+      doc.setFontSize(13);
+      doc.text("Cumulative PnL", 14, currentY);
+      currentY += 4;
+      doc.addImage(chartImage, "PNG", 14, currentY, 120, 50);
+      currentY += 60;
+    }
 
-doc.text(`Total PnL: $${totalPnL.toFixed(2)}`, 110, currentY + 8);
-doc.text(`Wins: ${wins} | Losses: ${losses}`, 110, currentY + 14);
-
-currentY += 35;
-
-    // ======================
-    // 🔹 ACCOUNTS SUMMARY
-    // ======================
     doc.setFontSize(14);
     doc.text("Accounts Summary", 14, currentY);
     currentY += 6;
 
     filteredAccounts.forEach((acc: any) => {
-  const pnl =
-    Number(acc.current_balance || 0) -
-    Number(acc.starting_balance || 0);
+      const accountTrades = normalizedTrades.filter(
+        (t: any) => t.accountId === acc.id
+      );
 
-  doc.setFontSize(10);
+      const accountPnL = accountTrades.reduce(
+        (sum: number, t: any) => sum + Number(t.pnlAmount || 0),
+        0
+      );
 
-  doc.text(`Account: ${acc.name}`, 14, currentY);
-  currentY += 5;
+      doc.setFontSize(10);
+      doc.text(`Account: ${acc.name}`, 14, currentY);
+      currentY += 5;
 
-  doc.text(
-    `Initial: $${Number(acc.starting_balance).toFixed(2)} | Current: $${Number(
-      acc.current_balance
-    ).toFixed(2)} | PnL: $${pnl.toFixed(2)}`,
-    14,
-    currentY
-  );
+      doc.text(
+        `Initial: $${Number(acc.starting_balance || 0).toFixed(
+          2
+        )} | Current: $${Number(acc.current_balance || 0).toFixed(
+          2
+        )} | Trades: ${accountTrades.length} | PnL: $${accountPnL.toFixed(2)}`,
+        14,
+        currentY
+      );
 
-  currentY += 8;
-});
-
-    currentY += 4;
-
-    // ======================
-    // 🔹 TRADES PER ACCOUNT
-    // ======================
+      currentY += 8;
+    });
 
     for (const acc of filteredAccounts) {
-  const accTrades = filteredTrades.filter(
-    (t: any) => t.account_id === acc.id
-  );
+      const accTrades = normalizedTrades.filter((t: any) => t.accountId === acc.id);
 
-  if (accTrades.length === 0) continue;
+      if (accTrades.length === 0) continue;
 
-  doc.addPage();
+      doc.addPage();
+      doc.setFontSize(14);
+      doc.text(`Account: ${acc.name}`, 14, 15);
 
-  doc.setFontSize(14);
-  doc.text(`Account: ${acc.name}`, 14, 15);
+      const tableData = accTrades.map((t: any) => [
+        t.tradeDate ? new Date(t.tradeDate).toLocaleDateString() : "-",
+        t.pair || "-",
+        t.direction || "-",
+        t.went || "-",
+        t.lotSize || "-",
+        t.bias || "-",
+        t.pips || "-",
+        t.entryPrice || "-",
+        t.stopLoss || "-",
+        t.takeProfit || "-",
+        t.result || "-",
+        t.pnlAmount ?? "-",
+        t.entryTime || "-",
+        t.exitTime || "-",
+        t.followPlan === "" ? "-" : t.followPlan ? "Yes" : "No",
+        t.notes || "-",
+        t.tags || "-",
+        t.customFields || "-",
+      ]);
 
-  const tableData = accTrades.map((t: any) => [
-    new Date(t.created_at).toLocaleDateString(),
-    t.pair || "-",
-    t.direction || "-",
-    t.lot_size || "-",
-    t.entry_price || "-",
-    t.stop_loss || "-",
-    t.take_profit || "-",
-    t.result || "-",
-    t.pnl_amount || "-",
-    t.note || "-",
-    t.entry_time || "-",
-    t.exit_time || "-",
-    t.screenshot_url || "-",
-  ]);
-
-  autoTable(doc, {
-    startY: 22,
-    head: [[
-      "Date",
-      "Pair",
-      "Type",
-      "Lot",
-      "Entry",
-      "SL",
-      "TP",
-      "Result",
-      "PnL",
-      "Note",
-      "Entry Time",
-      "Exit Time",
-      "Screenshot"
-    ]],
-    body: tableData,
-    styles: { fontSize: 7 },
-  });
-}
+      autoTable(doc, {
+        startY: 22,
+        head: [[
+          "Date",
+          "Pair",
+          "Direction",
+          "Went",
+          "Lot Size",
+          "Bias",
+          "Pips",
+          "Entry",
+          "SL",
+          "TP",
+          "Result",
+          "PnL",
+          "Entry Time",
+          "Exit Time",
+          "Follow Plan",
+          "Notes",
+          "Tags",
+          "Custom Fields",
+        ]],
+        body: tableData,
+        styles: { fontSize: 6.5, cellPadding: 2 },
+        headStyles: { fillColor: [15, 23, 42] },
+        margin: { left: 8, right: 8 },
+        tableWidth: "auto",
+      });
+    }
 
     doc.save("JournalXPro_Report.pdf");
-    toast.success("Custom PDF exported!");
-  }
+    toast.success("PDF exported successfully!");
+  } else {
+  const wb = XLSX.utils.book_new();
 
-  // ======================
-  // 🔹 KEEP YOUR EXCEL SAME
-  // ======================
-  else {
-    const wb = XLSX.utils.book_new();
+  const summaryData = [
+    {
+      Metric: "Scope",
+      Value:
+        selectedAccountId === "all"
+          ? "All Accounts"
+          : filteredAccounts[0]?.name || "-",
+    },
+    { Metric: "Accounts", Value: filteredAccounts.length },
+    { Metric: "Total Trades", Value: totalTrades },
+    { Metric: "Accuracy %", Value: Number(winRate) },
+    { Metric: "Wins", Value: wins },
+    { Metric: "Losses", Value: losses },
+    { Metric: "Breakeven", Value: breakeven },
+    { Metric: "Total PnL", Value: totalPnL.toFixed(2) },
+  ];
 
-// ======================
-// 🔹 ACCOUNTS CLEAN DATA
-// ======================
-const accountData = filteredAccounts.map((acc: any) => {
-  const pnl =
-    Number(acc.current_balance || 0) -
-    Number(acc.starting_balance || 0);
+  const accountData = filteredAccounts.map((acc: any) => {
+    const accountTrades = normalizedTrades.filter(
+      (t: any) => t.accountId === acc.id
+    );
 
-  return {
-    "Account Name": acc.name,
-    "Initial Balance": acc.starting_balance,
-    "Current Balance": acc.current_balance,
-    "PnL": pnl,
-  };
-});
+    const accountPnL = accountTrades.reduce(
+      (sum: number, t: any) => sum + Number(t.pnlAmount || 0),
+      0
+    );
 
-const accountSheet = XLSX.utils.json_to_sheet(accountData);
-XLSX.utils.book_append_sheet(wb, accountSheet, "Accounts");
+    return {
+      "Account Name": acc.name || "-",
+      "Initial Balance": Number(acc.starting_balance || 0),
+      "Current Balance": Number(acc.current_balance || 0),
+      "Trades": accountTrades.length,
+      "PnL": accountPnL,
+      "Created At": acc.created_at
+        ? new Date(acc.created_at).toLocaleString()
+        : "-",
+    };
+  });
 
-// ======================
-// 🔹 TRADES CLEAN DATA
-// ======================
-const tradeData = filteredTrades.map((t: any) => ({
-  "Date": new Date(t.created_at).toLocaleDateString(),
-  "Pair": t.pair || "-",
-  "Type": t.direction || "-",
-  "Lot": t.lot_size || "-",
-  "Entry": t.entry_price || "-",
-  "SL": t.stop_loss || "-",
-  "TP": t.take_profit || "-",
-  "Result": t.result || "-",
-  "PnL": t.pnl_amount || "-",
-  "Note": t.note || "-",
-}));
+  const tradeData = normalizedTrades.map((t: any) => ({
+    "Account Name":
+      accounts.find((a: any) => a.id === t.accountId)?.name || "-",
+    "Date": t.tradeDate ? new Date(t.tradeDate).toLocaleDateString() : "-",
+    "Pair": t.pair || "-",
+    "Direction": t.direction || "-",
+    "Went": t.went || "-",
+    "Lot Size": t.lotSize || "-",
+    "Bias": t.bias || "-",
+    "Pips": t.pips || "-",
+    "Entry": t.entryPrice || "-",
+    "SL": t.stopLoss || "-",
+    "TP": t.takeProfit || "-",
+    "Result": t.result || "-",
+    "PnL": t.pnlAmount ?? "-",
+    "Entry Time": t.entryTime || "-",
+    "Exit Time": t.exitTime || "-",
+    "Follow Plan": t.followPlan === "" ? "-" : t.followPlan ? "Yes" : "No",
+    "Notes": t.notes || "-",
+    "Tags": t.tags || "-",
+    "Custom Fields": t.customFields || "-",
+  }));
 
-const tradeSheet = XLSX.utils.json_to_sheet(tradeData);
-XLSX.utils.book_append_sheet(wb, tradeSheet, "Trades");
+  const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+  const accountSheet = XLSX.utils.json_to_sheet(accountData);
 
-// ======================
-XLSX.writeFile(wb, "JournalXPro_Report.xlsx");
-toast.success("Clean Excel exported!");
-  }
+  const tradeHeaders = [
+    "Account Name",
+    "Date",
+    "Pair",
+    "Direction",
+    "Went",
+    "Lot Size",
+    "Bias",
+    "Pips",
+    "Entry",
+    "SL",
+    "TP",
+    "Result",
+    "PnL",
+    "Entry Time",
+    "Exit Time",
+    "Follow Plan",
+    "Notes",
+    "Tags",
+    "Custom Fields",
+  ];
+
+  const tradeSheet = XLSX.utils.json_to_sheet(tradeData, {
+    header: tradeHeaders,
+  });
+
+  XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+  XLSX.utils.book_append_sheet(wb, accountSheet, "Accounts");
+  XLSX.utils.book_append_sheet(wb, tradeSheet, "Trades");
+
+  XLSX.writeFile(wb, "JournalXPro_Report.xlsx");
+  toast.success("Excel exported successfully!");
+}
 };
 
   const planBadge = (plan: string) => {
@@ -1037,36 +1157,12 @@ toast.success("Clean Excel exported!");
             <div className="rounded-lg border border-border bg-card p-6 space-y-5">
               <div>
                 <h3 className="font-semibold mb-3">Theme</h3>
-                <div className="flex gap-3">
-                  {[
-                    {
-                      id: "dark" as const,
-                      label: "Dark",
-                      desc: "Default dark theme",
-                    },
-                    {
-                      id: "light" as const,
-                      label: "Light",
-                      desc: "Clean light mode",
-                    },
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setTheme(t.id)}
-                      className={`flex-1 p-3 rounded-lg border text-left transition-all ${
-                        theme === t.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border bg-background hover:border-muted-foreground/30"
-                      }`}
-                    >
-                      <span className="text-sm font-medium block">
-                        {t.label}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {t.desc}
-                      </span>
-                    </button>
-                  ))}
+
+                <div className="p-3 rounded-lg border border-primary bg-primary/5">
+                  <span className="text-sm font-medium block">Dark Mode</span>
+                  <span className="text-xs text-muted-foreground">
+                    Default theme (only available mode)
+                  </span>
                 </div>
               </div>
             </div>
@@ -1096,95 +1192,44 @@ toast.success("Clean Excel exported!");
               </Button>
             </div>
 
-            
-              <div className="rounded-lg border border-border bg-card p-6 space-y-4">
-  <h3 className="font-semibold flex items-center gap-2">
-    <Download className="h-4 w-4 text-primary" />
-    Export My Data
-  </h3>
+            <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Download className="h-4 w-4 text-primary" />
+                Export My Data
+              </h3>
 
-  {/* 🔽 Account Selector */}
-  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-    <SelectTrigger className="bg-background border-border max-w-sm">
-      <SelectValue placeholder="Select account" />
-    </SelectTrigger>
+              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                <SelectTrigger className="bg-background border-border max-w-sm">
+                  <SelectValue placeholder="Select account" />
+                </SelectTrigger>
 
-    <SelectContent>
-      <SelectItem value="all">All Accounts</SelectItem>
+                <SelectContent>
+                  <SelectItem value="all">All Accounts</SelectItem>
 
-      {accounts.map((acc: any)=> (
-        <SelectItem key={acc.id} value={acc.id}>
-          {acc.name}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
+                  {accounts.map((acc: any) => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {acc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-  {/* 🔽 Buttons */}
-  <div className="flex gap-2">
-    <Button onClick={() => exportUserData("pdf")}>
-      Export PDF
-    </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => exportUserData("pdf")}>
+                  Export PDF
+                </Button>
 
-    <Button onClick={() => exportUserData("excel")}>
-      Export Excel
-    </Button>
-  </div>
-</div>
-            
+                <Button onClick={() => exportUserData("excel")}>
+                  Export Excel
+                </Button>
+              </div>
+            </div>
           </motion.div>
         </TabsContent>
 
         <TabsContent value="security">
           <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-card p-6 space-y-4">
-              <h3 className="font-semibold">Change Password</h3>
-
-              <div className="relative">
-                <label className="text-xs text-muted-foreground block mb-1">
-                  New Password
-                </label>
-                <Input
-                  type={showNewPw ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  className="bg-background border-border max-w-sm pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPw(!showNewPw)}
-                  className="absolute right-3 top-7 text-muted-foreground hover:text-foreground"
-                >
-                  {showNewPw ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">
-                  Confirm Password
-                </label>
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter password"
-                  className="bg-background border-border max-w-sm"
-                />
-              </div>
-
-              <Button
-                onClick={handlePasswordChange}
-                disabled={updatePassword.isPending}
-                className="bg-primary text-primary-foreground"
-              >
-                {updatePassword.isPending ? "Updating..." : "Update Password"}
-              </Button>
-            </div>
+            <div className="rounded-lg border border-border bg-card p-6 space-y-4"></div>
 
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 space-y-4">
               <div className="flex items-center gap-2">
