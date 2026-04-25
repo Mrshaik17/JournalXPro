@@ -439,31 +439,53 @@ const canAccessAI = isElite;
     };
 
     trades.forEach((t) => {
-      if (!t.entry_time) return;
-      const hour = new Date(t.entry_time).getUTCHours();
-      let session = "Asia";
-      if (hour >= 7 && hour < 12) session = "London";
-      else if (hour >= 12 && hour < 21) session = "New York";
+  if (!t.entry_time) return;
 
-      sessionPerf[session].total++;
-      if (t.result === "win") sessionPerf[session].wins++;
-      sessionPerf[session].pnl += toNumber(t.pnl_amount);
-    });
+  // ✅ extract hour manually (NO Date conversion)
+  const hour = parseInt(t.entry_time.split("T")[1].slice(0, 2));
+
+  let session = "Asia";
+
+  // ✅ Asia: 4 AM – 11 AM
+  if (hour >= 4 && hour < 11) {
+    session = "Asia";
+  }
+
+  // ✅ London: 12 PM – 5 PM
+  else if (hour >= 12 && hour < 17) {
+    session = "London";
+  }
+
+  // ✅ New York: 5:30 PM – 12 AM
+  else if (hour >= 17) {
+    session = "New York";
+  }
+
+  sessionPerf[session].total++;
+
+  if (t.result === "win") {
+    sessionPerf[session].wins++;
+  }
+
+  sessionPerf[session].pnl += Number(t.pnl_amount || 0);
+});
 
     const hourPerf: Record<number, { pnl: number; total: number }> = {};
     trades.forEach((t) => {
       if (!t.entry_time) return;
-      const hour = new Date(t.entry_time).getHours();
+      const hour = parseInt(t.entry_time.split("T")[1].slice(0, 2));
       if (!hourPerf[hour]) hourPerf[hour] = { pnl: 0, total: 0 };
       hourPerf[hour].pnl += toNumber(t.pnl_amount);
       hourPerf[hour].total++;
     });
 
     const hourEntries = Object.entries(hourPerf);
-    const bestHour =
-      hourEntries.sort((a, b) => b[1].pnl - a[1].pnl)[0] || null;
-    const worstHour =
-      hourEntries.sort((a, b) => a[1].pnl - b[1].pnl)[0] || null;
+
+// best
+const bestHour = [...hourEntries].sort((a, b) => b[1].pnl - a[1].pnl)[0] || null;
+
+// worst
+const worstHour = [...hourEntries].sort((a, b) => a[1].pnl - b[1].pnl)[0] || null;
 
     const tagPerf: Record<string, { wins: number; total: number; pnl: number }> =
       {};

@@ -479,14 +479,14 @@ if (count >= planAccess.maxTrades) {
     trade_date: tradeDateTime,
 
     entry_time:
-      form.tradeDate && form.entryTime
-        ? `${form.tradeDate}T${form.entryTime}:00`
-        : null,
+  form.tradeDate && form.entryTime
+    ? `${form.tradeDate}T${form.entryTime}:00`
+    : null,
 
-    exit_time:
-      form.tradeDate && form.exitTime
-        ? `${form.tradeDate}T${form.exitTime}:00`
-        : null,
+exit_time:
+  form.tradeDate && form.exitTime
+    ? `${form.tradeDate}T${form.exitTime}:00`
+    : null,
 
     follow_plan: form.followPlan,
     notes: form.notes || null,
@@ -599,11 +599,12 @@ if (count >= planAccess.maxTrades) {
       endBalance: trade.end_balance?.toString() || "",
       tradeDate: trade.trade_date ? trade.trade_date.split("T")[0] : "",
       entryTime: trade.entry_time
-        ? format(new Date(trade.entry_time), "yyyy-MM-dd'T'HH:mm")
-        : "",
-      exitTime: trade.exit_time
-        ? format(new Date(trade.exit_time), "yyyy-MM-dd'T'HH:mm")
-        : "",
+  ? trade.entry_time.split("T")[1].slice(0, 5)
+  : "",
+
+exitTime: trade.exit_time
+  ? trade.exit_time.split("T")[1].slice(0, 5)
+  : "",
       followPlan: trade.follow_plan ?? true,
       notes: trade.notes || "",
       tags: (trade.tags || []).join(", "),
@@ -1106,8 +1107,12 @@ if (count >= planAccess.maxTrades) {
                     className="border-b border-border last:border-0 hover:bg-muted/10"
                   >
                     <td className="p-3 font-mono text-xs">
-                      {format(new Date(trade.trade_date || trade.created_at), "MMM dd, HH:mm")}
-                    </td>
+  {trade.trade_date
+    ? `${format(new Date(trade.trade_date), "MMM dd")}${
+        trade.entry_time ? `, ${trade.entry_time.slice(11,16)}` : ""
+      }`
+    : "—"}
+</td>
                     <td className="p-3 text-xs font-mono">{trade.pair || "—"}</td>
                     <td className="p-3 text-xs">{trade.direction || "—"}</td>
                     <td className="p-3 text-xs">{account?.name || "—"}</td>
