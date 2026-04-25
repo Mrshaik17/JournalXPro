@@ -142,16 +142,20 @@ const UpgradePage = () => {
   const { data: profile, isLoading: profileLoading } = useQuery({
   queryKey: ["profile", user?.id],
   queryFn: async () => {
-    if (!user?.id) return {};
+    if (!user?.id) return null;
 
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("firebase_uid", user.id) // ✅ FIXED COLUMN
-      .maybeSingle(); // ✅ PREVENTS 406 ERROR
+      .eq("user_id", user.id) // ✅ IMPORTANT
+      .single();
 
-    if (error) throw error;
-    return data || {}; // ✅ PREVENTS undefined error
+    if (error) {
+      console.error(error);
+      return null; // 🔥 FIX (no crash)
+    }
+
+    return data ?? null; // 🔥 FIX
   },
   enabled: !!user?.id,
 });
