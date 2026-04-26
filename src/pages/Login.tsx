@@ -1,5 +1,16 @@
 import { supabase } from "@/integrations/supabase/client";
-import { Zap, Check, X, Sparkles, ShieldCheck, ArrowRight, Mail, Lock, UserPlus, KeyRound } from "lucide-react";
+import {
+  Zap,
+  Check,
+  X,
+  Sparkles,
+  ShieldCheck,
+  ArrowRight,
+  Mail,
+  Lock,
+  UserPlus,
+  KeyRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
@@ -9,11 +20,18 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   signInWithPopup,
+  sendEmailVerification,
+  signOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
 
 const Login = () => {
@@ -37,7 +55,9 @@ const Login = () => {
   }, []);
 
   useEffect(() => {
-    if (user) navigate("/app", { replace: true });
+    if (user) {
+      navigate("/app", { replace: true });
+    }
   }, [user, navigate]);
 
   const pwRules = useMemo(
@@ -51,9 +71,13 @@ const Login = () => {
   );
 
   const allPwValid =
-    pwRules.minLength && pwRules.hasUpper && pwRules.hasLower && pwRules.hasNumber;
+    pwRules.minLength &&
+    pwRules.hasUpper &&
+    pwRules.hasLower &&
+    pwRules.hasNumber;
 
-  const passwordsMatch = password === confirmPassword && confirmPassword.length > 0;
+  const passwordsMatch =
+    password === confirmPassword && confirmPassword.length > 0;
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +87,7 @@ const Login = () => {
         toast.error("Password doesn't meet requirements");
         return;
       }
+
       if (!passwordsMatch) {
         toast.error("Passwords do not match");
         return;
@@ -73,8 +98,13 @@ const Login = () => {
 
     try {
       if (isSignUp) {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
 
+        const firebaseUser = userCredential.user;
         const cleanReferralCode = referralCode.trim().toUpperCase();
 
         if (cleanReferralCode) {
@@ -97,9 +127,9 @@ const Login = () => {
 
         await supabase.from("profiles").upsert(
           {
-            id: userCredential.user.uid,
-            firebase_uid: userCredential.user.uid,
-            email: userCredential.user.email,
+            id: firebaseUser.uid,
+            firebase_uid: firebaseUser.uid,
+            email: firebaseUser.email,
             referral_code: cleanReferralCode || null,
             referred_by: referredBy,
             referral_id: referredBy,
@@ -108,15 +138,65 @@ const Login = () => {
           { onConflict: "firebase_uid" }
         );
 
+        await sendEmailVerification(firebaseUser, {
+          url: `${window.location.origin}/login`,
+        });
+
+        await signOut(auth);
+
         toast.success("Account created successfully!");
-        navigate("/app");
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-        navigate("/app");
+        toast.success("Verification link sent to your email.");
+        toast.message("Please verify your email, then sign in, Check Spam Folder For verification Link.");
+
+        setEmail("");
+        setPassword("");
+        setConfirmPassword("");
+        setReferralCode("");
+        setIsSignUp(false);
+        return;
       }
+
+      await signInWithEmailAndPassword(auth, email, password);
+      toast.success("Signed in successfully!");
+      navigate("/app");
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || "Authentication failed");
+
+      if (err.code === "auth/email-already-in-use") {
+        toast.error("Email is already in use");
+      } else if (err.code === "auth/invalid-email") {
+        toast.error("Invalid email address");
+      } else if (err.code === "auth/user-not-found") {
+        toast.error("User not found");
+      } else if (err.code === "auth/wrong-password") {
+        toast.error("Incorrect password");
+      } else if (err.code === "auth/invalid-credential") {
+        toast.error("Invalid email or password");
+      } else {
+        toast.error(err.message || "Authentication failed");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email || !password) {
+      toast.error("Enter email and password first");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      await sendEmailVerification(userCredential.user, {
+        url: `${window.location.origin}/login`,
+      });
+      await signOut(auth);
+      toast.success("Verification email sent again.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Could not resend verification email");
     } finally {
       setLoading(false);
     }
@@ -125,7 +205,7 @@ const Login = () => {
   const handleGoogleLogin = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
+      const firebaseUser = result.user;
 
       const cleanReferralCode = referralCode.trim().toUpperCase();
 
@@ -145,9 +225,9 @@ const Login = () => {
 
       await supabase.from("profiles").upsert(
         {
-          id: user.uid,
-          firebase_uid: user.uid,
-          email: user.email,
+          id: firebaseUser.uid,
+          firebase_uid: firebaseUser.uid,
+          email: firebaseUser.email,
           referral_code: cleanReferralCode || null,
           referred_by: referredBy,
           referral_id: referredBy,
@@ -157,8 +237,9 @@ const Login = () => {
       );
 
       navigate("/app");
-    } catch (err) {
-      toast.error("Google sign-in failed");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Google sign-in failed");
     }
   };
 
@@ -170,11 +251,22 @@ const Login = () => {
 
     setResetLoading(true);
     try {
-      await sendPasswordResetEmail(auth, resetEmail);
-      toast.success("Password reset email sent!");
+      await sendPasswordResetEmail(auth, resetEmail, {
+        url: `${window.location.origin}/login`,
+      });
+      toast.success("Password reset link sent to your email!");
       setForgotOpen(false);
+      setResetEmail("");
     } catch (err: any) {
-      toast.error(err.message || "Failed to send reset email");
+      console.error(err);
+
+      if (err.code === "auth/user-not-found") {
+        toast.error("No account found with this email");
+      } else if (err.code === "auth/invalid-email") {
+        toast.error("Invalid email address");
+      } else {
+        toast.error(err.message || "Failed to send reset email");
+      }
     } finally {
       setResetLoading(false);
     }
@@ -252,8 +344,8 @@ const Login = () => {
                     {[
                       {
                         icon: ShieldCheck,
-                        title: "Secure access",
-                        desc: "Protected sign in with email and Google authentication.",
+                        title: "Secure signup",
+                        desc: "New accounts receive a verification link by email.",
                       },
                       {
                         icon: Sparkles,
@@ -263,7 +355,7 @@ const Login = () => {
                       {
                         icon: ArrowRight,
                         title: "Fast onboarding",
-                        desc: "Sign up, apply referral, and jump straight into the app.",
+                        desc: "Create account, verify by mail, then sign in normally.",
                       },
                     ].map((item, i) => (
                       <motion.div
@@ -357,7 +449,7 @@ const Login = () => {
                     </motion.h1>
                     <p className="mt-2 text-sm text-muted-foreground">
                       {isSignUp
-                        ? "Start your premium journaling journey in a few seconds."
+                        ? "Create your account and verify it from the link sent to your email."
                         : "Sign in to continue to your workspace."}
                     </p>
                   </div>
@@ -525,7 +617,7 @@ const Login = () => {
                           "Loading..."
                         ) : isSignUp ? (
                           <>
-                            Create Account
+                            Verify / Create Account
                             <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                           </>
                         ) : (
@@ -537,6 +629,16 @@ const Login = () => {
                       </Button>
                     </motion.div>
                   </form>
+
+                  {isSignUp && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      className="mt-4 w-full text-sm text-primary transition-colors hover:text-primary/80"
+                    >
+                      Resend verification email
+                    </button>
+                  )}
 
                   <p className="mt-5 text-center text-sm text-muted-foreground">
                     {isSignUp ? "Already have an account?" : "Don’t have an account?"}
