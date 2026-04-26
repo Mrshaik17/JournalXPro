@@ -23,11 +23,11 @@ export const FooterSection = () => {
     { label: "Telegram", url: socialLinks?.telegram || "https://t.me/+HNH_urXRl4VmMzVl", icon: "✈️" },
     { label: "Discord", url: socialLinks?.discord || "https://discord.gg/YJ7h3jjud", icon: "💬" },
     { label: "YouTube", url: socialLinks?.youtube || "https://www.youtube.com/@JournalXPro", icon: "▶️" },
-    { label: "WhatsApp", url: socialLinks?.whatsapp || "", icon: "💬" },
+    //{ label: "WhatsApp", url: socialLinks?.whatsapp || "", icon: "💬" },//
     { label: "Email", url: "mailto:journalxpro@gmail.com", icon: "📧" },
   ];
 
-  return (
+  return (  
     <footer className="border-t border-border bg-background/80 backdrop-blur-sm py-14">
       <div className="container px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-10">
