@@ -118,53 +118,53 @@ const comparisonRows = [
 
 const tutorialSteps = [
   {
-    title: "Create Your Account Or Login",
-    desc: "Sign up in seconds and get instant access to your trading dashboard.",
+    title: "Start Your Trading Journal Journey",
+    desc: "Get instant access to your personal trading workspace and begin tracking your performance from day one.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197031/1_tcdnp0.png",
   },
   {
-    title: "Add Your Trading Account",
-    desc: "Connect your broker or prop firm account to start tracking performance.",
+    title: "Connect & Track Your Accounts",
+    desc: "Add broker or prop firm accounts and manage all your trading performance in one organized dashboard.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197031/2_aqqcrw.png",
   },
   {
-    title: "Log Your First Trade",
-    desc: "Enter your trade details manually with setup, entry, stop loss, and result.",
+    title: "Record Every Trade with Precision",
+    desc: "Log entries, exits, risk, and notes to build a complete trading history and identify what works.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197031/3_k3cbdw.png",
   },
   {
-    title: "Upload Trade Screenshots",
-    desc: "Attach before and after screenshots to review execution quality later.",
+    title: "Visualize Your Trades with Proof",
+    desc: "Attach before & after screenshots to review execution quality and improve your decision-making.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197031/4_tjxjox.png",
   },
   {
-    title: "Track Discipline Score",
-    desc: "See how well you follow your rules using your JournalX discipline score.",
+    title: "Share Your Trading Account Securely",
+    desc: "Give read-only access to mentors or teams so they can review your performance without affecting your data.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197031/5_jukfpw.png",
   },
   {
-    title: "View Analytics",
-    desc: "Understand your win rate, risk patterns, drawdown, and consistency.",
+    title: "Analyze Performance Like a Pro",
+    desc: "Break down win rate, risk patterns, drawdowns, and consistency to understand your true edge.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197031/6_j8hfqk.png",
   },
   {
-    title: "Use Trading Tools",
-    desc: "Calculate risk, lot size, pips, and position values with built-in tools.",
+    title: "Upgrade Your Plan in Minutes",
+    desc: "Select your plan, submit payment details, and get verified quickly to access powerful trading tools and insights.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197030/7_udxvgr.png",
   },
   {
-    title: "Monitor Payouts",
-    desc: "Keep track of funded profits, withdrawals, and payout history clearly.",
+    title: "Explore Prop Firms & Stay Updated",
+    desc: "Discover top prop firms, compare features, and stay informed with the latest announcements and platform updates.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197030/8_uqs3ug.png",
   },
   {
-    title: "Share With Mentor",
-    desc: "Give selected access to your mentor or team for better review and feedback.",
+    title: "Track & Share Your Payouts",
+    desc: "Monitor your profits, manage payout history, and share verified proof professionally with read-only access.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197030/9_n2efmr.png",
   },
   {
-    title: "Improve With Insights",
-    desc: "Use patterns and insights to refine discipline and performance over time.",
+    title: "Your Complete Trading Command Center",
+    desc: "Manage every aspect of your trading — from journaling to analytics and payouts — in one seamless experience.",
     image: "https://res.cloudinary.com/dmaeiz7zo/image/upload/v1777197030/10_thyqns.png",
   },
 ];
