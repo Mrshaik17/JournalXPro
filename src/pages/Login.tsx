@@ -20,7 +20,6 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   signInWithPopup,
-  sendEmailVerification,
   signOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
@@ -138,16 +137,10 @@ const Login = () => {
           { onConflict: "firebase_uid" }
         );
 
-        await sendEmailVerification(firebaseUser, {
-          url: `${window.location.origin}/login`,
-        });
-
         await signOut(auth);
 
         toast.success("Account created successfully!");
-        toast.success("Verification link sent to your email.");
-        toast.message("Please verify your email, then sign in, Check Spam Folder For verification Link.");
-
+        toast.success("You can now sign in.");
         setEmail("");
         setPassword("");
         setConfirmPassword("");
@@ -175,28 +168,6 @@ const Login = () => {
       } else {
         toast.error(err.message || "Authentication failed");
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendVerification = async () => {
-    if (!email || !password) {
-      toast.error("Enter email and password first");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      await sendEmailVerification(userCredential.user, {
-        url: `${window.location.origin}/login`,
-      });
-      await signOut(auth);
-      toast.success("Verification email sent again.");
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || "Could not resend verification email");
     } finally {
       setLoading(false);
     }
@@ -345,7 +316,7 @@ const Login = () => {
                       {
                         icon: ShieldCheck,
                         title: "Secure signup",
-                        desc: "New accounts receive a verification link by email.",
+                        desc: "New accounts are created instantly.",
                       },
                       {
                         icon: Sparkles,
@@ -355,7 +326,7 @@ const Login = () => {
                       {
                         icon: ArrowRight,
                         title: "Fast onboarding",
-                        desc: "Create account, verify by mail, then sign in normally.",
+                        desc: "Create account, then sign in normally.",
                       },
                     ].map((item, i) => (
                       <motion.div
@@ -449,7 +420,7 @@ const Login = () => {
                     </motion.h1>
                     <p className="mt-2 text-sm text-muted-foreground">
                       {isSignUp
-                        ? "Create your account and verify it from the link sent to your email."
+                        ? "Create your account and start using the app right away."
                         : "Sign in to continue to your workspace."}
                     </p>
                   </div>
@@ -617,7 +588,7 @@ const Login = () => {
                           "Loading..."
                         ) : isSignUp ? (
                           <>
-                            Verify / Create Account
+                            Create Account
                             <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                           </>
                         ) : (
@@ -630,19 +601,10 @@ const Login = () => {
                     </motion.div>
                   </form>
 
-                  {isSignUp && (
-                    <button
-                      type="button"
-                      onClick={handleResendVerification}
-                      className="mt-4 w-full text-sm text-primary transition-colors hover:text-primary/80"
-                    >
-                      Resend verification email
-                    </button>
-                  )}
-
                   <p className="mt-5 text-center text-sm text-muted-foreground">
                     {isSignUp ? "Already have an account?" : "Don’t have an account?"}
                     <button
+                      type="button"
                       onClick={() => setIsSignUp(!isSignUp)}
                       className="ml-2 font-medium text-primary transition-colors hover:text-primary/80"
                     >
