@@ -20,10 +20,10 @@ export const FooterSection = () => {
   const allLinks = [
     { label: "Instagram", url: socialLinks?.instagram || "https://www.instagram.com/journalxpro?igsh=anNjZDQ4MWFvYWlx", icon: "📷" },
     { label: "Twitter / X", url: socialLinks?.twitter || "https://x.com/journalXPro", icon: "𝕏" },
-    { label: "Telegram", url: socialLinks?.telegram || "#", icon: "✈️" },
+    { label: "Telegram", url: socialLinks?.telegram || "https://t.me/+HNH_urXRl4VmMzVl", icon: "✈️" },
     { label: "Discord", url: socialLinks?.discord || "https://discord.gg/YJ7h3jjud", icon: "💬" },
     { label: "YouTube", url: socialLinks?.youtube || "https://www.youtube.com/@JournalXPro", icon: "▶️" },
-    { label: "Facebook", url: socialLinks?.facebook || "", icon: "📘" },
+    { label: "WhatsApp", url: socialLinks?.whatsapp || "", icon: "💬" },
     { label: "Email", url: "mailto:journalxpro@gmail.com", icon: "📧" },
   ];
 
