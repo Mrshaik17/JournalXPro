@@ -410,24 +410,73 @@ const canAccessAI = isElite;
     );
 
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const dayPerf: Record<string, { wins: number; total: number; pnl: number }> =
-      {};
-    trades.forEach((t) => {
-      const d = dayNames[new Date(t.created_at).getDay()];
-      if (!dayPerf[d]) dayPerf[d] = { wins: 0, total: 0, pnl: 0 };
-      dayPerf[d].total++;
-      if (t.result === "win") dayPerf[d].wins++;
-      dayPerf[d].pnl += toNumber(t.pnl_amount);
-    });
 
+const getTradeDate = (t: TradeRow) => {
+  const raw = t.entry_time || t.created_at;
+  if (!raw) return null;
+
+  const date = new Date(raw);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const dayPerf: Record<
+  string,
+  { wins: number; losses: number; total: number; pnl: number }
+> = {};
+
+trades.forEach((t) => {
+  const date = getTradeDate(t);
+  if (!date) return;
+
+  const d = dayNames[date.getDay()];
+
+  if (!dayPerf[d]) {
+    dayPerf[d] = { wins: 0, losses: 0, total: 0, pnl: 0 };
+  }
+
+  const pnl = Number(t.pnl_amount ?? 0);
+
+  dayPerf[d].total += 1;
+  if (t.result === "win") dayPerf[d].wins += 1;
+  if (t.result === "loss") dayPerf[d].losses += 1;
+  dayPerf[d].pnl += pnl;
+});
+console.log("DAY PERF DEBUG:", dayPerf);
+trades.forEach((t) => {
+  const created = t.created_at;
+  const entry = t.entry_time;
+  const pnl = Number(t.pnl_amount ?? 0);
+
+  const createdDay = created ? dayNames[new Date(created).getDay()] : "NA";
+  const entryDay = entry ? dayNames[new Date(entry).getDay()] : "NA";
+
+  console.log("TRADE DEBUG", {
+    pnl,
+    created,
+    createdDay,
+    entry,
+    entryDay,
+  });
+});
     const dayData = ["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => ({
-      day: d,
-      pnl: dayPerf[d]?.pnl || 0,
-      winRate: dayPerf[d]
-        ? ((dayPerf[d].wins / dayPerf[d].total) * 100).toFixed(0)
-        : "0",
-      trades: dayPerf[d]?.total || 0,
-    }));
+  day: d,
+  pnl: dayPerf[d]?.pnl || 0,
+  wins: dayPerf[d]?.wins || 0,
+  losses: dayPerf[d]?.losses || 0,
+  trades: dayPerf[d]?.total || 0,
+}));
+let bestDay = null;
+let worstDay = null;
+
+Object.entries(dayPerf).forEach(([day, data]) => {
+  if (!bestDay || data.pnl > bestDay.pnl) {
+    bestDay = { day, ...data };
+  }
+
+  if (!worstDay || data.pnl < worstDay.pnl) {
+    worstDay = { day, ...data };
+  }
+});
 
     const sessionPerf: Record<
       string,
@@ -574,6 +623,8 @@ const worstHour =
       consistencyScore,
       expectancy,
       monthlyRows,
+      bestDay,
+      worstDay,
     };
   }, [trades]);
 
@@ -1047,33 +1098,101 @@ const worstHour =
 
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <SectionCard
-                  title="Day Performance"
-                  subtitle="See which weekdays produce your best outcomes"
-                >
-                  <div className="h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={analytics.dayData}>
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke={CHART_COLORS.border}
-                        />
-                        <XAxis
-                          dataKey="day"
-                          tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10, fill: CHART_COLORS.muted }}
-                        />
-                        <Tooltip contentStyle={tooltipStyle} />
-                        <Bar
-                          dataKey="pnl"
-                          fill={CHART_COLORS.primary}
-                          radius={[6, 6, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </SectionCard>
+  title="Day Performance"
+  subtitle="See which weekdays produce your best outcomes"
+>
+  <div className="space-y-4">
+    <div className="grid grid-cols-3 gap-3">
+      <div className="rounded-xl border border-border bg-background/60 p-3">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Best Day
+        </p>
+        <p className="mt-1 text-sm font-semibold text-success">
+          {analytics.bestDay ? analytics.bestDay.day : "—"}
+        </p>
+        <p className="mt-1 font-mono text-xs text-success">
+          {analytics.bestDay ? formatCurrency(analytics.bestDay.pnl, true) : "—"}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-background/60 p-3">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Worst Day
+        </p>
+        <p className="mt-1 text-sm font-semibold text-destructive">
+          {analytics.worstDay ? analytics.worstDay.day : "—"}
+        </p>
+        <p className="mt-1 font-mono text-xs text-destructive">
+          {analytics.worstDay ? formatCurrency(analytics.worstDay.pnl, true) : "—"}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-background/60 p-3">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Active Days
+        </p>
+        <p className="mt-1 text-sm font-semibold">
+          {analytics.dayData.filter((d) => d.trades > 0).length}
+        </p>
+        <p className="mt-1 font-mono text-xs text-muted-foreground">
+          weekdays traded
+        </p>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {analytics.dayData.map((d) => (
+        <div
+          key={d.day}
+          className="rounded-xl border border-border bg-background/50 p-4"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold">{d.day}</span>
+            <span className="text-[10px] text-muted-foreground">
+              {d.trades} trades
+            </span>
+          </div>
+
+          <p
+            className={`mt-3 font-mono text-base font-bold ${
+              d.pnl > 0
+                ? "text-success"
+                : d.pnl < 0
+                ? "text-destructive"
+                : "text-muted-foreground"
+            }`}
+          >
+            {formatCurrency(d.pnl, true)}
+          </p>
+
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
+            <div
+              className={`h-full rounded-full ${
+                d.pnl > 0
+                  ? "bg-green-500"
+                  : d.pnl < 0
+                  ? "bg-red-500"
+                  : "bg-muted"
+              }`}
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.abs(d.pnl) /
+                    Math.max(...analytics.dayData.map((x) => Math.abs(x.pnl) || 1)) *
+                    100
+                )}%`,
+              }}
+            />
+          </div>
+
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            {d.wins}W / {d.losses}L
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+</SectionCard>
 
                 <SectionCard
                   title="Session Analysis"
