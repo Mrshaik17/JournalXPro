@@ -481,11 +481,23 @@ const canAccessAI = isElite;
 
     const hourEntries = Object.entries(hourPerf);
 
-// best
-const bestHour = [...hourEntries].sort((a, b) => b[1].pnl - a[1].pnl)[0] || null;
+// ✅ filter profit hours
+const profitHours = hourEntries.filter(([_, v]) => v.pnl > 0);
 
-// worst
-const worstHour = [...hourEntries].sort((a, b) => a[1].pnl - b[1].pnl)[0] || null;
+// ✅ filter loss hours
+const lossHours = hourEntries.filter(([_, v]) => v.pnl < 0);
+
+// ✅ BEST = highest profit
+const bestHour =
+  profitHours.length > 0
+    ? profitHours.sort((a, b) => b[1].pnl - a[1].pnl)[0]
+    : null;
+
+// ✅ WORST = biggest loss
+const worstHour =
+  lossHours.length > 0
+    ? lossHours.sort((a, b) => a[1].pnl - b[1].pnl)[0]
+    : null;
 
     const tagPerf: Record<string, { wins: number; total: number; pnl: number }> =
       {};
