@@ -18,12 +18,12 @@ export const FooterSection = () => {
   });
 
   const allLinks = [
-    { label: "Instagram", url: socialLinks?.instagram || "#", icon: "📷" },
-    { label: "Twitter / X", url: socialLinks?.twitter || "#", icon: "𝕏" },
+    { label: "Instagram", url: socialLinks?.instagram || "https://www.instagram.com/journalxpro?igsh=anNjZDQ4MWFvYWlx", icon: "📷" },
+    { label: "Twitter / X", url: socialLinks?.twitter || "https://x.com/journalXPro", icon: "𝕏" },
     { label: "Telegram", url: socialLinks?.telegram || "#", icon: "✈️" },
-    { label: "Discord", url: socialLinks?.discord || "https://discord.gg/rtzKyV4HH", icon: "💬" },
-    { label: "YouTube", url: socialLinks?.youtube || "#", icon: "▶️" },
-    { label: "Facebook", url: socialLinks?.facebook || "#", icon: "📘" },
+    { label: "Discord", url: socialLinks?.discord || "https://discord.gg/YJ7h3jjud", icon: "💬" },
+    { label: "YouTube", url: socialLinks?.youtube || "https://www.youtube.com/@JournalXPro", icon: "▶️" },
+    { label: "Facebook", url: socialLinks?.facebook || "", icon: "📘" },
     { label: "Email", url: "mailto:journalxpro@gmail.com", icon: "📧" },
   ];
 
